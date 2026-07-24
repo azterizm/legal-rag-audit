@@ -171,9 +171,9 @@ class TestRunner:
             
             # If the retrieval endpoint was hit separately
             # we can evaluate it if we have a separate retrieval endpoint config
-            if self.config.endpoints.retrieval:
+            if self.config.target.endpoints.retrieval:
                 url, method, headers, kwargs = self.client._prepare_request(
-                    self.config.endpoints.retrieval,
+                    self.config.target.endpoints.retrieval,
                     default_payload={"query": query},
                     variables={"QUERY": query}
                 )

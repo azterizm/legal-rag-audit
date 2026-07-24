@@ -124,10 +124,14 @@ class TargetClient:
         return None
 
     async def chat(self, query: str) -> Dict[str, Any]:
+        import uuid
+        req_uuid = str(uuid.uuid4())
+        variables = {"QUERY": query, "UUID": req_uuid}
+        
         url, method, headers, kwargs = self._prepare_request(
             self.config.endpoints.chat,
             default_payload={"query": query},
-            variables={"QUERY": query}
+            variables=variables
         )
         
         receive_endpoint = getattr(self.config.endpoints, "receive", None)
@@ -135,7 +139,7 @@ class TargetClient:
             rec_url, rec_method, rec_headers, rec_kwargs = self._prepare_request(
                 receive_endpoint,
                 default_payload={},
-                variables={"QUERY": query}
+                variables=variables
             )
             if rec_url.startswith("ws://") or rec_url.startswith("wss://"):
                 import websockets
@@ -145,6 +149,10 @@ class TargetClient:
                 safe_headers = {k: v for k, v in rec_headers.items() if k.lower() not in ["connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]}
                 
                 async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
+                    if "socket.io" in rec_url:
+                        # Send socket.io namespace connect packet
+                        await websocket.send("40")
+                        
                     logger.debug(f"Sending query to {url}: {query}")
                     response = await self.client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
