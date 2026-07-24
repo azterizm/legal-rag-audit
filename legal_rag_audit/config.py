@@ -1,12 +1,19 @@
 import os
-from typing import Optional, Dict
+from typing import Optional, Dict, Union, Any
 from pydantic import BaseModel, Field
 import yaml
 
+class EndpointConfig(BaseModel):
+    url: str
+    method: str = "POST"
+    headers: Dict[str, str] = Field(default_factory=dict)
+    body: Any = None
+
 class EndpointsConfig(BaseModel):
-    chat: str
-    upload: str
-    retrieval: Optional[str] = None
+    chat: Union[str, EndpointConfig]
+    receive: Optional[Union[str, EndpointConfig]] = None
+    upload: Union[str, EndpointConfig]
+    retrieval: Optional[Union[str, EndpointConfig]] = None
 
 class AuthConfig(BaseModel):
     type: str = "none" # bearer | api_key | basic | none

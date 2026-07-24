@@ -94,6 +94,8 @@ To ensure the audit tool interfaces correctly with your RAG system, you must con
 
 If your API requires specific HTTP methods, custom headers, or a deeply nested JSON body structure (or stringified JSON), you can configure endpoints as objects rather than simple strings. 
 
+You can also configure a **`receive`** endpoint if your RAG system uses decoupled asynchronous responses (e.g., polling GET endpoints or WebSockets). When configured, the tool will trigger the generation on the `chat` endpoint and automatically listen for the response on the `receive` endpoint.
+
 Use the `{{QUERY}}` variable in the `body` field. The tool will inject the query at runtime. (For upload endpoints, use `{{FILENAME}}` and `{{CONTENT}}`).
 
 ```yaml
@@ -109,10 +111,18 @@ target:
         x-api-key: "hhh0h4uuiy"
       # If your body must be a JSON string, you can provide it as a string:
       body: '{"content":"{{QUERY}}","is_voice":false,"client_message_id":"f9517177-f80c","client_metadata":{"chat_page_access_token":"eyJhbGciOiJIUzI1NiIsIn...","language":"en"}}'
-      # OR provide it as YAML and it will be sent as standard JSON:
-      # body:
-      #   content: "{{QUERY}}"
-      #   is_voice: false
+      
+    receive:
+      # Automatically detected as a WebSocket connection
+      url: "wss://app.lexcorp.example.com/socket.io/?EIO=4&transport=websocket"
+      headers:
+        accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
+        cache-control: "no-cache"
+  
+  response_format:
+    # Use jsonpath-ng syntax to filter specific WS events for the AI's final answer
+    answer_field: "$[?(@.event_type=='message' & @.data.author.type=='ai_assistant')].data.content"
+    stream: true # Keep the connection open to aggregate chunks if the WS streams chunks
 ```
 
 ### 2. Setting up the Corpus
