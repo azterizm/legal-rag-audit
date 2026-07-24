@@ -148,6 +148,11 @@ class TargetClient:
                 
                 safe_headers = {k: v for k, v in rec_headers.items() if k.lower() not in ["connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]}
                 
+                # Forward cookies from httpx client to websocket
+                if self.client.cookies:
+                    cookie_str = "; ".join([f"{k}={v}" for k, v in self.client.cookies.items()])
+                    safe_headers["Cookie"] = cookie_str
+                
                 async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
                     if "socket.io" in rec_url:
                         # Send socket.io namespace connect packet
@@ -171,6 +176,13 @@ class TargetClient:
                         
                         try:
                             message = await asyncio.wait_for(websocket.recv(), timeout=10.0)
+                            logger.info(f"Raw WS message: {message}")
+                            
+                            # Handle Socket.IO Ping
+                            if isinstance(message, str) and message == "2":
+                                await websocket.send("3")
+                                continue
+                                
                             json_str = self._extract_json_from_string(message)
                             if json_str:
                                 chunk = json.loads(json_str)
