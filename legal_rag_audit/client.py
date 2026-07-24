@@ -126,7 +126,12 @@ class TargetClient:
     async def chat(self, query: str) -> Dict[str, Any]:
         import uuid
         req_uuid = str(uuid.uuid4())
+        
+        chat_headers = {**self.headers, **self.config.endpoints.chat.headers}
         variables = {"QUERY": query, "UUID": req_uuid}
+        for k, v in chat_headers.items():
+            variables[k] = str(v)
+            variables[k.replace("-", "_")] = str(v)
         
         url, method, headers, kwargs = self._prepare_request(
             self.config.endpoints.chat,
@@ -156,10 +161,12 @@ class TargetClient:
                 async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
                     if "socket.io" in rec_url:
                         # Send socket.io namespace connect packet
-                        # Lexcorp requires /visitor_widget namespace and conv_id
-                        conv_id_val = headers.get("conv-id") or headers.get("Conv-Id") or headers.get("conv_id") or ""
-                        if conv_id_val:
-                            await websocket.send(f'40/visitor_widget,{{"conv_id":"{conv_id_val}"}}')
+                        # Flexible: pull from receive.body if configured
+                        connect_packet = rec_kwargs.get("content") or rec_kwargs.get("json")
+                        if connect_packet:
+                            if isinstance(connect_packet, dict):
+                                connect_packet = json.dumps(connect_packet)
+                            await websocket.send(connect_packet)
                         else:
                             await websocket.send("40")
                         

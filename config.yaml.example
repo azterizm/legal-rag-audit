@@ -2,6 +2,13 @@ target:
   name: "lexcorp-staging"
   endpoints:
     chat: "https://staging.lexcorp.example.com/api/v1/chat"
+    receive:
+      # Optional: For WebSockets, url should start with ws:// or wss://
+      url: "wss://api.example.com/socket.io/?EIO=4&transport=websocket"
+      headers:
+        cache-control: "no-cache"
+      # Optional: Payload to send upon connection (variables supported)
+      body: '40/namespace,{"conv_id":"{{conv_id}}"}'
     upload:
       url: "https://app.lexcorp.example.com/v1/api/knowledge_base/file_upload_api"
       method: "POST"
@@ -9,8 +16,8 @@ target:
         accept: "application/json, text/plain, */*"
         accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
         authorization: "Bearer ..."
-        scenario-id: "hhh0h4uuiy"
-        x-csrftoken: "aIUG3jnMLJDgH4V2keRQ4jCRuUWtEKQz"
+        scenario-id: "..."
+        x-csrftoken: "..."
       file_field: "file"
     retrieval: "https://staging.lexcorp.example.com/api/v1/search"  # optional
   auth:
