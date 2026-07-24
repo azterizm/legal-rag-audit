@@ -71,6 +71,25 @@ thresholds:
   max_cross_tenant_leaks: 0
 ```
 
+#### API Endpoints Explained
+
+To ensure the audit tool interfaces correctly with your RAG system, you must configure the following endpoints in your `config.yaml`. The tool expects your API to accept standard `POST` requests with JSON payloads.
+
+1. **`chat` (Required)**: 
+   - **What it is**: The primary endpoint for sending user queries to your RAG system and receiving generated answers.
+   - **Expected Request**: A `POST` request with a JSON body containing the query.
+   - **Expected Response**: A JSON object containing the final answer string and an array of citations. The tool uses `response_format.answer_field` and `response_format.citations_field` from your config to extract these.
+
+2. **`upload` (Required if uploading a corpus)**: 
+   - **What it is**: The endpoint used to ingest raw text or documents into your RAG system's knowledge base prior to testing.
+   - **Expected Request**: A `POST` request containing the document content and metadata. The tool currently sends `{"filename": "...", "content": "..."}`.
+   - **Expected Response**: A JSON object acknowledging the upload. The tool captures the `id` from the response (if available) to verify citations later.
+
+3. **`retrieval` (Optional)**: 
+   - **What it is**: A direct endpoint to your vector database or search index. If provided, the tool tests the raw retrieval relevance before generation.
+   - **Expected Request**: A `POST` request with the search query.
+   - **Expected Response**: A JSON object containing an array of retrieved text chunks. The tool computes cosine similarity against these raw chunks to grade retrieval performance independently of the LLM.
+
 ### 2. Setting up the Corpus
 
 **Bundled Corpus (Recommended):**
