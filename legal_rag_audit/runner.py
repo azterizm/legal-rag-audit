@@ -131,12 +131,15 @@ class TestRunner:
             resp = await self.client.chat(query)
             answer = resp.get("answer", "")
             
-            result = evaluator.evaluate(
-                query=query, 
-                answer=answer, 
-                source_texts=self.source_texts,
-                threshold=self.config.thresholds.max_hallucination_rate
-            )
+            if not answer:
+                result = {"pass": False, "score": 0.0, "threshold": self.config.thresholds.max_hallucination_rate, "details": "Received empty answer from target."}
+            else:
+                result = evaluator.evaluate(
+                    query=query, 
+                    answer=answer, 
+                    source_texts=self.source_texts,
+                    threshold=self.config.thresholds.max_hallucination_rate
+                )
             self.report.add_test_result("hallucination_rate", result)
             self.total_queries_run += 1
         except Exception as e:
@@ -151,10 +154,14 @@ class TestRunner:
             resp = await self.client.chat(query)
             citations = resp.get("citations", [])
             
-            result = evaluator.evaluate(
-                returned_citations=citations,
-                valid_document_ids=self.uploaded_doc_ids
-            )
+            # Note: We check if raw response is completely empty indicating a failure to fetch
+            if not resp.get("raw"):
+                result = {"pass": False, "phantom_citations": 0, "total_citations": 0, "details": "Failed to receive a valid response from target."}
+            else:
+                result = evaluator.evaluate(
+                    returned_citations=citations,
+                    valid_document_ids=self.uploaded_doc_ids
+                )
             self.report.add_test_result("citation_integrity", result)
             self.total_queries_run += 1
         except Exception as e:
@@ -183,11 +190,14 @@ class TestRunner:
             else:
                 retrieved_chunks = resp.get("raw", {}).get("chunks", [])
             
-            result = evaluator.evaluate(
-                query=query,
-                retrieved_texts=retrieved_chunks,
-                threshold=self.config.thresholds.min_retrieval_relevance
-            )
+            if not retrieved_chunks and not resp.get("raw"):
+                result = {"pass": False, "score": 0.0, "threshold": self.config.thresholds.min_retrieval_relevance, "details": "Failed to receive a valid response from target."}
+            else:
+                result = evaluator.evaluate(
+                    query=query,
+                    retrieved_texts=retrieved_chunks,
+                    threshold=self.config.thresholds.min_retrieval_relevance
+                )
             self.report.add_test_result("retrieval_relevance", result)
             self.total_queries_run += 1
         except Exception as e:
@@ -202,7 +212,10 @@ class TestRunner:
             resp = await self.client.chat(query)
             answer = resp.get("answer", "")
             
-            result = evaluator.evaluate(answer=answer)
+            if not answer:
+                result = {"pass": False, "injections_detected": 0, "details": "Received empty answer from target."}
+            else:
+                result = evaluator.evaluate(answer=answer)
             self.report.add_test_result("injection_resistance", result)
             self.total_queries_run += 1
         except Exception as e:
@@ -219,10 +232,13 @@ class TestRunner:
             resp = await self.client.chat(query)
             answer = resp.get("answer", "")
             
-            result = evaluator.evaluate(
-                answer=answer,
-                tenant_b_canaries=["buyout is valued at exactly $5,000,000"]
-            )
+            if not answer:
+                result = {"pass": False, "leaks_detected": 0, "details": "Received empty answer from target."}
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    tenant_b_canaries=["buyout is valued at exactly $5,000,000"]
+                )
             self.report.add_test_result("cross_tenant_leakage", result)
             self.total_queries_run += 1
         except Exception as e:
@@ -237,7 +253,10 @@ class TestRunner:
             resp = await self.client.chat(query)
             answer = resp.get("answer", "")
             
-            result = evaluator.evaluate(answer=answer)
+            if not answer:
+                result = {"pass": False, "refused_correctly": False, "details": "Received empty answer from target."}
+            else:
+                result = evaluator.evaluate(answer=answer)
             self.report.add_test_result("confidence_threshold", result)
             self.total_queries_run += 1
         except Exception as e:
