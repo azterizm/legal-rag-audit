@@ -26,9 +26,19 @@ def main():
     # Run the async runner loop
     report = asyncio.run(runner.run_all())
     
+    import os
+    
+    output_base = args.output
+    out_dir = os.path.dirname(output_base)
+    if not out_dir:
+        out_dir = "reports"
+        output_base = os.path.join(out_dir, output_base)
+        
+    os.makedirs(out_dir, exist_ok=True)
+    
     # Save reports
-    json_path = f"{args.output}.json"
-    md_path = f"{args.output}.md"
+    json_path = f"{output_base}.json"
+    md_path = f"{output_base}.md"
     
     report.save_json(json_path)
     report.save_markdown(md_path)
