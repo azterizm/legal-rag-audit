@@ -144,7 +144,7 @@ class TargetClient:
                 
                 safe_headers = {k: v for k, v in rec_headers.items() if k.lower() not in ["connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]}
                 
-                async with websockets.connect(rec_url, extra_headers=safe_headers) as websocket:
+                async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
                     logger.debug(f"Sending query to {url}: {query}")
                     response = await self.client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
@@ -153,7 +153,14 @@ class TargetClient:
                     citations = []
                     raw_response = {}
                     
+                    import time
+                    start_time = time.time()
+                    
                     while True:
+                        if time.time() - start_time > 60.0:
+                            logger.error("Websocket receive overall timeout (60s) reached.")
+                            break
+                        
                         try:
                             message = await asyncio.wait_for(websocket.recv(), timeout=10.0)
                             json_str = self._extract_json_from_string(message)
@@ -175,9 +182,17 @@ class TargetClient:
                                             citations.extend(cit_match[0].value)
                         except asyncio.TimeoutError:
                             break
-                        except Exception:
-                            pass
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.debug("Websocket connection closed by server")
+                            break
+                        except Exception as e:
+                            logger.error(f"Error processing websocket message: {e}")
+                            break # Break on unexpected errors to prevent infinite loops
                     
+                    # Wait at most 30 seconds for the answer to fully stream if streaming
+                    # Wait wait, the timeout inside wait_for handles the idle time.
+                    # But if we receive a constant stream of garbage, it could loop forever.
+                    # We will rely on ConnectionClosed to break the loop naturally if the server finishes.
                     return {
                         "answer": answer_text,
                         "citations": citations,
