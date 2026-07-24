@@ -1,4 +1,152 @@
-SaaS Master Subscription Agreement (Version 1)
+MASTER TERMS AND CONDITIONS SOFTWARE-AS-A-SERVICE AGREEMENT (AGREEMENT V1)
 
-8. Limitation of Liability
-In no event shall either party's aggregate liability arising out of or related to this agreement exceed the total amount paid by Customer hereunder for the services giving rise to the liability in the twelve (12) months preceding the first incident.
+These Master Terms and Conditions are made and entered into as of the Effective Date by and between SaaS Provider and Client (each, a "Party" and collectively, the "Parties"). These Master Terms and Conditions, together with all Orders, Statements of Work (SOWs), and Exhibits attached hereto or referencing these Master Terms and Conditions, constitute the entire "Agreement."
+
+1. DEFINITIONS.
+
+1.1 "Affiliate" means, with respect to any entity, any other present or future entity controlling, controlled by, or under common control with such entity.
+
+1.2 "Application Platform" or "Platform" means SaaS Provider's proprietary application software and website, including all modules, functions, and features identified in an Order or SOW, and all underlying technology resources and infrastructure supporting the Services.
+
+1.3 "Cardholder Data" has the meaning provided in PCI-DSS, including cardholder name, account number, expiration date, service code, PIN/CVV, and transaction data.
+
+1.4 "Client Data" means any proprietary or confidential content, information, data, and materials of any kind, including End User Data and Cardholder Data, provided to or processed by SaaS Provider in connection with the Services.
+
+1.5 "Confidential Information" means any and all technical, business, client, or proprietary information disclosed by one Party ("Disclosing Party") to the other Party ("Receiving Party"), including trade secrets, pricing, technology, software source code, client lists, and Client Data.
+
+1.6 "Data Center" means the secure facility or facilities in which the servers and computer equipment hosting the Application Platform reside.
+
+1.7 "Documentation" means SaaS Provider's user guides, manuals, and online help materials relating to the Services and Application Platform.
+
+1.8 "End User Data" means all data and information collected from end users of Client or its Affiliates, including personally identifiable information.
+
+1.9 "Implementation Services" means the data migration, setup, integration, API development, and configuration services described in an Order or SOW.
+
+1.10 "Intellectual Property Rights" means all copyrights, patents, trade secrets, trademarks, moral rights, and other proprietary rights worldwide.
+
+1.11 "Order" means an order form executed by the Parties for SaaS Services or Application Platform access.
+
+1.12 "Professional Services" means consulting, implementation, training, and integration services provided pursuant to a Statement of Work.
+
+1.13 "SaaS Services" means the subscription-based services provided by SaaS Provider under an Order, including hosting, maintenance, support, and access to the Application Platform.
+
+1.14 "Security Event" means any actual or reasonably suspected unauthorized access, acquisition, exposure, disclosure, alteration, or destruction of Client Data or Confidential Information, or any breach of SaaS Provider's systems impacting Client Data.
+
+1.15 "Services" means, collectively, SaaS Services and Professional Services.
+
+2. SOFTWARE-AS-A-SERVICE RIGHTS AND LIMITATIONS.
+
+2.1 Provision of SaaS Services. Subject to the terms of this Agreement, SaaS Provider will make available to Client, its designated Affiliates, and their authorized users the SaaS Services and Application Platform in accordance with the applicable Order and Documentation. SaaS Provider will host, operate, maintain, and support the Application Platform at approved Data Centers.
+
+2.2 Access Rights. SaaS Provider hereby grants to Client a non-exclusive, non-transferable (except as permitted herein), limited license and right to access and use the SaaS Services and Application Platform during the Term for its business operations.
+
+2.3 Limitations on Use. Client shall not: (i) reverse engineer, decompile, or disassemble the Application Platform; (ii) modify or create derivative works based on the Application Platform; (iii) sublicense, sell, rent, or lease access to third parties outside authorized Affiliates; or (iv) remove any proprietary notices embedded in the Application Platform.
+
+3. ANCILLARY PROFESSIONAL SERVICES.
+
+SaaS Provider will perform Implementation Services and Professional Services as set forth in Exhibit C and any mutually executed SOW. Any changes to the scope of Professional Services shall be governed by the Change Control Procedures in Exhibit D.
+
+4. SERVICE LEVELS.
+
+SaaS Provider shall maintain and operate the SaaS Services to meet or exceed the Service Levels set forth in Exhibit E. In the event of a failure to meet applicable Service Levels, Client shall be entitled to Service Level Credits as defined in Exhibit E.
+
+5. FEES, PRICE ADJUSTMENTS, AND PAYMENT TERMS.
+
+5.1 SaaS Charges. Client will pay the subscription fees specified in each Order.
+
+5.2 Professional Services Fees. Client will pay the fees specified in applicable SOWs for Professional Services.
+
+5.3 Automatic Renewal and Renewal Price Adjustments. Within ninety (90) days prior to the expiration of the Initial Term or any renewal term for SaaS Services, SaaS Provider will notify Client of the upcoming renewal date and any proposed pricing adjustments. Any increase in SaaS Charges for any renewal term shall be capped and shall not exceed the lesser of: (i) 3% of the prior year's SaaS Charges; or (ii) the percentage increase in SaaS Provider's published list price for such SaaS Charges. The SaaS Services shall automatically renew for additional one (1) year terms unless Client provides written notice of non-renewal at least thirty (30) days prior to the end of the then-current term.
+
+5.4 Payment of Fees and Invoice Disputes. All undisputed Charges are due and payable within thirty (30) days of Client's receipt of a proper invoice. If an undisputed Charge is not paid within ten (10) days after receipt of written notice of past-due balance, a late payment fee of 1.0% per month (or the maximum allowed by law, whichever is lower) may be assessed on such undisputed amounts. Client shall have no obligation to pay any disputed amounts until thirty (30) days after such dispute has been formally resolved in writing by the Parties. In the event Client disputes all or any portion of an invoice, the Parties agree to engage in a mandatory ninety (90) day good-faith escalation window to resolve the dispute, during which ninety (90) day escalation period SaaS Provider must continue to perform all Services without interruption or degradation.
+
+5.5 Taxes. Client shall be responsible for applicable sales or use taxes resulting from Client's use of the SaaS Services, excluding taxes based on SaaS Provider's net income or workforce.
+
+6. OWNERSHIP AND DATA HANDLING.
+
+6.1 Ownership of Platform. SaaS Provider retains all right, title, and interest in and to the Application Platform, Documentation, and SaaS Provider Confidential Information, including all intellectual property rights therein.
+
+6.2 Ownership of Client Data. Client exclusively owns all right, title, and interest in and to all Client Data and Client Confidential Information, including all intellectual property rights therein. SaaS Provider acquires no title, right, or ownership interest in Client Data.
+
+6.3 Return and Deletion of Client Data. Upon termination or expiration of this Agreement, SaaS Provider will promptly return all Client Data and Client Confidential Information to Client in a mutually agreed format. Immediately following such return, SaaS Provider must delete and permanently purge all Client Data from all of its production, backup, test, and staging environments and servers, and provide written verification and certification of such complete deletion signed by an authorized officer of SaaS Provider to Client within fifteen (15) days following termination.
+
+7. TERM, TERMINATION, AND SUSPENSION.
+
+7.1 Term. The term of this Agreement shall commence on the Effective Date and shall remain co-extensive with all active Orders and SOWs executed hereunder. The contract is strictly bound to the term of the active Orders/SOWs unless terminated for cause or non-renewal as explicitly provided herein. Neither Party has any right to terminate this Agreement or any Order/SOW for convenience.
+
+7.2 Termination for Cause by SaaS Provider. SaaS Provider may terminate this Agreement for cause only if Client fails to pay undisputed Charges exceeding the average monthly billing within ten (10) days of written notice of non-payment, or materially breaches Section 2.3 or Section 8 and fails to cure such breach within thirty (30) days of written notice.
+
+7.3 Termination for Cause by Client. Client may terminate this Agreement, any Order, or SOW for cause immediately upon written notice: (a) if SaaS Provider commits a material breach that remains uncured for thirty (30) days; (b) upon an SLA Termination Event; (c) if SaaS Provider fails to perform disaster recovery obligations; or (d) if a Security Event occurs.
+
+7.4 Pro-Rata Refund. Upon any termination by Client for cause, SaaS Provider shall promptly issue a pro-rata refund of any pre-paid, unearned SaaS Charges or fees.
+
+7.5 Termination Assistance Services. Upon termination or expiration, Client may request Termination Assistance Services for a Transition Assistance Period of up to twelve (12) months following termination, during which SaaS Provider shall assist in migrating Client Data and transition operations at the agreed contract rates.
+
+7.6 Strict Prohibition on Service Suspension (No Suspension). Under no circumstances may SaaS Provider suspend, throttle, disable, or terminate Client's or any Affiliate's access to or use of the Application Platform or receipt of the Services, whether for alleged non-payment, invoice dispute, security concern, or alleged breach, except through a formal termination of this Agreement in accordance with Section 7.2 and, in each such case, only after the designated Transition Assistance Period has fully expired. Any attempt by SaaS Provider to suspend or interrupt access prior to the conclusion of the Transition Assistance Period shall constitute a material breach of this Agreement.
+
+8. CONFIDENTIALITY AND DATA SECURITY.
+
+8.1 Confidentiality. Each Party shall maintain the strict confidentiality of the other Party's Confidential Information using at least reasonable care, and shall not disclose or use such information except as necessary to perform its obligations under this Agreement.
+
+8.2 Data Security Program. SaaS Provider shall maintain a comprehensive written Security Program with physical, administrative, and technical safeguards complying with PCI-DSS and applicable privacy statutes to protect Client Data against unauthorized access or disclosure.
+
+8.3 Security Events. SaaS Provider shall immediately notify Client in writing of any Security Event, fully cooperate in investigation and remediation efforts, and bear all costs of notification, credit monitoring, forensic analysis, and legal compliance.
+
+9. MARKETING AND PUBLICITY.
+
+Neither Party may use the other Party's name, trademarks, service marks, or logos in any marketing, advertising, press release, customer list, or public disclosure without obtaining the prior written approval of the other Party in each instance, which approval may be withheld in such Party's sole and absolute discretion.
+
+10. INDEMNIFICATION.
+
+SaaS Provider shall defend, indemnify, and hold harmless Client, its Affiliates, officers, directors, employees, and agents from and against all losses, damages, liabilities, costs, fines, and legal fees arising out of or relating to: (a) any Security Event or data breach; (b) breach of confidentiality obligations under Section 8; or (c) any third-party claim alleging that the Application Platform or Services infringe any patent, copyright, trademark, or trade secret.
+
+11. LIMITATION OF LIABILITY.
+
+11.1 Aggregate Liability Cap. EXCEPT AS OTHERWISE PROVIDED IN SECTION 11.3, IN NO EVENT SHALL EITHER PARTY'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THIS AGREEMENT EXCEED THE TOTAL CHARGES PAID BY CLIENT TO SAAS PROVIDER DURING THE TWELVE (12) MONTH PERIOD IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO LIABILITY.
+
+11.2 Consequential Damages Waiver. EXCEPT AS OTHERWISE PROVIDED IN SECTION 11.3, NEITHER PARTY SHALL BE LIABLE FOR INDIRECT, SPECIAL, INCIDENTAL, PUNITIVE, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THIS AGREEMENT.
+
+11.3 Uncapped Liability and Carve-Outs. THE LIMITATIONS AND EXCLUSIONS OF LIABILITY SET FORTH IN SECTION 11.1 AND SECTION 11.2 SHALL NOT APPLY TO: (A) SECURITY EVENTS, DATA BREACHES, OR SAAS PROVIDER'S FAILURE TO COMPLY WITH SECTION 8 (CONFIDENTIALITY AND DATA SECURITY); (B) BREACHES OF CONFIDENTIALITY UNDER SECTION 8; (C) INDEMNIFICATION OBLIGATIONS UNDER SECTION 10; (D) GROSS NEGLIGENCE, WILLFUL MISCONDUCT, OR FRAUD; OR (E) SERVICE LEVEL CREDITS. LIABILITY FOR DATA BREACHES, SECURITY EVENTS, CONFIDENTIALITY BREACHES, GROSS NEGLIGENCE, AND INDEMNIFICATION IS COMPLETELY UNCAPPED.
+
+12. REPRESENTATIONS AND WARRANTIES.
+
+SaaS Provider warrants that: (a) it has full power and authority to enter into this Agreement; (b) the Services will be performed in a professional and workmanlike manner; (c) the Application Platform will operate in material compliance with Documentation; and (d) the Application Platform does not contain malicious code or viruses.
+
+13. PLATFORM MODIFICATIONS.
+
+SaaS Provider shall provide at least thirty (30) days' prior written notice of any substantive modifications to the Application Platform. No modification shall materially reduce or diminish the functionality of the SaaS Services.
+
+14. FORCE MAJEURE AND EXCUSABLE DELAY.
+
+14.1 Force Majeure Events. Neither Party will be liable for delay or failure in performing its obligations hereunder (other than Client's obligation to pay undisputed fees for services rendered prior to the event) to the extent resulting from causes beyond its reasonable control, including acts of God, natural disasters, epidemics, war, or major telecommunication outages, provided the affected Party takes prompt steps to mitigate the impact.
+
+14.2 Service Credits and Fee Waiver. No SaaS Charges or fees shall accrue or be payable by Client during any period in which the SaaS Services or Application Platform are unavailable due to a force majeure event.
+
+14.3 Client Termination Remedy. If any force majeure event disrupts, impairs, or prevents the operation or availability of the SaaS Services or Application Platform for more than five (5) consecutive days, or more than ten (10) cumulative days in any calendar year, Client shall have the right to immediately terminate this Agreement and receive a pro-rata refund of pre-paid Charges and fifty percent (50%) of all Implementation Service Charges paid under this Agreement.
+
+15. INSURANCE.
+
+SaaS Provider shall maintain for the Term: (a) Workers' Compensation; (b) Commercial General Liability ($2M aggregate); (c) Professional Liability ($5M limit); and (d) Cyber Security Liability ($5M limit), naming Client as an additional insured.
+
+16. GENERAL PROVISIONS.
+
+16.1 Governing Law and Venue. This Agreement is governed by the laws of the State of California. Any legal action shall be brought exclusively in state or federal courts located in San Diego County, California.
+
+16.2 Mandatory Escalation. In the event of any dispute, the Parties shall engage in formal executive escalation prior to initiating litigation, except where emergency injunctive relief is required.
+
+16.3 Severability and Assignment. Neither Party may assign this Agreement without written consent, except to Affiliates or in connection with a merger or sale of assets.
+
+16.4 Entire Agreement. This Agreement constitutes the complete and exclusive statement of agreement between the Parties regarding its subject matter.
+
+IN WITNESS WHEREOF, the Parties have executed this Master Software-as-a-Service Agreement.
+
+CLIENT: _______________________
+SAAS PROVIDER: _________________
+
+EXHIBIT A - ORDER FORM
+EXHIBIT B - DISASTER RECOVERY PLAN
+EXHIBIT C - IMPLEMENTATION SERVICES
+EXHIBIT D - CHANGE CONTROL PROCEDURES
+EXHIBIT E - SERVICE LEVELS
+EXHIBIT F - PRICING; INVOICING; EXPENSE REIMBURSEMENT
+EXHIBIT G - SECURITY AUDIT

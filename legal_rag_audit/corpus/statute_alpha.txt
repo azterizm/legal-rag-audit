@@ -1,7 +1,36 @@
-Statute Alpha (Environmental Code)
+STATUTE ALPHA: NATIONAL ENVIRONMENTAL PROTECTION AND WATERWAY INTEGRITY ACT
 
-Article 4. Definitions.
+AN ACT to preserve national water resources, establish strict compliance guidelines for industrial discharge, define hazardous substances, and provide comprehensive enforcement powers to environmental protection regulatory authorities.
 
-Article 5. Any corporation found dumping hazardous waste in protected waterways shall be subject to a fine of no less than $25,000 per day of violation.
+ARTICLE 1. SHORT TITLE AND ENACTMENT
+This statute shall be known and may be cited as "Statute Alpha (Environmental Code)". This Code shall take effect immediately upon constitutional ratification and shall apply to all commercial entities operating within state and territorial jurisdiction.
 
-Article 6. Enforcement mechanisms.
+ARTICLE 2. LEGISLATIVE PURPOSE AND INTENT
+The purpose of this Statute is to eliminate toxic water contamination, protect public health, preserve marine ecosystems, and mandate environmental stewardship across all industrial sectors.
+
+ARTICLE 3. DEFINITIONS AND SCOPE OF TERMS
+For the purposes of this Statute, the following definitions shall govern:
+(a) "Hazardous Waste" means any liquid, solid, semi-solid, or contained gaseous waste material that exhibits ignitability, corrosivity, reactivity, or toxicity as defined in Schedule I of this Code.
+(b) "Protected Waterways" includes all rivers, streams, lakes, coastal estuaries, wetlands, subterranean aquifers, and territorial marine waters under jurisdiction.
+(c) "Corporation" means any business enterprise, corporation, partnership, joint venture, or commercial entity organized under public or private law.
+(d) "Discharge" means any spilling, leaking, pumping, pouring, emitting, emptying, dumping, or escaping of pollutants into water resources.
+
+ARTICLE 4. PERMITTING PROCEDURES AND COMPLIANCE STANDARDS
+All industrial facilities discharging effluent into surrounding environmental regions must maintain a valid Class-A National Pollutant Discharge Elimination Permit. Facility operators shall conduct bi-weekly water quality testing and submit audited environmental impact reports to the Enforcement Division.
+
+ARTICLE 5. Any corporation found dumping hazardous waste in protected waterways shall be subject to a fine of no less than $25,000 per day of violation.
+
+ARTICLE 6. ENFORCEMENT MECHANISMS AND INSPECTORS' POWERS
+The Environmental Protection Agency shall maintain full regulatory authority to conduct unannounced, on-site facility inspections, collect water and soil samples, inspect corporate maintenance records, and subpoena internal operational logs. In instances of ongoing or imminent environmental contamination, inspectors may issue administrative cease-and-desist orders effective immediately.
+
+ARTICLE 7. CITIZEN SUITS AND INJUNCTIVE RELIEF
+Any citizen or aggrieved non-governmental organization may commence a civil action on their own behalf against any corporation alleged to be in violation of any provision of this Code, provided that 60 days' written notice of the violation has been delivered to the regulatory agency and the alleged violator.
+
+ARTICLE 8. MANDATORY REMEDIATION AND RESTORATION
+In addition to monetary penalties specified under Article 5, any entity found liable for unlawful hazardous discharge shall be held strictly, jointly, and severally liable for all costs associated with environmental remediation, habitat restoration, and public health monitoring necessary to restore affected waterways to their pre-discharge ecological baseline.
+
+ARTICLE 9. CRIMINAL PENALTIES FOR WILLFUL NON-COMPLIANCE
+Any corporate officer, director, or managing agent who knowingly authorizes, directs, or conceals the illegal dumping of hazardous waste in violation of Article 5 shall be guilty of a Class B felony, punishable by imprisonment for not less than two years nor more than ten years per offense.
+
+ARTICLE 10. SEVERABILITY AND SAVINGS CLAUSE
+If any article, section, subsection, sentence, clause, or phrase of this Statute is for any reason held to be unconstitutional, invalid, or unenforceable by a court of competent jurisdiction, such decision shall not affect the validity or enforceability of the remaining portions of this Statute, which shall remain in full force and effect.
