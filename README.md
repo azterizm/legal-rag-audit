@@ -90,6 +90,31 @@ To ensure the audit tool interfaces correctly with your RAG system, you must con
    - **Expected Request**: A `POST` request with the search query.
    - **Expected Response**: A JSON object containing an array of retrieved text chunks. The tool computes cosine similarity against these raw chunks to grade retrieval performance independently of the LLM.
 
+#### Advanced Endpoint Configuration
+
+If your API requires specific HTTP methods, custom headers, or a deeply nested JSON body structure (or stringified JSON), you can configure endpoints as objects rather than simple strings. 
+
+Use the `{{QUERY}}` variable in the `body` field. The tool will inject the query at runtime. (For upload endpoints, use `{{FILENAME}}` and `{{CONTENT}}`).
+
+```yaml
+target:
+  endpoints:
+    chat:
+      url: "https://app.lexcorp.example.com/v1/api_core/widget/send_message/?language=en"
+      method: "POST"
+      headers:
+        accept: "application/json, text/plain, */*"
+        conv-id: "bd208096-772e-40a7-bcde-702ad8bdebfc"
+        scenario-id: "hhh0h4uuiy"
+        x-api-key: "hhh0h4uuiy"
+      # If your body must be a JSON string, you can provide it as a string:
+      body: '{"content":"{{QUERY}}","is_voice":false,"client_message_id":"f9517177-f80c","client_metadata":{"chat_page_access_token":"eyJhbGciOiJIUzI1NiIsIn...","language":"en"}}'
+      # OR provide it as YAML and it will be sent as standard JSON:
+      # body:
+      #   content: "{{QUERY}}"
+      #   is_voice: false
+```
+
 ### 2. Setting up the Corpus
 
 **Bundled Corpus (Recommended):**
