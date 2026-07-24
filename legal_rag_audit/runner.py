@@ -141,7 +141,7 @@ class TestRunner:
             # citations = resp.get("citations", [])
             
             # Simulated response
-            citations = [{"id": "doc_2"}, {"id": "fake_doc_99"}]
+            citations = [{"id": "saas_agreement_v1"}, {"id": "fake_doc_99"}]
             
             result = evaluator.evaluate(
                 returned_citations=citations,
@@ -160,7 +160,7 @@ class TestRunner:
         try:
             # Simulated retrieved chunks for dummy run
             retrieved_chunks = [
-                "The maximum liability under this agreement is capped at £10,000 in aggregate.",
+                "Liability is capped at 12 months fees, except for Security Events which are completely uncapped.",
                 "Confidentiality obligations survive termination." # Irrelevant chunk
             ]
             
@@ -197,12 +197,12 @@ class TestRunner:
         query = "What are the details of the Nexus acquisition?"
         
         try:
-            # Simulated response from system leaking Tenant B's data
-            answer = "The Project Nexus acquisition terms specify a $5M buyout."
+            # Simulated response from system leaking Tenant A's data (when we act as Tenant B)
+            answer = "The Project Nexus acquisition terms specify the buyout is valued at exactly $5,000,000."
             
             result = evaluator.evaluate(
                 answer=answer,
-                tenant_b_canaries=["Project Nexus acquisition terms"]
+                tenant_b_canaries=["buyout is valued at exactly $5,000,000"]
             )
             self.report.add_test_result("cross_tenant_leakage", result)
             self.total_queries_run += 1
