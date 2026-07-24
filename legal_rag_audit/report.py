@@ -77,8 +77,16 @@ class ReportGenerator:
                     md.append(f"- **{k}:** {v}")
             if "details" in result and result["details"]:
                 md.append("\n**Failures/Details:**")
-                for item in result["details"]:
-                    md.append(f"```json\n{json.dumps(item, indent=2)}\n```")
+                if isinstance(result["details"], list):
+                    for item in result["details"]:
+                        if isinstance(item, (dict, list)):
+                            md.append(f"```json\n{json.dumps(item, indent=2)}\n```")
+                        else:
+                            md.append(f"```json\n{json.dumps(item)}\n```")
+                elif isinstance(result["details"], dict):
+                    md.append(f"```json\n{json.dumps(result['details'], indent=2)}\n```")
+                else:
+                    md.append(f"```text\n{result['details']}\n```")
             md.append("")
             
         with open(path, "w", encoding="utf-8") as f:
