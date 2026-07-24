@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 import httpx
-from jsonpath_ng import parse
+from jsonpath_ng.ext import parse
 
 from legal_rag_audit.config import TargetConfig
 
