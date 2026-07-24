@@ -74,7 +74,12 @@ class ReportGenerator:
             md.append(f"### {status_icon} {test_name.replace('_', ' ').title()}")
             for k, v in result.items():
                 if k not in ("status", "details"):
-                    md.append(f"- **{k}:** {v}")
+                    if isinstance(v, (dict, list)):
+                        md.append(f"- **{k}:**\n```json\n{json.dumps(v, indent=2)}\n```")
+                    elif isinstance(v, str) and '\n' in v:
+                        md.append(f"- **{k}:**\n```text\n{v}\n```")
+                    else:
+                        md.append(f"- **{k}:** {v}")
             if "details" in result and result["details"]:
                 md.append("\n**Failures/Details:**")
                 if isinstance(result["details"], list):

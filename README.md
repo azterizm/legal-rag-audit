@@ -155,3 +155,7 @@ The evaluation suite uses deterministic checks (exact string matching, semantic 
 ## Output Example
 
 The tool outputs a structured JSON report and a markdown summary.
+
+# Roadmap
+
+- [ ] Add support for third party LLMs (e.g., OpenAI, Gemini)

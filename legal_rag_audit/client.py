@@ -66,6 +66,8 @@ class TargetClient:
             else:
                 return url, method, headers, {"content": payload}
         else:
+            if method.upper() == "GET":
+                return url, method, headers, {}
             return url, method, headers, {"json": default_payload}
 
     async def upload_document(self, filename: str, content: str, metadata: Optional[Dict] = None) -> Any:
@@ -158,7 +160,7 @@ class TargetClient:
                     cookie_str = "; ".join([f"{k}={v}" for k, v in self.client.cookies.items()])
                     safe_headers["Cookie"] = cookie_str
                 
-                async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
+                async with websockets.connect(rec_url, additional_headers=safe_headers, open_timeout=60.0) as websocket:
                     if "socket.io" in rec_url:
                         # Send socket.io namespace connect packet
                         # Flexible: pull from receive.body if configured
@@ -187,8 +189,9 @@ class TargetClient:
                             break
                         
                         try:
-                            message = await asyncio.wait_for(websocket.recv(), timeout=45.0)
-                            logger.info(f"Raw WS message: {message}")
+                            current_timeout = 5.0 if answer_text else 45.0
+                            message = await asyncio.wait_for(websocket.recv(), timeout=current_timeout)
+                            logger.debug(f"Raw WS message: {message}")
                             
                             # Handle Socket.IO Ping
                             if isinstance(message, str) and message == "2":
@@ -212,6 +215,9 @@ class TargetClient:
                                         cit_match = self.citations_parser.find(chunk)
                                         if cit_match and isinstance(cit_match[0].value, list):
                                             citations.extend(cit_match[0].value)
+                                        if not isinstance(raw_response, list):
+                                            raw_response = []
+                                        raw_response.append(chunk)
                         except asyncio.TimeoutError:
                             break
                         except websockets.exceptions.ConnectionClosed:
@@ -281,6 +287,9 @@ class TargetClient:
                                 cit_match = self.citations_parser.find(chunk)
                                 if cit_match and isinstance(cit_match[0].value, list):
                                     citations.extend(cit_match[0].value)
+                                if not isinstance(raw_response, list):
+                                    raw_response = []
+                                raw_response.append(chunk)
                             except Exception:
                                 pass
             return {
