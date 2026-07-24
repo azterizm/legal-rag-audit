@@ -55,7 +55,7 @@ class TargetClient:
         if isinstance(endpoint_config, str):
             return endpoint_config, "POST", self.headers, {"json": default_payload}
         
-        url = endpoint_config.url
+        url = self._inject_variables(endpoint_config.url, variables)
         method = endpoint_config.method
         headers = {**self.headers, **endpoint_config.headers}
         
@@ -156,7 +156,12 @@ class TargetClient:
                 async with websockets.connect(rec_url, additional_headers=safe_headers) as websocket:
                     if "socket.io" in rec_url:
                         # Send socket.io namespace connect packet
-                        await websocket.send("40")
+                        # Lexcorp requires /visitor_widget namespace and conv_id
+                        conv_id_val = headers.get("conv-id") or headers.get("Conv-Id") or headers.get("conv_id") or ""
+                        if conv_id_val:
+                            await websocket.send(f'40/visitor_widget,{{"conv_id":"{conv_id_val}"}}')
+                        else:
+                            await websocket.send("40")
                         
                     logger.debug(f"Sending query to {url}: {query}")
                     response = await self.client.request(method, url, headers=headers, **kwargs)
