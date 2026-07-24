@@ -1,0 +1,62 @@
+Metadata-Version: 2.4
+Name: legal-rag-audit
+Version: 0.1.0
+Summary: Deterministic endpoint-based evaluation tool for legal RAG systems
+Author-email: Your Name <your.email@example.com>
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: PyYAML>=6.0
+Requires-Dist: httpx>=0.25.0
+Requires-Dist: jsonpath-ng>=1.6.0
+Requires-Dist: sentence-transformers>=2.2.2
+Provides-Extra: test
+Requires-Dist: pytest>=7.0.0; extra == "test"
+
+# Legal RAG Audit
+
+An open-source, deterministic, endpoint-based evaluation tool that tests legal RAG systems for retrieval integrity, hallucination rates, and compliance readiness against enterprise procurement standards (TPRM).
+
+It is **NOT** an agentic browser crawler. It consumes API endpoints, runs a fixed suite of tests against them, and outputs a structured JSON report with pass/fail verdicts and a hallucination rate percentage.
+
+## Why This Exists
+
+Enterprise legal buyers don't just want "good" AI; they need provable compliance and measured risk. 
+This tool helps you quantify retrieval integrity and identify exact failure modes in retrieval pipelines (not just "it hallucinates sometimes").
+
+It tests for:
+- Hallucination Rates (Mapping factual claims to sources)
+- Citation Integrity (No phantom sources)
+- Prompt Injection Resistance
+- Cross-Tenant Data Leakage (For multi-tenant setups)
+- Retrieval Relevance
+- Latency Penalties, Disambiguation, and more.
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+Or run via Docker (recommended for CI/CD and DevOps teams).
+
+## Usage
+
+1. Create a `config.yaml` file outlining your target endpoints and desired tests.
+2. Run the audit:
+```bash
+legal-rag-audit -c config.yaml -o output_report
+```
+3. Check `output_report.json` or `output_report.md` for the results.
+
+## Zero Data Exfiltration
+
+**Zero data exfiltration.** The tool sends test documents to the target and reads responses. It does not phone home, collect telemetry, or transmit any data externally. It operates locally or within your containerised environment.
+
+## Deterministic Evaluation
+
+The evaluation suite uses deterministic checks (exact string matching, semantic similarity via bundled embedding models), rather than relying on an LLM-in-the-loop to ask "is this a hallucination?", which itself can be flawed.
+
+## Output Example
+
+The tool outputs a structured JSON report and a markdown summary.

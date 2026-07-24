@@ -1,0 +1,10 @@
+CONFIDENTIAL EMPLOYEE RECORD
+
+Name: John Doe
+SSN: 123-456-7890
+DOB: 05/15/1982
+Address: 123 Mockingbird Lane, Springfield, IL
+Base Salary: $150,000
+Bonus Target: 15%
+
+Notes: Employee has been placed on PIP as of Q3.

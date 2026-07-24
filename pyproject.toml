@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-rag-audit"
+version = "0.1.0"
+description = "Deterministic endpoint-based evaluation tool for legal RAG systems"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0.0",
+    "PyYAML>=6.0",
+    "httpx>=0.25.0",
+    "jsonpath-ng>=1.6.0",
+    "sentence-transformers>=2.2.2",
+]
+
+[project.scripts]
+legal-rag-audit = "legal_rag_audit.cli:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+]

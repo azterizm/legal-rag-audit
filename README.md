@@ -1,0 +1,103 @@
+# Legal RAG Audit
+
+An open-source, deterministic, endpoint-based evaluation tool that tests legal RAG systems for retrieval integrity, hallucination rates, and compliance readiness against enterprise procurement standards (TPRM).
+
+It is **NOT** an agentic browser crawler. It consumes API endpoints, runs a fixed suite of tests against them, and outputs a structured JSON report with pass/fail verdicts and a hallucination rate percentage.
+
+## Why This Exists
+
+Enterprise legal buyers don't just want "good" AI; they need provable compliance and measured risk. 
+This tool helps you quantify retrieval integrity and identify exact failure modes in retrieval pipelines (not just "it hallucinates sometimes").
+
+It tests for:
+- Hallucination Rates (Mapping factual claims to sources)
+- Citation Integrity (No phantom sources)
+- Prompt Injection Resistance
+- Cross-Tenant Data Leakage (For multi-tenant setups)
+- Retrieval Relevance
+- Latency Penalties, Disambiguation, and more.
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+Or run via Docker (recommended for CI/CD and DevOps teams).
+
+## Configuration & Setup Guide
+
+To get accurate, deterministic results and avoid false positives, you must correctly map the audit tool to your RAG system's exact API shape using `config.yaml`.
+
+### 1. The Configuration File (`config.yaml`)
+
+Create a `config.yaml` in your project root. Here is a robust example:
+
+```yaml
+target:
+  name: "lexcorp-staging" # Give your test run a descriptive name
+  endpoints:
+    chat: "https://staging.lexcorp.example.com/api/v1/chat"
+    upload: "https://staging.lexcorp.example.com/api/v1/documents"
+    retrieval: "https://staging.lexcorp.example.com/api/v1/search" # Optional
+  auth:
+    type: "bearer" # Options: bearer | api_key | basic | none
+    token_env: "TARGET_API_KEY" # Tool reads the actual token securely from this env var
+  response_format:
+    # CRITICAL: Define the exact JSONPath to the answer string and citation array in your API's response.
+    # Incorrect JSONPaths are the #1 cause of false positives (e.g., evaluating an empty string as a hallucination).
+    answer_field: "response.text" 
+    citations_field: "response.sources"
+    stream: false # Set to true if your chat endpoint uses Server-Sent Events (SSE)
+
+corpus:
+  # The test documents used for the evaluation.
+  use_bundled: true # True to use our curated 13-document suite of adversarial legal texts
+  # OR provide a path to your own custom directory of texts
+  # path: "./my_test_documents/"
+
+tests:
+  hallucination_rate: true
+  citation_integrity: true
+  retrieval_relevance: true
+  injection_resistance: true
+  cross_tenant_leakage: false # Set to true only if multi_tenant config is provided
+  confidence_threshold: true
+
+thresholds:
+  max_hallucination_rate: 0.02 # Maximum acceptable hallucination rate (2%)
+  min_retrieval_relevance: 0.85 # Minimum cosine similarity for retrieved chunks
+  max_injection_success_rate: 0.0 
+  max_cross_tenant_leaks: 0
+```
+
+### 2. Setting up the Corpus
+
+**Bundled Corpus (Recommended):**
+Set `use_bundled: true` in your `config.yaml`. The tool ships with a highly curated suite of 13 synthetic legal documents explicitly designed to trigger failure modes (e.g., highly contradictory SaaS agreements, overlapping statutes, and prompt injection traps).
+
+**Custom Corpus:**
+If you set `use_bundled: false`, you must provide a `path:` to a directory of text/markdown files.
+- The tool will upload these documents and use their raw text as the source of truth.
+- **Tip to avoid false positives:** Ensure the documents in your custom directory are clean and accurately reflect the expected facts you are testing for, as the Hallucination Evaluator computes semantic similarity directly against these files.
+
+### 3. Execution
+
+Set your environment variables and run the tool:
+```bash
+export TARGET_API_KEY="your-api-token"
+legal-rag-audit -c config.yaml -o output_report
+```
+3. Check `output_report.json` or `output_report.md` for the detailed results.
+
+## Zero Data Exfiltration
+
+**Zero data exfiltration.** The tool sends test documents to the target and reads responses. It does not phone home, collect telemetry, or transmit any data externally. It operates locally or within your containerised environment.
+
+## Deterministic Evaluation
+
+The evaluation suite uses deterministic checks (exact string matching, semantic similarity via bundled embedding models), rather than relying on an LLM-in-the-loop to ask "is this a hallucination?", which itself can be flawed.
+
+## Output Example
+
+The tool outputs a structured JSON report and a markdown summary.

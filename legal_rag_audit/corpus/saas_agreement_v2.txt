@@ -1,0 +1,4 @@
+SaaS Master Subscription Agreement (Version 2)
+
+8. Limitation of Liability
+Notwithstanding any other provision in this agreement, the Service Provider's aggregate liability for any and all claims shall be strictly capped at $1,000,000 USD, regardless of the actual fees paid by the Customer.

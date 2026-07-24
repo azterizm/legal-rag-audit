@@ -1,0 +1,4 @@
+SaaS Master Subscription Agreement (Version 1)
+
+8. Limitation of Liability
+In no event shall either party's aggregate liability arising out of or related to this agreement exceed the total amount paid by Customer hereunder for the services giving rise to the liability in the twelve (12) months preceding the first incident.
