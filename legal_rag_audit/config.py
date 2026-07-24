@@ -8,6 +8,7 @@ class EndpointConfig(BaseModel):
     method: str = "POST"
     headers: Dict[str, str] = Field(default_factory=dict)
     body: Any = None
+    file_field: Optional[str] = None
 
 class EndpointsConfig(BaseModel):
     chat: Union[str, EndpointConfig]

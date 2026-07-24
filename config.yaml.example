@@ -2,7 +2,16 @@ target:
   name: "lexcorp-staging"
   endpoints:
     chat: "https://staging.lexcorp.example.com/api/v1/chat"
-    upload: "https://staging.lexcorp.example.com/api/v1/documents"
+    upload:
+      url: "https://app.lexcorp.example.com/v1/api/knowledge_base/file_upload_api"
+      method: "POST"
+      headers:
+        accept: "application/json, text/plain, */*"
+        accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
+        authorization: "Bearer ..."
+        scenario-id: "hhh0h4uuiy"
+        x-csrftoken: "aIUG3jnMLJDgH4V2keRQ4jCRuUWtEKQz"
+      file_field: "file"
     retrieval: "https://staging.lexcorp.example.com/api/v1/search"  # optional
   auth:
     type: "bearer"  # bearer | api_key | basic | none

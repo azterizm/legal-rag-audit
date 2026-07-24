@@ -27,3 +27,6 @@ legal-rag-audit = "legal_rag_audit.cli:main"
 test = [
     "pytest>=7.0.0",
 ]
+
+[tool.setuptools]
+packages = ["legal_rag_audit", "legal_rag_audit.evaluators"]

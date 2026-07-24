@@ -69,6 +69,10 @@ class TargetClient:
             return url, method, headers, {"json": default_payload}
 
     async def upload_document(self, filename: str, content: str, metadata: Optional[Dict] = None) -> Any:
+        endpoint_config = self.config.endpoints.upload
+        
+        file_field = getattr(endpoint_config, "file_field", None) if not isinstance(endpoint_config, str) else None
+        
         default_payload = {
             "filename": filename,
             "content": content,
@@ -77,13 +81,29 @@ class TargetClient:
             default_payload["metadata"] = metadata
             
         url, method, headers, kwargs = self._prepare_request(
-            self.config.endpoints.upload,
+            endpoint_config,
             default_payload=default_payload,
             variables={"FILENAME": filename, "CONTENT": content}
         )
             
-        logger.debug(f"Uploading {filename} to {url}")
-        response = await self.client.request(method, url, headers=headers, **kwargs)
+        if file_field:
+            # Native multipart form upload using httpx
+            # Remove content-type from headers so httpx computes the boundary correctly
+            headers = {k: v for k, v in headers.items() if k.lower() != 'content-type'}
+            
+            # Since we are sending files, we remove json/content from kwargs
+            kwargs.pop("json", None)
+            kwargs.pop("content", None)
+            
+            files = {file_field: (filename, content, "text/plain")}
+            kwargs["files"] = files
+            
+            logger.debug(f"Uploading {filename} to {url} using native multipart on field '{file_field}'")
+            response = await self.client.request(method, url, headers=headers, **kwargs)
+        else:
+            logger.debug(f"Uploading {filename} to {url}")
+            response = await self.client.request(method, url, headers=headers, **kwargs)
+            
         response.raise_for_status()
         return response.json()
 
