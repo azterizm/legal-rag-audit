@@ -175,12 +175,12 @@ class TargetClient:
                     start_time = time.time()
                     
                     while True:
-                        if time.time() - start_time > 60.0:
-                            logger.error("Websocket receive overall timeout (60s) reached.")
+                        if time.time() - start_time > 120.0:
+                            logger.error("Websocket receive overall timeout (120s) reached.")
                             break
                         
                         try:
-                            message = await asyncio.wait_for(websocket.recv(), timeout=10.0)
+                            message = await asyncio.wait_for(websocket.recv(), timeout=45.0)
                             logger.info(f"Raw WS message: {message}")
                             
                             # Handle Socket.IO Ping

@@ -13,7 +13,12 @@ class ConfidenceEvaluator:
             "not mentioned in the provided text",
             "not specified in the document",
             "i cannot answer",
-            "insufficient information"
+            "i can't answer",
+            "insufficient information",
+            "don't have that information",
+            "materials available to me",
+            "documents i can access don't cover",
+            "can't answer this reliably"
         ]
 
     def evaluate(self, answer: str) -> Dict[str, Any]:
