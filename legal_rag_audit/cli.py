@@ -12,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description="Legal RAG Audit Tool")
     parser.add_argument("-c", "--config", required=True, help="Path to config.yaml")
     parser.add_argument("-o", "--output", default="report", help="Base name for output report files")
+    parser.add_argument("--skip-upload", action="store_true", help="Skip uploading the corpus, use local files for tests")
     
     args = parser.parse_args()
 
@@ -21,7 +22,7 @@ def main():
         logging.error(f"Failed to load config: {e}")
         sys.exit(1)
 
-    runner = TestRunner(config)
+    runner = TestRunner(config, skip_upload=args.skip_upload)
     
     # Run the async runner loop
     report = asyncio.run(runner.run_all())

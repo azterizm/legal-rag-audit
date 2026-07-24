@@ -17,8 +17,9 @@ from legal_rag_audit.evaluators import (
 logger = logging.getLogger(__name__)
 
 class TestRunner:
-    def __init__(self, config: AuditConfig):
+    def __init__(self, config: AuditConfig, skip_upload: bool = False):
         self.config = config
+        self.skip_upload = skip_upload
         self.report = ReportGenerator(target_name=config.target.name, config=config)
         self.client = TargetClient(config.target)
         self.total_queries_run = 0
@@ -93,25 +94,32 @@ class TestRunner:
             ]
         
         for doc in docs_to_upload:
-            try:
-                resp = await self.client.upload_document(doc["filename"], doc["content"], metadata={"id": doc["id"]})
+            if not self.skip_upload:
+                try:
+                    resp = await self.client.upload_document(doc["filename"], doc["content"], metadata={"id": doc["id"]})
+                    
+                    # Many APIs return 200 OK but fail in the JSON payload
+                    if isinstance(resp, dict) and (resp.get("status") == "error" or resp.get("success") is False):
+                        logger.error(f"Upload of {doc['filename']} returned 200 OK but failed: {resp}")
+                    elif isinstance(resp, dict) and "error" in resp:
+                        logger.error(f"Upload of {doc['filename']} returned 200 OK but may have failed: {resp}")
+                    else:
+                        logger.debug(f"Successfully uploaded {doc['filename']}: {resp}")
+                    
+                    self.uploaded_doc_ids.add(resp.get("id", doc["id"]))
+                except Exception as e:
+                    logger.error(f"Failed to upload document {doc['filename']}: {e}")
+                    continue # Skip appending if it completely failed
+            else:
+                self.uploaded_doc_ids.add(doc["id"])
                 
-                # Many APIs return 200 OK but fail in the JSON payload
-                if isinstance(resp, dict) and (resp.get("status") == "error" or resp.get("success") is False):
-                    logger.error(f"Upload of {doc['filename']} returned 200 OK but failed: {resp}")
-                elif isinstance(resp, dict) and "error" in resp:
-                    logger.error(f"Upload of {doc['filename']} returned 200 OK but may have failed: {resp}")
-                else:
-                    logger.debug(f"Successfully uploaded {doc['filename']}: {resp}")
-                
-                # Simulation for now
-                self.uploaded_documents.append(doc)
-                self.uploaded_doc_ids.add(resp.get("id", doc["id"]))
-                self.source_texts.append(doc["content"])
-            except Exception as e:
-                logger.error(f"Failed to upload document {doc['filename']}: {e}")
+            self.uploaded_documents.append(doc)
+            self.source_texts.append(doc["content"])
         
-        logger.info(f"Uploaded {len(self.uploaded_documents)} documents.")
+        if self.skip_upload:
+            logger.info(f"Skipped upload. Loaded {len(self.uploaded_documents)} local documents into memory for testing.")
+        else:
+            logger.info(f"Uploaded {len(self.uploaded_documents)} documents.")
 
     async def _run_hallucination_test(self):
         logger.info("Running Hallucination Rate test...")
