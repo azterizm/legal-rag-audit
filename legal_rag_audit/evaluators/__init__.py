@@ -9,11 +9,17 @@ from .routing import RoutingContaminationEvaluator
 from .synthesis import CrossClauseSynthesisEvaluator
 from .memory import MemoryManagementEvaluator
 from .cache import CacheInvalidationEvaluator
+from .latency import LatencyPenaltyEvaluator
+from .disambiguation import RetrievalDisambiguationEvaluator
+from .structural import StructuralIntegrityEvaluator
+from .entity_masking import EntityMaskingEvaluator
+from .parametric_bleed import ParametricBleedEvaluator
+from .cross_doc_attribution import CrossDocAttributionEvaluator
 
 __all__ = [
-    "HallucinationEvaluator", 
-    "CitationEvaluator", 
-    "RetrievalEvaluator", 
+    "HallucinationEvaluator",
+    "CitationEvaluator",
+    "RetrievalEvaluator",
     "InjectionEvaluator",
     "LeakageEvaluator",
     "ConfidenceEvaluator",
@@ -21,5 +27,11 @@ __all__ = [
     "RoutingContaminationEvaluator",
     "CrossClauseSynthesisEvaluator",
     "MemoryManagementEvaluator",
-    "CacheInvalidationEvaluator"
+    "CacheInvalidationEvaluator",
+    "LatencyPenaltyEvaluator",
+    "RetrievalDisambiguationEvaluator",
+    "StructuralIntegrityEvaluator",
+    "EntityMaskingEvaluator",
+    "ParametricBleedEvaluator",
+    "CrossDocAttributionEvaluator",
 ]

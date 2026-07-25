@@ -10,15 +10,22 @@ Enterprise legal buyers don't just want "good" AI; they need provable compliance
 This tool helps you quantify retrieval integrity and identify exact failure modes in retrieval pipelines (not just "it hallucinates sometimes").
 
 It tests for:
-- **Hallucination Rates & Boundary Probing**: Evaluates if the model fabricates facts or correctly abstains from answering out-of-domain questions by relying on confidence thresholds.
+- **Hallucination Rates**: Evaluates if the model fabricates facts or accurately represents the source documents.
 - **Citation Integrity**: Verifies that every generated citation points to a real, existing source document, catching "phantom" or hallucinated sources.
 - **Prompt Injection Resistance & Input Robustness**: Assesses vulnerability to adversarial instructions (e.g., direct overrides) and semantic noise.
 - **Cross-Tenant Data Leakage**: In multi-tenant setups, strictly tests if a tenant can retrieve or leak 'canary' data belonging to another tenant's isolated namespace.
-- **Retrieval Relevance & Disambiguation**: Checks if the underlying search index retrieves highly relevant chunks and distinguishes between semantically similar but distinct rules.
-- **Contradiction Surfacing**: Uploads inherently conflicting documents (e.g., SaaS agreements with different liability caps) and verifies the system acknowledges the conflict rather than silently blending or picking one.
+- **Retrieval Relevance**: Checks if the underlying search index retrieves highly relevant chunks for the query.
+- **Retrieval Disambiguation**: Queries overlapping entities (e.g., "Article 5" from two different statutes) to ensure the system doesn't merge contexts or thrash in infinite ReAct loops.
+- **Contradiction Surfacing**: Uploads inherently conflicting documents and verifies the system acknowledges the conflict rather than silently blending or picking one.
+- **Latency Penalty (The Hallucination Tax)**: Measures Time-To-First-Byte (TTFB) and total latency on contradictory queries to detect post-hoc catch-and-regenerate loops.
+- **Structural Integrity**: Tests chunking flaws by verifying the system can connect headers to deeply nested list/table items in dense regulatory documents without severing the context.
+- **Entity Masking Re-hydration**: Evaluates PII handling by verifying perfect re-hydration of masked entities without counterparty swapping or metadata leakage.
+- **Parametric Knowledge Bleed**: Queries topics not in the corpus to verify the system refuses or explicitly cites an external source, rather than silently substituting ungrounded pre-trained world knowledge.
+- **Cross-Document Attribution**: Verifies that responses synthesizing multiple documents explicitly label the specific source for each claim, rather than merging them into an orphaned, unverifiable truth.
+- **Confidence Threshold & Boundary Probing**: Evaluates if the model correctly abstains from answering out-of-domain questions by relying on confidence thresholds.
 - **Contextual Routing & Namespace Contamination**: Ensures the system restricts answers to the uploaded corpus instead of bypassing it to leverage generic, out-of-bounds internet knowledge.
 - **Cross-Clause Synthesis**: Formulates complex scenario queries requiring the model to precisely extract and compile scattered facts across multiple clauses without missing exclusions.
-- **Context Window Saturation & Memory Management**: Issues ambiguous multi-turn queries using pronouns (e.g., "What about that exception?") to verify the system anchors references correctly to earlier dialogue.
+- **Context Window Saturation & Memory Management**: Issues ambiguous multi-turn queries using pronouns to verify the system anchors references correctly to earlier dialogue.
 - **Index Freshness & Cache Invalidation**: Evaluates if the retrieval index accurately mirrors live updates by verifying the system retrieves fresh facts instead of serving stale data from a zombie cache.
 
 ## Installation
@@ -72,6 +79,12 @@ tests:
   cross_clause_synthesis: true
   memory_management: true
   cache_invalidation: true
+  latency_penalty: true
+  retrieval_disambiguation: true
+  structural_integrity: true
+  entity_masking_rehydration: true
+  parametric_knowledge_bleed: true
+  cross_document_attribution: true
 
 thresholds:
   max_hallucination_rate: 0.02 # Maximum acceptable hallucination rate (2%)

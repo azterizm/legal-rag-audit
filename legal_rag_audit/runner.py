@@ -1,4 +1,5 @@
 import asyncio
+import time
 import logging
 from typing import Dict, Any, List
 
@@ -16,7 +17,13 @@ from legal_rag_audit.evaluators import (
     RoutingContaminationEvaluator,
     CrossClauseSynthesisEvaluator,
     MemoryManagementEvaluator,
-    CacheInvalidationEvaluator
+    CacheInvalidationEvaluator,
+    LatencyPenaltyEvaluator,
+    RetrievalDisambiguationEvaluator,
+    StructuralIntegrityEvaluator,
+    EntityMaskingEvaluator,
+    ParametricBleedEvaluator,
+    CrossDocAttributionEvaluator,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +83,24 @@ class TestRunner:
 
             if self.config.tests.cache_invalidation:
                 await self._run_cache_invalidation_test()
+
+            if self.config.tests.latency_penalty:
+                await self._run_latency_penalty_test()
+
+            if self.config.tests.retrieval_disambiguation:
+                await self._run_retrieval_disambiguation_test()
+
+            if self.config.tests.structural_integrity:
+                await self._run_structural_integrity_test()
+
+            if self.config.tests.entity_masking_rehydration:
+                await self._run_entity_masking_test()
+
+            if self.config.tests.parametric_knowledge_bleed:
+                await self._run_parametric_bleed_test()
+
+            if self.config.tests.cross_document_attribution:
+                await self._run_cross_doc_attribution_test()
 
         finally:
             await self.client.close()
@@ -384,3 +409,275 @@ class TestRunner:
         except Exception as e:
             logger.error(f"Cache invalidation test failed: {e}")
 
+    async def _timed_chat(self, query: str) -> tuple:
+        """
+        Send a chat query and measure TTFB and total latency.
+        Returns (response_dict, ttfb_seconds, total_seconds).
+        """
+        start = time.monotonic()
+        resp = await self.client.chat(query)
+        total = time.monotonic() - start
+        # TTFB approximation: for non-streaming, TTFB ≈ total.
+        # For streaming, the client returns after full collection,
+        # so we use total as the best available measurement.
+        ttfb = total
+        return resp, ttfb, total
+
+    async def _run_latency_penalty_test(self):
+        """F4: Latency Penalty (Post-Hoc Trap).
+
+        Sends a baseline (non-contradictory) query and a contradictory query,
+        then compares their latencies. A spike flags a catch-and-regenerate loop.
+        """
+        logger.info("Running Latency Penalty test...")
+        evaluator = LatencyPenaltyEvaluator()
+
+        baseline_query = "What is the liability cap in the SaaS agreement v1?"
+        contradictory_query = (
+            "The SaaS agreements mention different liability caps. "
+            "What is the exact cap — is it $2M or $5M?"
+        )
+
+        try:
+            _, baseline_ttfb, baseline_total = await self._timed_chat(baseline_query)
+            self.total_queries_run += 1
+
+            _, contra_ttfb, contra_total = await self._timed_chat(contradictory_query)
+            self.total_queries_run += 1
+
+            result = evaluator.evaluate(
+                baseline_ttfb=baseline_ttfb,
+                baseline_total=baseline_total,
+                contradictory_ttfb=contra_ttfb,
+                contradictory_total=contra_total,
+            )
+            result["baseline_query"] = baseline_query
+            result["contradictory_query"] = contradictory_query
+            self.report.add_test_result("latency_penalty", result)
+        except Exception as e:
+            logger.error(f"Latency Penalty test failed: {e}")
+
+    async def _run_retrieval_disambiguation_test(self):
+        """F5: Retrieval Disambiguation.
+
+        Queries 'Article 5' which exists in both Statute Alpha (environmental
+        fines) and Statute Beta (labor arbitration). A good system must
+        disambiguate and not merge the two.
+        """
+        logger.info("Running Retrieval Disambiguation test...")
+        evaluator = RetrievalDisambiguationEvaluator()
+
+        # Query specifically about the environmental statute's Article 5
+        query = (
+            "Under the environmental protection statute (Statute Alpha), "
+            "what does Article 5 say about hazardous waste penalties?"
+        )
+
+        # Expected: content from Statute Alpha's Article 5
+        expected_canaries = ["$25,000", "hazardous waste"]
+        # Forbidden: content from Statute Beta's Article 5 (labor arbitration)
+        forbidden_canaries = ["binding arbitration", "14 days", "strike notice"]
+
+        try:
+            start = time.monotonic()
+            resp = await self.client.chat(query)
+            latency = time.monotonic() - start
+            answer = resp.get("answer", "")
+            self.total_queries_run += 1
+
+            if not answer:
+                result = {
+                    "status": "FAIL",
+                    "details": "Received empty answer from target."
+                }
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    expected_canaries=expected_canaries,
+                    forbidden_canaries=forbidden_canaries,
+                    latency_seconds=latency,
+                )
+            result["system_response"] = answer
+            self.report.add_test_result("retrieval_disambiguation", result)
+        except Exception as e:
+            logger.error(f"Retrieval Disambiguation test failed: {e}")
+
+    async def _run_structural_integrity_test(self):
+        """F6: Structural Integrity (Chunking).
+
+        Asks a relational question against reg_finance_404.md that requires
+        connecting a header (Tier 2) to a deeply nested penalty table row
+        ($250,000 for Material Misstatement). Naive chunking will sever this.
+        """
+        logger.info("Running Structural Integrity test...")
+        evaluator = StructuralIntegrityEvaluator()
+
+        query = (
+            "Under Financial Regulation 404, what is the monetary fine for "
+            "a Tier 2 entity that commits a Material Misstatement or "
+            "Fraudulent Filing?"
+        )
+
+        # Facts that MUST appear — connecting the Tier 2 header to the
+        # nested penalty table row
+        required_relational_facts = ["$250,000", "tier 2"]
+
+        # Facts from the WRONG tier that would indicate conflation
+        forbidden_conflations = ["$5,000", "$15,000"]
+
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            self.total_queries_run += 1
+
+            if not answer:
+                result = {
+                    "status": "FAIL",
+                    "details": "Received empty answer from target."
+                }
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    required_relational_facts=required_relational_facts,
+                    forbidden_conflations=forbidden_conflations,
+                )
+            result["system_response"] = answer
+            self.report.add_test_result("structural_integrity", result)
+        except Exception as e:
+            logger.error(f"Structural Integrity test failed: {e}")
+
+    async def _run_entity_masking_test(self):
+        """F7: Entity Masking Re-hydration.
+
+        Queries about the employee record (pii_employee_record.txt) and
+        verifies correct PII re-hydration without counterparty swaps.
+        """
+        logger.info("Running Entity Masking Re-hydration test...")
+        evaluator = EntityMaskingEvaluator()
+
+        query = (
+            "What is the employee's name, SSN, and base salary from the "
+            "confidential personnel file?"
+        )
+
+        # PII values that MUST be correctly re-hydrated
+        expected_pii_pairs = [
+            ("employee_name", "John Doe"),
+            ("ssn", "123-456-7890"),
+            ("salary", "$150,000"),
+        ]
+
+        # The supervisor's name must NOT appear as the employee's name
+        forbidden_swaps = [
+            ("employee_name_swap", "Marcus Vance"),
+        ]
+
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            raw = resp.get("raw", {})
+            self.total_queries_run += 1
+
+            if not answer:
+                result = {
+                    "status": "FAIL",
+                    "details": "Received empty answer from target."
+                }
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    expected_pii_pairs=expected_pii_pairs,
+                    forbidden_swaps=forbidden_swaps,
+                    raw_response=raw if isinstance(raw, dict) else None,
+                )
+            result["system_response"] = answer
+            self.report.add_test_result("entity_masking_rehydration", result)
+        except Exception as e:
+            logger.error(f"Entity Masking test failed: {e}")
+
+    async def _run_parametric_bleed_test(self):
+        """F13: Parametric Knowledge Bleed.
+
+        Queries a topic with zero relevant documents in the corpus. The
+        system should refuse or cite an external source — never silently
+        answer from parametric memory.
+        """
+        logger.info("Running Parametric Knowledge Bleed test...")
+        evaluator = ParametricBleedEvaluator()
+
+        query = (
+            "What year was the European Union's General Data Protection "
+            "Regulation (GDPR) enacted and what is its primary purpose?"
+        )
+
+        # Known correct facts that would only come from parametric memory
+        # (the corpus contains no GDPR documents)
+        parametric_canaries = ["2016", "2018", "data protection", "privacy"]
+
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            citations = resp.get("citations", [])
+            self.total_queries_run += 1
+
+            if not answer:
+                result = {
+                    "status": "FAIL",
+                    "details": "Received empty answer from target."
+                }
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    parametric_canaries=parametric_canaries,
+                    citations=citations,
+                )
+            result["system_response"] = answer
+            self.report.add_test_result("parametric_knowledge_bleed", result)
+        except Exception as e:
+            logger.error(f"Parametric Knowledge Bleed test failed: {e}")
+
+    async def _run_cross_doc_attribution_test(self):
+        """F9: Cross-Document Attribution.
+
+        Asks a question that requires facts from BOTH Statute Alpha and
+        Statute Beta, then verifies each fact is explicitly attributed to
+        its origin document.
+        """
+        logger.info("Running Cross-Document Attribution test...")
+        evaluator = CrossDocAttributionEvaluator()
+
+        query = (
+            "Compare the enforcement mechanisms in Article 5 of the "
+            "Environmental Protection statute and Article 5 of the "
+            "Labor Relations statute. What does each one mandate?"
+        )
+
+        # Facts with their expected source attribution markers
+        expected_facts_with_sources = [
+            ("$25,000", "statute alpha"),
+            ("hazardous waste", "environmental"),
+            ("binding arbitration", "statute beta"),
+            ("14 days", "labor"),
+        ]
+
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            citations = resp.get("citations", [])
+            self.total_queries_run += 1
+
+            if not answer:
+                result = {
+                    "status": "FAIL",
+                    "details": "Received empty answer from target."
+                }
+            else:
+                result = evaluator.evaluate(
+                    answer=answer,
+                    expected_facts_with_sources=expected_facts_with_sources,
+                    citations=citations,
+                )
+            result["system_response"] = answer
+            self.report.add_test_result("cross_document_attribution", result)
+        except Exception as e:
+            logger.error(f"Cross-Document Attribution test failed: {e}")
