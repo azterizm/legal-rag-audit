@@ -118,11 +118,19 @@ target:
       headers:
         accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
         cache-control: "no-cache"
+      # (Optional) Send a specific connection initiation packet upon connecting to the WebSocket.
+      # You can provide a string (e.g., "40" for Socket.IO) or a JSON object. Variables like {{UUID}} are supported.
+      init_message: "40"
   
   response_format:
     # Use jsonpath-ng syntax to filter specific WS events for the AI's final answer
     answer_field: "$[?(@.event_type=='message' & @.data.author.type=='ai_assistant')].data.content"
     stream: true # Keep the connection open to aggregate chunks if the WS streams chunks
+    # (Optional) Stop stream immediately if payload contains this substring (Lazy match)
+    stop_payload_match: "MESSAGE_END"
+    # (Optional) Stop stream if JSONPath strictly matches this value
+    # stop_field: "message.type"
+    # stop_value: "finish"
 ```
 
 ### 2. Setting up the Corpus

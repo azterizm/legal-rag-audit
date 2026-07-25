@@ -37,3 +37,5 @@ venv.bak/
 
 # Environment variables
 .env
+
+.legal_rag_audit.log

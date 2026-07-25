@@ -17,6 +17,7 @@ class TargetClient:
         
         self.answer_parser = parse(self.config.response_format.answer_field)
         self.citations_parser = parse(self.config.response_format.citations_field)
+        self.stop_parser = parse(self.config.response_format.stop_field) if getattr(self.config.response_format, 'stop_field', None) else None
 
     def _build_auth_headers(self) -> Dict[str, str]:
         headers = {}
@@ -161,7 +162,15 @@ class TargetClient:
                     safe_headers["Cookie"] = cookie_str
                 
                 async with websockets.connect(rec_url, additional_headers=safe_headers, open_timeout=60.0) as websocket:
-                    if "socket.io" in rec_url:
+                    init_message = getattr(receive_endpoint, "init_message", None) if not isinstance(receive_endpoint, str) else None
+                    if init_message:
+                        init_msg_resolved = self._inject_variables(init_message, variables)
+                        if isinstance(init_msg_resolved, dict):
+                            init_msg_resolved = json.dumps(init_msg_resolved)
+                        elif not isinstance(init_msg_resolved, str):
+                            init_msg_resolved = str(init_msg_resolved)
+                        await websocket.send(init_msg_resolved)
+                    elif "socket.io" in rec_url:
                         # Send socket.io namespace connect packet
                         # Flexible: pull from receive.body if configured
                         connect_packet = rec_kwargs.get("content") or rec_kwargs.get("json")
@@ -198,9 +207,20 @@ class TargetClient:
                                 await websocket.send("3")
                                 continue
                                 
+                            if isinstance(message, str) and getattr(self.config.response_format, 'stop_payload_match', None) and self.config.response_format.stop_payload_match in message:
+                                logger.debug("Websocket receive stopped by lazy stop_payload_match.")
+                                break
+
                             json_str = self._extract_json_from_string(message)
                             if json_str:
                                 chunk = json.loads(json_str)
+                                
+                                if getattr(self, 'stop_parser', None):
+                                    stop_match = self.stop_parser.find(chunk)
+                                    if stop_match and str(stop_match[0].value) == getattr(self.config.response_format, 'stop_value', None):
+                                        logger.debug("Websocket receive stopped by strict stop_field match.")
+                                        break
+
                                 match = self.answer_parser.find(chunk)
                                 if match:
                                     if not self.config.response_format.stream:
@@ -272,26 +292,53 @@ class TargetClient:
             async with self.client.stream(method, url, headers=headers, **kwargs) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if data_str == "[DONE]":
-                            break
-                        if data_str:
-                            try:
-                                import json
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                    elif line.startswith("data "):
+                        data_str = line[5:].strip()
+                    elif line.startswith("id:") or line.startswith("event:") or line.startswith("retry:"):
+                        continue
+                    else:
+                        data_str = line
+
+                    if data_str == "[DONE]":
+                        break
+                        
+                    if getattr(self.config.response_format, 'stop_payload_match', None) and self.config.response_format.stop_payload_match in data_str:
+                        logger.debug("HTTP stream stopped by lazy stop_payload_match.")
+                        break
+                    
+                    if data_str:
+                        try:
+                            import json
+                            json_str = self._extract_json_from_string(data_str)
+                            if json_str:
+                                chunk = json.loads(json_str)
+                            else:
                                 chunk = json.loads(data_str)
-                                match = self.answer_parser.find(chunk)
-                                if match:
-                                    answer_text += match[0].value
                                 
-                                cit_match = self.citations_parser.find(chunk)
-                                if cit_match and isinstance(cit_match[0].value, list):
-                                    citations.extend(cit_match[0].value)
-                                if not isinstance(raw_response, list):
-                                    raw_response = []
-                                raw_response.append(chunk)
-                            except Exception:
-                                pass
+                            if getattr(self, 'stop_parser', None):
+                                stop_match = self.stop_parser.find(chunk)
+                                if stop_match and str(stop_match[0].value) == getattr(self.config.response_format, 'stop_value', None):
+                                    logger.debug("HTTP stream stopped by strict stop_field match.")
+                                    break
+                                
+                            match = self.answer_parser.find(chunk)
+                            if match:
+                                answer_text += match[0].value
+                            
+                            cit_match = self.citations_parser.find(chunk)
+                            if cit_match and isinstance(cit_match[0].value, list):
+                                citations.extend(cit_match[0].value)
+                            if not isinstance(raw_response, list):
+                                raw_response = []
+                            raw_response.append(chunk)
+                        except Exception:
+                            pass
             return {
                 "answer": answer_text,
                 "citations": citations,

@@ -9,6 +9,7 @@ class EndpointConfig(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict)
     body: Any = None
     file_field: Optional[str] = None
+    init_message: Any = None
 
 class EndpointsConfig(BaseModel):
     chat: Union[str, EndpointConfig]
@@ -24,6 +25,9 @@ class ResponseFormatConfig(BaseModel):
     answer_field: str = "response.text"
     citations_field: str = "response.sources"
     stream: bool = False
+    stop_payload_match: Optional[str] = None
+    stop_field: Optional[str] = None
+    stop_value: Optional[str] = None
 
 class TargetConfig(BaseModel):
     name: str
