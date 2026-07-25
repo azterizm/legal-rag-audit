@@ -28,6 +28,98 @@ It tests for:
 - **Context Window Saturation & Memory Management**: Issues ambiguous multi-turn queries using pronouns to verify the system anchors references correctly to earlier dialogue.
 - **Index Freshness & Cache Invalidation**: Evaluates if the retrieval index accurately mirrors live updates by verifying the system retrieves fresh facts instead of serving stale data from a zombie cache.
 
+## System Architecture
+
+The Legal RAG Audit Tool operates as an asynchronous, deterministic evaluation harness that tests target RAG API endpoints without modifying internal system code or relying on subjective LLM-as-a-judge prompts.
+
+```mermaid
+flowchart TD
+    subgraph Input ["1. Configuration & Corpus Input"]
+        CLI["CLI Interface<br/>(cli.py)"]
+        CFG["Config Parser<br/>(config.py)"]
+        CORPUS["Test Corpus Suite<br/>(Bundled / Custom Legal Docs)"]
+    end
+
+    subgraph Core ["2. Audit Orchestration Core"]
+        RUNNER["Test Runner<br/>(runner.py)"]
+    end
+
+    subgraph Client ["3. Target API Integration Client (client.py)"]
+        HTTP["HTTP Client (httpx)<br/>REST & SSE Streaming"]
+        WS["WebSocket Client (websockets)<br/>Decoupled Async & Polling"]
+        JPATH["JSONPath Extractor (jsonpath-ng)<br/>Answer & Citation Extractor"]
+    end
+
+    subgraph Target ["4. External Target RAG API"]
+        UPLOAD_EP["Upload Endpoint<br/>(/documents)"]
+        CHAT_EP["Chat Endpoint<br/>(/chat)"]
+        RET_EP["Retrieval Endpoint<br/>(/search)"]
+    end
+
+    subgraph Evaluators ["5. Deterministic Evaluator Engine (evaluators/)"]
+        E_RET["Retrieval & Relevance"]
+        E_HALL["Hallucination Evaluator<br/>(NLI / Sentence Transformers)"]
+        E_CIT["Citation & Attribution"]
+        E_INJ["Prompt Injection Resistance"]
+        E_LEAK["Cross-Tenant Leakage"]
+        E_CONF["Confidence & Boundaries"]
+        E_PERF["Latency & Cache Invalidation"]
+    end
+
+    subgraph Output ["6. Reporting Engine (report.py)"]
+        REP_JSON["JSON Report<br/>(output_report.json)"]
+        REP_MD["Markdown Summary<br/>(output_report.md)"]
+    end
+
+    CLI --> CFG
+    CLI --> RUNNER
+    CFG --> RUNNER
+    CORPUS --> RUNNER
+
+    RUNNER --> Client
+    Client -->|1. Ingest Corpus| UPLOAD_EP
+    Client -->|2. Query Probes| CHAT_EP
+    Client -->|3. Vector Search| RET_EP
+
+    UPLOAD_EP -.->|Upload Ack| Client
+    CHAT_EP -.->|Responses / SSE / WS| Client
+    RET_EP -.->|Raw Vector Chunks| Client
+
+    Client --> JPATH
+    JPATH --> RUNNER
+
+    RUNNER --> Evaluators
+    CORPUS -.->|Ground Truth Text| Evaluators
+
+    Evaluators -->|Metrics & Pass/Fail Verdicts| RUNNER
+    RUNNER --> Output
+    Output --> REP_JSON
+    Output --> REP_MD
+```
+
+### Component Overview
+
+1. **Configuration & Corpus Input (`config.py`, `corpus/`)**:
+   - **`config.yaml`**: Configures target API endpoints (`chat`, `upload`, `retrieval`, `receive`), authentication models (Bearer, API Key, Basic), JSONPath extraction mappings, active test suites, and threshold limits (`max_hallucination_rate`, `min_retrieval_relevance`).
+   - **Corpus Management**: Provides a 13-document curated suite of synthetic legal documents (SaaS terms, statutory texts, conflicting NDAs, PII-masked texts) or custom text directories used as ground truth.
+
+2. **Audit Orchestration Core (`runner.py`)**:
+   - Manages the audit execution lifecycle. It first seeds the target system via the `upload` endpoint (if enabled), dispatches probing queries across active evaluators asynchronously, collects target outputs, feeds evidence to evaluators, and computes final compliance verdicts.
+
+3. **Target API Integration Client (`client.py`)**:
+   - Handles multi-protocol communication with target RAG APIs via asynchronous HTTP (`httpx`) and WebSocket (`websockets`).
+   - Supports REST JSON payloads, SSE chunk streaming, and decoupled WebSocket push/receive channels. Uses `jsonpath-ng` to dynamically extract answer text, citations, and vector search chunks.
+
+4. **Deterministic Evaluator Engine (`evaluators/`)**:
+   - Evaluates target system outputs against ground-truth source text using 17 modular evaluators:
+     - **Retrieval & Relevance**: Evaluates vector chunk relevance, structural header context retention, and entity disambiguation.
+     - **Grounding & Integrity**: Measures hallucination rates (via local Sentence Transformers / NLI models or optional Gemini API), citation validity, cross-document attribution, and parametric knowledge bleed.
+     - **Security & Isolation**: Verifies prompt injection resistance, cross-tenant canary isolation, and out-of-domain routing boundaries.
+     - **Performance & State**: Measures latency penalties (post-hoc regeneration loops), memory context saturation, contradiction surfacing, and cache invalidation.
+
+5. **Reporting Engine (`report.py`)**:
+   - Aggregates evaluation metrics, hallucination rates, and test pass/fail verdicts into machine-readable JSON (`output_report.json`) and formatted Markdown (`output_report.md`).
+
 ## Installation
 
 ```bash
@@ -185,7 +277,3 @@ The evaluation suite uses deterministic checks (exact string matching, semantic 
 ## Output Example
 
 The tool outputs a structured JSON report and a markdown summary.
-
-# Roadmap
-
-- [ ] Add support for third party LLMs (e.g., OpenAI, Gemini)
