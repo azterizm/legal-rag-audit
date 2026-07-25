@@ -53,6 +53,10 @@ class TestsConfig(BaseModel):
     entity_masking_rehydration: bool = False
     cross_document_attribution: bool = False
     parametric_knowledge_bleed: bool = False
+    routing_contamination: bool = False
+    cross_clause_synthesis: bool = False
+    memory_management: bool = False
+    cache_invalidation: bool = False
 
 class TenantConfig(BaseModel):
     token_env: str

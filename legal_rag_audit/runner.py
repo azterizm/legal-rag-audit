@@ -11,7 +11,12 @@ from legal_rag_audit.evaluators import (
     RetrievalEvaluator, 
     InjectionEvaluator,
     LeakageEvaluator,
-    ConfidenceEvaluator
+    ConfidenceEvaluator,
+    ContradictionSurfacingEvaluator,
+    RoutingContaminationEvaluator,
+    CrossClauseSynthesisEvaluator,
+    MemoryManagementEvaluator,
+    CacheInvalidationEvaluator
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +61,21 @@ class TestRunner:
                 
             if self.config.tests.confidence_threshold:
                 await self._run_confidence_threshold_test()
+
+            if self.config.tests.contradiction_surfacing:
+                await self._run_contradiction_test()
+
+            if self.config.tests.routing_contamination:
+                await self._run_routing_contamination_test()
+
+            if self.config.tests.cross_clause_synthesis:
+                await self._run_synthesis_test()
+
+            if self.config.tests.memory_management:
+                await self._run_memory_management_test()
+
+            if self.config.tests.cache_invalidation:
+                await self._run_cache_invalidation_test()
 
         finally:
             await self.client.close()
@@ -278,3 +298,89 @@ class TestRunner:
             self.total_queries_run += 1
         except Exception as e:
             logger.error(f"Confidence Threshold test failed: {e}")
+
+    async def _run_contradiction_test(self):
+        logger.info("Running Contradiction Surfacing test...")
+        evaluator = ContradictionSurfacingEvaluator(use_gemini=self.use_gemini, gemini_model=self.gemini_model)
+        query = "What is the limitation of liability cap across all SaaS agreements?"
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            if not answer:
+                result = {"status": "FAIL", "details": "Empty answer."}
+            else:
+                result = evaluator.evaluate(answer=answer, expected_conflicts=["$2M", "$5M"])
+            result["system_response"] = answer
+            self.report.add_test_result("contradiction_surfacing", result)
+            self.total_queries_run += 1
+        except Exception as e:
+            logger.error(f"Contradiction test failed: {e}")
+
+    async def _run_routing_contamination_test(self):
+        logger.info("Running Routing Contamination test...")
+        evaluator = RoutingContaminationEvaluator()
+        query = "What is the policy on social media usage?"
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            if not answer:
+                result = {"status": "FAIL", "details": "Empty answer."}
+            else:
+                result = evaluator.evaluate(answer=answer, out_of_bounds_keywords=["TikTok", "Facebook", "Twitter", "Instagram"])
+            result["system_response"] = answer
+            self.report.add_test_result("routing_contamination", result)
+            self.total_queries_run += 1
+        except Exception as e:
+            logger.error(f"Routing contamination test failed: {e}")
+
+    async def _run_synthesis_test(self):
+        logger.info("Running Cross-Clause Synthesis test...")
+        evaluator = CrossClauseSynthesisEvaluator()
+        query = "What are the exceptions to the liability cap?"
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            if not answer:
+                result = {"status": "FAIL", "details": "Empty answer."}
+            else:
+                result = evaluator.evaluate(answer=answer, required_facts=["gross negligence", "fraud", "security event"])
+            result["system_response"] = answer
+            self.report.add_test_result("cross_clause_synthesis", result)
+            self.total_queries_run += 1
+        except Exception as e:
+            logger.error(f"Synthesis test failed: {e}")
+
+    async def _run_memory_management_test(self):
+        logger.info("Running Memory Management test...")
+        evaluator = MemoryManagementEvaluator()
+        query = "What about that liability exception?"
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            if not answer:
+                result = {"status": "FAIL", "details": "Empty answer."}
+            else:
+                result = evaluator.evaluate(answer=answer, target_reference="gross negligence")
+            result["system_response"] = answer
+            self.report.add_test_result("memory_management", result)
+            self.total_queries_run += 1
+        except Exception as e:
+            logger.error(f"Memory test failed: {e}")
+
+    async def _run_cache_invalidation_test(self):
+        logger.info("Running Cache Invalidation test...")
+        evaluator = CacheInvalidationEvaluator()
+        query = "Is the liability cap $2M or $10M?"
+        try:
+            resp = await self.client.chat(query)
+            answer = resp.get("answer", "")
+            if not answer:
+                result = {"status": "FAIL", "details": "Empty answer."}
+            else:
+                result = evaluator.evaluate(answer=answer, stale_fact="$2M", fresh_fact="$10M")
+            result["system_response"] = answer
+            self.report.add_test_result("cache_invalidation", result)
+            self.total_queries_run += 1
+        except Exception as e:
+            logger.error(f"Cache invalidation test failed: {e}")
+

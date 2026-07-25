@@ -10,12 +10,16 @@ Enterprise legal buyers don't just want "good" AI; they need provable compliance
 This tool helps you quantify retrieval integrity and identify exact failure modes in retrieval pipelines (not just "it hallucinates sometimes").
 
 It tests for:
-- Hallucination Rates (Mapping factual claims to sources)
-- Citation Integrity (No phantom sources)
-- Prompt Injection Resistance
-- Cross-Tenant Data Leakage (For multi-tenant setups)
-- Retrieval Relevance
-- Latency Penalties, Disambiguation, and more.
+- **Hallucination Rates & Boundary Probing**: Evaluates if the model fabricates facts or correctly abstains from answering out-of-domain questions by relying on confidence thresholds.
+- **Citation Integrity**: Verifies that every generated citation points to a real, existing source document, catching "phantom" or hallucinated sources.
+- **Prompt Injection Resistance & Input Robustness**: Assesses vulnerability to adversarial instructions (e.g., direct overrides) and semantic noise.
+- **Cross-Tenant Data Leakage**: In multi-tenant setups, strictly tests if a tenant can retrieve or leak 'canary' data belonging to another tenant's isolated namespace.
+- **Retrieval Relevance & Disambiguation**: Checks if the underlying search index retrieves highly relevant chunks and distinguishes between semantically similar but distinct rules.
+- **Contradiction Surfacing**: Uploads inherently conflicting documents (e.g., SaaS agreements with different liability caps) and verifies the system acknowledges the conflict rather than silently blending or picking one.
+- **Contextual Routing & Namespace Contamination**: Ensures the system restricts answers to the uploaded corpus instead of bypassing it to leverage generic, out-of-bounds internet knowledge.
+- **Cross-Clause Synthesis**: Formulates complex scenario queries requiring the model to precisely extract and compile scattered facts across multiple clauses without missing exclusions.
+- **Context Window Saturation & Memory Management**: Issues ambiguous multi-turn queries using pronouns (e.g., "What about that exception?") to verify the system anchors references correctly to earlier dialogue.
+- **Index Freshness & Cache Invalidation**: Evaluates if the retrieval index accurately mirrors live updates by verifying the system retrieves fresh facts instead of serving stale data from a zombie cache.
 
 ## Installation
 
@@ -63,6 +67,11 @@ tests:
   injection_resistance: true
   cross_tenant_leakage: false # Set to true only if multi_tenant config is provided
   confidence_threshold: true
+  contradiction_surfacing: true
+  routing_contamination: true
+  cross_clause_synthesis: true
+  memory_management: true
+  cache_invalidation: true
 
 thresholds:
   max_hallucination_rate: 0.02 # Maximum acceptable hallucination rate (2%)
