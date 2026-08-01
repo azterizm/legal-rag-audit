@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, List
 
 from legal_rag_audit.config import AuditConfig
+from legal_rag_audit.corpus_loader import CorpusError, load_corpus
 from legal_rag_audit.report import ReportGenerator
 from legal_rag_audit.client import TargetClient
 from legal_rag_audit.evaluators import (
@@ -29,11 +30,9 @@ from legal_rag_audit.evaluators import (
 logger = logging.getLogger(__name__)
 
 class TestRunner:
-    def __init__(self, config: AuditConfig, skip_upload: bool = False, use_gemini: bool = False, gemini_model: str = "gemini-2.5-flash"):
+    def __init__(self, config: AuditConfig, skip_upload: bool = False):
         self.config = config
         self.skip_upload = skip_upload
-        self.use_gemini = use_gemini
-        self.gemini_model = gemini_model
         self.report = ReportGenerator(target_name=config.target.name, config=config)
         self.client = TargetClient(config.target)
         self.total_queries_run = 0
@@ -114,32 +113,15 @@ class TestRunner:
 
     async def _upload_corpus(self):
         logger.info("Uploading corpus...")
-        docs_to_upload = []
-        
-        import os
-        if self.config.corpus.use_bundled:
-            corpus_path = os.path.join(os.path.dirname(__file__), "corpus")
-        else:
-            corpus_path = self.config.corpus.path
-            
-        if corpus_path and os.path.exists(corpus_path):
-            for filename in os.listdir(corpus_path):
-                filepath = os.path.join(corpus_path, filename)
-                if os.path.isfile(filepath):
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    docs_to_upload.append({
-                        "id": filename.split('.')[0],
-                        "filename": filename,
-                        "content": content
-                    })
-        else:
-            logger.warning("No corpus found. Using fallback dummy docs.")
-            docs_to_upload = [
-                {"id": "doc_1", "filename": "smith_v_crown.txt", "content": "In the case of Smith v. Crown (2024), the judge ruled that the defendant was not liable for the damages. No compensation of £150,000 was awarded."},
-                {"id": "doc_2", "filename": "liability_cap.txt", "content": "The maximum liability under this agreement is capped at £10,000 in aggregate."}
-            ]
-        
+
+        # Resolved and checked before a single request goes out. A corpus problem is a
+        # setup problem: it aborts here rather than surfacing later as a finding (NF9).
+        docs_to_upload = load_corpus(
+            use_bundled=self.config.corpus.use_bundled,
+            path=self.config.corpus.path,
+        )
+        logger.info(f"Corpus resolved: {len(docs_to_upload)} documents.")
+
         for doc in docs_to_upload:
             if not self.skip_upload:
                 try:
@@ -170,7 +152,7 @@ class TestRunner:
 
     async def _run_hallucination_test(self):
         logger.info("Running Hallucination Rate test...")
-        evaluator = HallucinationEvaluator(use_gemini=self.use_gemini, gemini_model=self.gemini_model)
+        evaluator = HallucinationEvaluator()
         
         query = "What was the ruling in Smith v. Crown (2024)? Did they award £150,000?"
         
@@ -218,7 +200,7 @@ class TestRunner:
 
     async def _run_retrieval_relevance_test(self):
         logger.info("Running Retrieval Relevance test...")
-        evaluator = RetrievalEvaluator(use_gemini=self.use_gemini)
+        evaluator = RetrievalEvaluator()
         query = "What is the liability cap?"
         
         try:
@@ -307,7 +289,7 @@ class TestRunner:
 
     async def _run_confidence_threshold_test(self):
         logger.info("Running Confidence Threshold test...")
-        evaluator = ConfidenceEvaluator(use_gemini=self.use_gemini, gemini_model=self.gemini_model)
+        evaluator = ConfidenceEvaluator()
         
         query = "What is the capital of France?" # completely out of domain
         try:
@@ -326,7 +308,7 @@ class TestRunner:
 
     async def _run_contradiction_test(self):
         logger.info("Running Contradiction Surfacing test...")
-        evaluator = ContradictionSurfacingEvaluator(use_gemini=self.use_gemini, gemini_model=self.gemini_model)
+        evaluator = ContradictionSurfacingEvaluator()
         query = "What is the limitation of liability cap across all SaaS agreements?"
         try:
             resp = await self.client.chat(query)

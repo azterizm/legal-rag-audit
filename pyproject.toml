@@ -5,19 +5,29 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "legal-rag-audit"
 version = "0.1.0"
-description = "Deterministic endpoint-based evaluation tool for legal RAG systems"
+description = "Endpoint-based evaluation harness for legal RAG systems"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+
+# Exact pins, not ranges. A report is reproducible only if the software that produced it
+# can be reconstructed, so "whatever resolved on the day you installed" is not a
+# dependency specification this project can use (NF11). These versions are kept identical
+# to requirements/*.txt by scripts/lock.sh, and tests/test_dependency_pinning.py fails if
+# the two ever drift.
+#
+# These pins fix the *version*. requirements/*.txt additionally fix the *bytes*, via
+# --require-hashes. Prefer the lockfiles; see README "Installation".
 dependencies = [
-    "pydantic>=2.0.0",
-    "PyYAML>=6.0",
-    "httpx>=0.25.0",
-    "websockets>=11.0.0",
-    "jsonpath-ng>=1.6.0",
-    "sentence-transformers>=2.2.2",
+    "httpx==0.28.1",
+    "jsonpath-ng==1.8.0",
+    "pydantic==2.13.4",
+    "PyYAML==6.0.3",
+    "websockets==17.0.1",
+    "sentence-transformers==5.6.1",
+    "tqdm==4.70.0",
 ]
 
 [project.scripts]
@@ -25,8 +35,27 @@ legal-rag-audit = "legal_rag_audit.cli:main"
 
 [project.optional-dependencies]
 test = [
-    "pytest>=7.0.0",
+    "pytest==9.1.1",
 ]
 
 [tool.setuptools]
+# Explicit, not discovered. internal_experiments/ carries the removed remote-scoring
+# path (V2_FULL_PLAN.md §4.2) and must never enter a wheel or sdist; an explicit list
+# is what keeps it out. scripts/check_no_remote_scoring.sh asserts this.
 packages = ["legal_rag_audit", "legal_rag_audit.evaluators"]
+
+[tool.setuptools.package-data]
+# The bundled demo corpus is data, not code, so setuptools does not ship it by default.
+# Without this the wheel installs without a corpus and `use_bundled: true` has nothing
+# to read. legal_rag_audit/corpus_loader.py aborts loudly in that case; this is what
+# stops it happening. tests/test_corpus_packaging.py asserts it against the built wheel.
+legal_rag_audit = ["corpus/*.txt", "corpus/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# internal_experiments/ holds manual scripts that need a live API key and a network.
+# They are not tests and must never be collected.
+norecursedirs = ["internal_experiments", ".git", "build", "dist", "*.egg-info"]
+markers = [
+    "slow: builds an artefact or downloads a model; skipped with -m 'not slow'",
+]

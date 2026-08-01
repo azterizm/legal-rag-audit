@@ -1,170 +1,354 @@
-# Legal RAG Audit
+# legal-rag-audit
 
-An open-source, deterministic, endpoint-based evaluation tool that tests legal RAG systems for retrieval integrity, hallucination rates, and compliance readiness against enterprise procurement standards (TPRM).
+An open-source evaluation harness that fires a fixed, hashed battery of probes at a legal
+RAG system and reports what the system did — nothing more. Its output is built for one
+purpose: **to survive being handed to a third party** — a client's enterprise buyer, a
+procurement reviewer, a risk committee — and re-run by them.
 
-It is **NOT** an agentic browser crawler. It consumes API endpoints, runs a fixed suite of tests against them, and outputs a structured JSON report with pass/fail verdicts and a hallucination rate percentage.
+The harness is free and forkable on purpose. Because it is open, the buyer's own
+enterprise customer can re-run a report and reproduce the numbers. Nobody can re-run a
+SOC 2.
 
-## Why This Exists
+---
 
-Enterprise legal buyers don't just want "good" AI; they need provable compliance and measured risk. 
-This tool helps you quantify retrieval integrity and identify exact failure modes in retrieval pipelines (not just "it hallucinates sometimes").
+## What it reports, and what that is worth
 
-It tests for:
-- **Hallucination Rates**: Evaluates if the model fabricates facts or accurately represents the source documents.
-- **Citation Integrity**: Verifies that every generated citation points to a real, existing source document, catching "phantom" or hallucinated sources.
-- **Prompt Injection Resistance & Input Robustness**: Assesses vulnerability to adversarial instructions (e.g., direct overrides) and semantic noise.
-- **Cross-Tenant Data Leakage**: In multi-tenant setups, strictly tests if a tenant can retrieve or leak 'canary' data belonging to another tenant's isolated namespace.
-- **Retrieval Relevance**: Checks if the underlying search index retrieves highly relevant chunks for the query.
-- **Retrieval Disambiguation**: Queries overlapping entities (e.g., "Article 5" from two different statutes) to ensure the system doesn't merge contexts or thrash in infinite ReAct loops.
-- **Contradiction Surfacing**: Uploads inherently conflicting documents and verifies the system acknowledges the conflict rather than silently blending or picking one.
-- **Latency Penalty (The Hallucination Tax)**: Measures Time-To-First-Byte (TTFB) and total latency on contradictory queries to detect post-hoc catch-and-regenerate loops.
-- **Structural Integrity**: Tests chunking flaws by verifying the system can connect headers to deeply nested list/table items in dense regulatory documents without severing the context.
-- **Entity Masking Re-hydration**: Evaluates PII handling by verifying perfect re-hydration of masked entities without counterparty swapping or metadata leakage.
-- **Parametric Knowledge Bleed**: Queries topics not in the corpus to verify the system refuses or explicitly cites an external source, rather than silently substituting ungrounded pre-trained world knowledge.
-- **Cross-Document Attribution**: Verifies that responses synthesizing multiple documents explicitly label the specific source for each claim, rather than merging them into an orphaned, unverifiable truth.
-- **Confidence Threshold & Boundary Probing**: Evaluates if the model correctly abstains from answering out-of-domain questions by relying on confidence thresholds.
-- **Contextual Routing & Namespace Contamination**: Ensures the system restricts answers to the uploaded corpus instead of bypassing it to leverage generic, out-of-bounds internet knowledge.
-- **Cross-Clause Synthesis**: Formulates complex scenario queries requiring the model to precisely extract and compile scattered facts across multiple clauses without missing exclusions.
-- **Context Window Saturation & Memory Management**: Issues ambiguous multi-turn queries using pronouns to verify the system anchors references correctly to earlier dialogue.
-- **Index Freshness & Cache Invalidation**: Evaluates if the retrieval index accurately mirrors live updates by verifying the system retrieves fresh facts instead of serving stale data from a zombie cache.
+Findings are split into two tiers, and both labels are printed on the face of every
+report along with their definitions.
 
-## System Architecture
+| Tier | What it is | Register label | Defensibility |
+|---|---|---|---|
+| **Tier 1 — assertion-free** | Exact match against ground truth we authored and planted in the corpus. **No model anywhere in the evaluation path.** | Measured | A planted token either appeared or it did not |
+| **Tier 2 — instrument-scored** | Semantic scoring by a named local model against a stated threshold | Measured (instrument disclosed) | Contestable on threshold and model choice. Bounded by full disclosure |
 
-The Legal RAG Audit Tool operates as an asynchronous, deterministic evaluation harness that tests target RAG API endpoints without modifying internal system code or relying on subjective LLM-as-a-judge prompts.
+The split matters more than the checks themselves. The predictable response to any
+finding is *"you tested it wrong"*, and against Tier 2 that objection is not a bluff —
+general-corpus NLI models are weak on legal language: negation, exceptions,
+*notwithstanding*, conditional obligations. So the model, its version and its threshold
+go on the page and the threshold is arguable. Tier 1 is a string planted in tenant B's
+namespace appearing verbatim in a tenant A response. Conceding the arguable half is what
+makes the unarguable half land.
+
+Every report leads with Tier 1. Tier 2 is supporting texture.
+
+### The checks have mechanical names
+
+There is no headline percentage. `unresolvable_citations`, `non_existent_authorities`,
+`version_mismatch`, `unsupported_assertions`, `non_reproducible_responses`,
+`licensed_content_reproduction` — each is
+counted against **the probes declared eligible for that check before the run**, not
+against the battery total, and reported as a count with its denominator and the date the
+battery was fixed:
+
+> 60 eligible probes × 3 passes. 11 failed in all three passes (stable defect). 3 failed
+> in some passes only (non-reproducible). Battery fixed 2026-08-04, hash `sha256:…`
+
+Three reasons it is stated that way. A percentage hides its denominator, and 7% of 14
+probes is a different claim from 7% of 200. The battery deliberately over-samples known
+failure surfaces, so any rate it yields is the failure rate *on a set built to find
+failures* — stating counts against a fixed, hashed, dated battery makes that explicit
+instead of inviting the one objection that would land. And a probe failing 3 of 3 is a
+defect while a probe failing 1 of 3 is non-reproducibility, which is a different finding
+that no accuracy work closes; collapsing them destroys the more valuable of the two.
+
+### What this is not
+
+- Not a leaderboard. No named commercial product is benchmarked publicly, at any tier.
+- Not a remediation tool. It names causes and stops.
+- Not a browser agent, not a UI-level tester, not a shadow-AI scanner.
+- Not a general RAG eval framework competing with RAGAS/ARES/TruLens.
+
+---
+
+## Implementation status
+
+This README describes the v2 design. The repository is mid-migration from v1, and the
+table below is the honest split. **Anything marked *specified* does not exist in the code
+yet** — it is documented here because the interchange formats are the product surface and
+they are being built against a written spec, not discovered.
+
+| Capability | Status |
+|---|---|
+| Local-only scoring; no third-party inference path | **Shipped** |
+| Exact version pins + hash-pinned lockfiles, split by mode | **Shipped** |
+| Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
+| 17 evaluators against a configured endpoint | **Shipped** — single pass, flat report |
+| Licensed-content reproduction check (#18) | Specified — v0.4.0 |
+| SSE / WebSocket transport, JSONPath extraction | **Shipped** |
+| JSON + Markdown report | **Shipped** — v1 shape, flat `tests` object |
+| Non-root container, dependency layer installed under `--require-hashes` | **Shipped** — single image; two-image split pending |
+| `generate` / `score` / `validate` mode split | Specified — v0.2.0 |
+| `responses.jsonl` interchange format + published schema | Specified — v0.2.0 |
+| Tier 1 / Tier 2 tagging and tier-separated report | Specified — v0.2.0 |
+| Run manifest: hashes, seed, signed commit SHA, model versions | Specified — v0.2.0 |
+| `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | Specified — v0.2.0 |
+| Authorisation gating on injection / canary families | Specified — v0.2.0 |
+| Seeded plant generation with collision guard | Specified — v0.3.0 |
+| N-pass execution and variance as a first-class finding | Specified — v0.3.0 |
+| Pathological reference target, sensitivity/specificity CI gates | Specified — v0.3.0 |
+| Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
+
+Until the mode split lands, one command runs everything in a single process and the
+report carries no tier labels or manifest. Read any current output as a v1 artefact.
+
+---
+
+## Architecture
+
+Three modes with hard separation between them. The split is the security control, not a
+convenience.
+
+| Mode | Does | Network | Who runs it |
+|---|---|---|---|
+| `validate` | 3 neutral probes; prints the raw response body and what each JSONPath extracted; exits | Target only | Them, pre-sale, free |
+| `generate` | Fires the battery at the configured endpoints, writes `responses.jsonl` | Target only | Them — or replaced entirely by their own tooling |
+| `score` | Reads `responses.jsonl` plus the ground-truth manifest, writes the report | **None** | Us |
+
+```
+                         ┌──────────────── OUR SIDE ────────────────┐
+  corpus/ ──┐            │                                          │
+  probes/ ──┼── handover │   ground_truth.json (withheld, hashed)   │
+            │            │                                          │
+            ▼            │                                          │
+  ┌──── THEIR SIDE ────┐ │                                          │
+  │  validate (opt.)   │ │                                          │
+  │  generate  ──OR──  │ │                                          │
+  │  their own harness │ │                                          │
+  │        │           │ │                                          │
+  │        ▼           │ │                                          │
+  │  responses.jsonl ──┼─┼──► score ──► report.json + report.md      │
+  └────────────────────┘ │            + evidence bundle + manifest   │
+                         └──────────────────────────────────────────┘
+```
+
+Four things the split buys:
+
+1. **It removes `config.yaml` from the critical path.** Responses can be produced however
+   is cheapest — an internal eval harness, a QA script, thirty lines of curl — and
+   returned as a JSONL file.
+2. **Custody of the evidence moves to whoever generated it.** Responses a vendor produced
+   themselves cannot later be dismissed as *"your harness prompted it wrong."*
+3. **It answers "is your tool safe to run" structurally.** If our code never runs, there
+   is nothing of ours to security-review. The question stops being asked rather than
+   being answered.
+4. **`score` running with no network at all is a short review** even when it does run.
+
+### Dependency split
+
+`sentence-transformers` pulls torch and transformers — hundreds of transitive packages
+nobody can review. That is fine on our machine and unacceptable on a target's.
+
+| Mode | Dependencies |
+|---|---|
+| `generate`, `validate` | `httpx`, `pyyaml`, `pydantic`, `jsonpath-ng` — four pure-Python libraries |
+| `score` | the above, plus `sentence-transformers`, `torch` (CPU), a pinned NLI model |
+
+CI asserts the boundary: the `generate` entrypoint imports and runs in a virtualenv
+installed without the `[score]` extra, and `torch` is not importable there. *"Read it in
+ten minutes"* is then literally true rather than a slogan.
+
+### Current component map
 
 ```mermaid
 flowchart TD
     subgraph Input ["1. Configuration & Corpus Input"]
         CLI["CLI Interface<br/>(cli.py)"]
         CFG["Config Parser<br/>(config.py)"]
-        CORPUS["Test Corpus Suite<br/>(Bundled / Custom Legal Docs)"]
+        CORPUS["Corpus<br/>(bundled demo / custom directory)"]
     end
-
-    subgraph Core ["2. Audit Orchestration Core"]
+    subgraph Core ["2. Orchestration"]
         RUNNER["Test Runner<br/>(runner.py)"]
     end
-
-    subgraph Client ["3. Target API Integration Client (client.py)"]
+    subgraph Client ["3. Target Integration Client (client.py)"]
         HTTP["HTTP Client (httpx)<br/>REST & SSE Streaming"]
         WS["WebSocket Client (websockets)<br/>Decoupled Async & Polling"]
         JPATH["JSONPath Extractor (jsonpath-ng)<br/>Answer & Citation Extractor"]
     end
-
-    subgraph Target ["4. External Target RAG API"]
+    subgraph Target ["4. Target RAG API"]
         UPLOAD_EP["Upload Endpoint<br/>(/documents)"]
         CHAT_EP["Chat Endpoint<br/>(/chat)"]
         RET_EP["Retrieval Endpoint<br/>(/search)"]
     end
-
-    subgraph Evaluators ["5. Deterministic Evaluator Engine (evaluators/)"]
-        E_RET["Retrieval & Relevance"]
-        E_HALL["Hallucination Evaluator<br/>(NLI / Sentence Transformers)"]
-        E_CIT["Citation & Attribution"]
-        E_INJ["Prompt Injection Resistance"]
-        E_LEAK["Cross-Tenant Leakage"]
-        E_CONF["Confidence & Boundaries"]
-        E_PERF["Latency & Cache Invalidation"]
+    subgraph Evaluators ["5. Local Scoring Engine (evaluators/)"]
+        E_EXACT["Exact-match & inverted checks<br/>(no model in the path)"]
+        E_NLI["Entailment & relevance<br/>(local NLI / embeddings)"]
     end
-
-    subgraph Output ["6. Reporting Engine (report.py)"]
-        REP_JSON["JSON Report<br/>(output_report.json)"]
-        REP_MD["Markdown Summary<br/>(output_report.md)"]
+    subgraph Output ["6. Reporting (report.py)"]
+        REP_JSON["JSON Report"]
+        REP_MD["Markdown Report"]
     end
-
     CLI --> CFG
     CLI --> RUNNER
     CFG --> RUNNER
     CORPUS --> RUNNER
-
     RUNNER --> Client
     Client -->|1. Ingest Corpus| UPLOAD_EP
     Client -->|2. Query Probes| CHAT_EP
     Client -->|3. Vector Search| RET_EP
-
     UPLOAD_EP -.->|Upload Ack| Client
     CHAT_EP -.->|Responses / SSE / WS| Client
     RET_EP -.->|Raw Vector Chunks| Client
-
     Client --> JPATH
     JPATH --> RUNNER
-
     RUNNER --> Evaluators
     CORPUS -.->|Ground Truth Text| Evaluators
-
-    Evaluators -->|Metrics & Pass/Fail Verdicts| RUNNER
+    Evaluators --> RUNNER
     RUNNER --> Output
     Output --> REP_JSON
     Output --> REP_MD
 ```
 
-### Component Overview
+---
 
-1. **Configuration & Corpus Input (`config.py`, `corpus/`)**:
-   - **`config.yaml`**: Configures target API endpoints (`chat`, `upload`, `retrieval`, `receive`), authentication models (Bearer, API Key, Basic), JSONPath extraction mappings, active test suites, and threshold limits (`max_hallucination_rate`, `min_retrieval_relevance`).
-   - **Corpus Management**: Provides a 13-document curated suite of synthetic legal documents (SaaS terms, statutory texts, conflicting NDAs, PII-masked texts) or custom text directories used as ground truth.
+## Scoring is deterministic. Target systems typically are not.
 
-2. **Audit Orchestration Core (`runner.py`)**:
-   - Manages the audit execution lifecycle. It first seeds the target system via the `upload` endpoint (if enabled), dispatches probing queries across active evaluators asynchronously, collects target outputs, feeds evidence to evaluators, and computes final compliance verdicts.
+Two different things get called determinism — the reproducibility of our scoring, and the
+reproducibility of the target's answers — and conflating them destroys both.
 
-3. **Target API Integration Client (`client.py`)**:
-   - Handles multi-protocol communication with target RAG APIs via asynchronous HTTP (`httpx`) and WebSocket (`websockets`).
-   - Supports REST JSON payloads, SSE chunk streaming, and decoupled WebSocket push/receive channels. Uses `jsonpath-ng` to dynamically extract answer text, citations, and vector search chunks.
+**Ours is a precondition.** Scoring is deterministic: the same responses, the same ground
+truth and the same scoring configuration produce a byte-identical report. No model sits
+in the scoring path by default, and where one does — the two Tier 2 checks — it is local,
+pinned by version, and disclosed on the page. If scoring were not reproducible the report
+would die to *"run it again"*, and reproducibility cannot be sold with an instrument that
+lacks it.
 
-4. **Deterministic Evaluator Engine (`evaluators/`)**:
-   - Evaluates target system outputs against ground-truth source text using 17 modular evaluators:
-     - **Retrieval & Relevance**: Evaluates vector chunk relevance, structural header context retention, and entity disambiguation.
-     - **Grounding & Integrity**: Measures hallucination rates (via local Sentence Transformers / NLI models or optional Gemini API), citation validity, cross-document attribution, and parametric knowledge bleed.
-     - **Security & Isolation**: Verifies prompt injection resistance, cross-tenant canary isolation, and out-of-domain routing boundaries.
-     - **Performance & State**: Measures latency penalties (post-hoc regeneration loops), memory context saturation, contradiction surfacing, and cache invalidation.
+**Theirs is a finding.** A target that returns a different answer to the same question
+cannot reproduce an answer given to a client six months ago when it is disputed. That is
+a records failure and it holds at any accuracy level. So running the harness twice against
+a non-deterministic target legitimately produces different counts: the scoring did not
+change, the system under test did. That is the instrument working, not the instrument
+broken. The variance pass classifies each probe
+across passes as `identical`, `invariant_stable` (prose differs, every Tier 1 outcome is
+the same) or `divergent` (a Tier 1 outcome changed), and only `divergent` is reported as
+a finding. Flagging ordinary phrasing variation as failure is the fastest way to lose a
+report.
 
-5. **Reporting Engine (`report.py`)**:
-   - Aggregates evaluation metrics, hallucination rates, and test pass/fail verdicts into machine-readable JSON (`output_report.json`) and formatted Markdown (`output_report.md`).
+Everything that could vary is seeded and the seed is recorded: plant generation, probe
+ordering, any sampling.
+
+---
+
+## Data handling
+
+**No remote scoring path exists in the published package.** Scoring runs on local models
+only — a pinned sentence-transformers embedding model and a pinned local NLI
+cross-encoder, both CPU, both offline after first download. There is no third-party
+inference vendor, no vendor credential, and no code path that transmits corpus text or
+target responses to anyone. `scripts/check_no_remote_scoring.sh` and
+`tests/test_no_remote_scoring.py` assert this on every run.
+
+**Zero data exfiltration, scoped precisely.** On the local scoring path the harness makes
+exactly one class of outbound connection: `generate` talks to the target endpoints named
+in your `config.yaml`, and nothing else. No telemetry, no phone-home, no update check, no
+analytics. Model weights download once from the Hugging Face hub on first use and can be
+pre-baked into the image for a fully offline run. Once the mode split lands, `score`
+opens no sockets at all and asserts that at start-up.
+
+> v1 shipped an optional Gemini path for three of the evaluators. It has been removed.
+> That path made a third party a sub-processor and made each run a data-transfer event,
+> on a tool whose stated selling point is that nothing leaves the local environment, and it
+> averaged three generation calls per claim, which is not reproducible scoring. The code
+> is retained, quarantined and documented in `internal_experiments/`, which is excluded
+> from the wheel and the image. See `V2_FULL_PLAN.md` §4.2.
+
+### When you do run it
+
+Deny egress rather than disabling it. A delayed payload still has to make a call
+eventually, and it fails whenever it fires — timing is irrelevant under denial. The
+recommended invocation, once the two images ship:
+
+```bash
+docker run --rm --network=host-allowlist-only \
+  --read-only --cap-drop=ALL --security-opt no-new-privileges \
+  --user 65534:65534 \
+  -v "$PWD/in:/in:ro" -v "$PWD/out:/out" \
+  ghcr.io/…/legal-rag-audit-generate@sha256:… \
+  generate -c /in/config.yaml -o /out/responses.jsonl
+```
+
+Put a logging proxy in front of it if you want proof rather than a claim — the connection
+log is yours, not ours. One read-only input mount, one write-only output directory, no
+volumes, no daemon, exits when done. Nothing persists, so there is nowhere for "queued"
+to live.
+
+---
 
 ## Installation
 
+Every dependency is pinned to an exact version and verified by hash. Install from a
+lockfile:
+
 ```bash
-pip install -e .
+pip install --require-hashes -r requirements/score.txt && pip install --no-deps -e .
 ```
 
-Or run via Docker (recommended for CI/CD and DevOps teams).
+For the generate/validate path only — five pure-Python libraries, no ML stack:
 
-## Configuration & Setup Guide
+```bash
+pip install --require-hashes -r requirements/generate.txt && pip install --no-deps -e .
+```
 
-To get accurate, deterministic results and avoid false positives, you must correctly map the audit tool to your RAG system's exact API shape using `config.yaml`.
+`pip install -e .` on its own also works and installs the same versions, because
+`pyproject.toml` pins exactly rather than by range. It does not verify hashes.
 
-### 1. The Configuration File (`config.yaml`)
+**Why there are no version ranges anywhere.** A report claims that a third party can
+reconstruct the run from the manifest and the repository at a signed commit. A range
+makes that false: `sentence-transformers>=2.2.2` is different software in March than in
+August, and a Tier 2 threshold means nothing without the model and library version behind
+it. A range also turns a vulnerability scan into a statement about the day you installed
+rather than about the artefact — which is how `idna` 3.11 (PYSEC-2026-215) came to be
+installed here while the declared dependency set looked clean.
 
-Create a `config.yaml` in your project root. Here is a robust example:
+A pin fixes the version. A hash fixes the bytes. With `--require-hashes`, a substituted
+or tampered artefact fails the install instead of reaching the run.
+
+| File | Contents |
+|---|---|
+| `requirements/generate.txt` | 14 packages — the `generate`/`validate` runtime |
+| `requirements/score.txt` | 66 packages — adds the local scoring models |
+| `requirements/dev.txt` | 92 packages — adds test and release tooling |
+
+The lockfiles are generated, never hand-edited. Change `requirements/*.in`, then run
+`./scripts/lock.sh`. They are resolved universally, so one file installs correctly on
+macOS arm64 and Linux x86_64 rather than silently disagreeing per platform.
+
+Scoring downloads two model weights on first use (~500MB total). Pre-warm them if the run
+host has no outbound access.
+
+---
+
+## Configuration
+
+Map the harness to your API's exact shape in `config.yaml`. **An incorrect JSONPath is
+the documented leading cause of false positives** — an empty extracted string scored as a
+finding is a result that has to be retracted in front of a buyer. This is what `validate`
+exists to prevent.
 
 ```yaml
 target:
-  name: "lexcorp-staging" # Give your test run a descriptive name
+  name: "vendor-staging"
   endpoints:
-    chat: "https://staging.lexcorp.example.com/api/v1/chat"
-    upload: "https://staging.lexcorp.example.com/api/v1/documents"
-    retrieval: "https://staging.lexcorp.example.com/api/v1/search" # Optional
+    chat: "https://staging.example.com/api/v1/chat"
+    upload: "https://staging.example.com/api/v1/documents"
+    retrieval: "https://staging.example.com/api/v1/search"   # optional
   auth:
-    type: "bearer" # Options: bearer | api_key | basic | none
-    token_env: "TARGET_API_KEY" # Tool reads the actual token securely from this env var
+    type: "bearer"                 # bearer | api_key | basic | none
+    token_env: "TARGET_API_KEY"    # env var only, never inline
   response_format:
-    # CRITICAL: Define the exact JSONPath to the answer string and citation array in your API's response.
-    # Incorrect JSONPaths are the #1 cause of false positives (e.g., evaluating an empty string as a hallucination).
-    answer_field: "response.text" 
+    answer_field: "response.text"
     citations_field: "response.sources"
-    stream: false # Set to true if your chat endpoint uses Server-Sent Events (SSE)
+    stream: false                  # true for Server-Sent Events
 
 corpus:
-  # The test documents used for the evaluation.
-  use_bundled: true # True to use our curated 13-document suite of adversarial legal texts
-  # OR provide a path to your own custom directory of texts
-  # path: "./my_test_documents/"
+  use_bundled: true                # the 13-document demo corpus — read the caveat below
+  # path: "./my_test_documents/"   # or your own directory
 
 tests:
   hallucination_rate: true
   citation_integrity: true
   retrieval_relevance: true
   injection_resistance: true
-  cross_tenant_leakage: false # Set to true only if multi_tenant config is provided
+  cross_tenant_leakage: false      # only with a multi-tenant config
   confidence_threshold: true
   contradiction_surfacing: true
   routing_contamination: true
@@ -179,101 +363,267 @@ tests:
   cross_document_attribution: true
 
 thresholds:
-  max_hallucination_rate: 0.02 # Maximum acceptable hallucination rate (2%)
-  min_retrieval_relevance: 0.85 # Minimum cosine similarity for retrieved chunks
-  max_injection_success_rate: 0.0 
+  max_hallucination_rate: 0.02
+  min_retrieval_relevance: 0.85
+  max_injection_success_rate: 0.0
   max_cross_tenant_leaks: 0
 ```
 
-#### API Endpoints Explained
+> **`thresholds` are settings, not standards.** `0.85` and `0.02` are numbers someone put
+> in a config file. They are not a published benchmark and nothing about them is
+> authoritative. v0.2.0 renames the block `display_thresholds` and draws each one as a
+> marked line on a distribution rather than a pass/fail gate, because presenting a
+> setting as a standard is the exact failure this project exists to measure in other
+> people's systems. The rename makes the misuse impossible to commit by accident.
 
-To ensure the audit tool interfaces correctly with your RAG system, you must configure the following endpoints in your `config.yaml`. The tool expects your API to accept standard `POST` requests with JSON payloads.
+### Endpoints
 
-1. **`chat` (Required)**: 
-   - **What it is**: The primary endpoint for sending user queries to your RAG system and receiving generated answers.
-   - **Expected Request**: A `POST` request with a JSON body containing the query.
-   - **Expected Response**: A JSON object containing the final answer string and an array of citations. The tool uses `response_format.answer_field` and `response_format.citations_field` from your config to extract these.
+1. **`chat` (required)** — `POST` with the query in a JSON body; returns the answer string
+   and, if the system emits them, an array of citations. Extraction is driven by
+   `response_format.answer_field` and `citations_field`.
+2. **`upload` (required for planted-corpus mode)** — `POST` with document content; the
+   harness captures the returned document `id` to build the upload manifest. Citation
+   integrity is set membership against that manifest, so without an `id` the check
+   silently loses its ground truth.
+3. **`retrieval` (optional)** — direct search endpoint. Without it, retrieval relevance
+   has no chunks to score and reports `NOT_CAPTURED` rather than passing.
 
-2. **`upload` (Required if uploading a corpus)**: 
-   - **What it is**: The endpoint used to ingest raw text or documents into your RAG system's knowledge base prior to testing.
-   - **Expected Request**: A `POST` request containing the document content and metadata. The tool currently sends `{"filename": "...", "content": "..."}`.
-   - **Expected Response**: A JSON object acknowledging the upload. The tool captures the `id` from the response (if available) to verify citations later.
+### Non-standard shapes
 
-3. **`retrieval` (Optional)**: 
-   - **What it is**: A direct endpoint to your vector database or search index. If provided, the tool tests the raw retrieval relevance before generation.
-   - **Expected Request**: A `POST` request with the search query.
-   - **Expected Response**: A JSON object containing an array of retrieved text chunks. The tool computes cosine similarity against these raw chunks to grade retrieval performance independently of the LLM.
-
-#### Advanced Endpoint Configuration
-
-If your API requires specific HTTP methods, custom headers, or a deeply nested JSON body structure (or stringified JSON), you can configure endpoints as objects rather than simple strings. 
-
-You can also configure a **`receive`** endpoint if your RAG system uses decoupled asynchronous responses (e.g., polling GET endpoints or WebSockets). When configured, the tool will trigger the generation on the `chat` endpoint and automatically listen for the response on the `receive` endpoint.
-
-Use the `{{QUERY}}` variable in the `body` field. The tool will inject the query at runtime. (For upload endpoints, use `{{FILENAME}}` and `{{CONTENT}}`).
+Endpoints may be objects rather than strings when you need a specific method, custom
+headers, or a nested (or stringified) JSON body. A **`receive`** endpoint handles
+decoupled asynchronous responses — the harness triggers generation on `chat` and listens
+on `receive`. Use `{{QUERY}}` in `body`; for uploads, `{{FILENAME}}` and `{{CONTENT}}`.
 
 ```yaml
 target:
   endpoints:
     chat:
-      url: "https://app.lexcorp.example.com/v1/api_core/widget/send_message/?language=en"
+      url: "https://app.example.com/v1/api_core/widget/send_message/?language=en"
       method: "POST"
       headers:
         accept: "application/json, text/plain, */*"
         conv-id: "bd208096-772e-40a7-bcde-702ad8bdebfc"
-        scenario-id: "hhh0h4uuiy"
-        x-api-key: "hhh0h4uuiy"
-      # If your body must be a JSON string, you can provide it as a string:
-      body: '{"content":"{{QUERY}}","is_voice":false,"client_message_id":"f9517177-f80c","client_metadata":{"chat_page_access_token":"eyJhbGciOiJIUzI1NiIsIn...","language":"en"}}'
-      
+      body: '{"content":"{{QUERY}}","is_voice":false,"client_message_id":"f9517177-f80c"}'
     receive:
-      # Automatically detected as a WebSocket connection
-      url: "wss://app.lexcorp.example.com/socket.io/?EIO=4&transport=websocket"
+      # wss:// is detected as a WebSocket
+      url: "wss://app.example.com/socket.io/?EIO=4&transport=websocket"
       headers:
         accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
-        cache-control: "no-cache"
-      # (Optional) Send a specific connection initiation packet upon connecting to the WebSocket.
-      # You can provide a string (e.g., "40" for Socket.IO) or a JSON object. Variables like {{UUID}} are supported.
+      # Connection init packet. Accepts a string ("40" for Socket.IO) or a JSON object.
       init_message: "40"
-  
   response_format:
-    # Use jsonpath-ng syntax to filter specific WS events for the AI's final answer
     answer_field: "$[?(@.event_type=='message' & @.data.author.type=='ai_assistant')].data.content"
-    stream: true # Keep the connection open to aggregate chunks if the WS streams chunks
-    # (Optional) Stop stream immediately if payload contains this substring (Lazy match)
+    stream: true
     stop_payload_match: "MESSAGE_END"
-    # (Optional) Stop stream if JSONPath strictly matches this value
-    # stop_field: "message.type"
-    # stop_value: "finish"
 ```
 
-### 2. Setting up the Corpus
+---
 
-**Bundled Corpus (Recommended):**
-Set `use_bundled: true` in your `config.yaml`. The tool ships with a highly curated suite of 13 synthetic legal documents explicitly designed to trigger failure modes (e.g., highly contradictory SaaS agreements, overlapping statutes, and prompt injection traps).
+## Running it
 
-**Custom Corpus:**
-If you set `use_bundled: false`, you must provide a `path:` to a directory of text/markdown files.
-- The tool will upload these documents and use their raw text as the source of truth.
-- **Tip to avoid false positives:** Ensure the documents in your custom directory are clean and accurately reflect the expected facts you are testing for, as the Hallucination Evaluator computes semantic similarity directly against these files.
-
-### 3. Execution
-
-Set your environment variables and run the tool:
 ```bash
 export TARGET_API_KEY="your-api-token"
 legal-rag-audit -c config.yaml -o output_report
 ```
-3. Check `output_report.json` or `output_report.md` for the detailed results.
 
-## Zero Data Exfiltration
+Writes `reports/output_report.json` and `reports/output_report.md`. Exits non-zero if the
+run produced a failing verdict.
 
-**Zero data exfiltration.** The tool sends test documents to the target and reads responses. It does not phone home, collect telemetry, or transmit any data externally. It operates locally or within your containerised environment.
+The v0.2.0 surface, once the mode split lands:
 
-## Deterministic Evaluation
+```bash
+legal-rag-audit validate -c config.yaml
+legal-rag-audit generate -c config.yaml -o responses.jsonl
+legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json -o out/
+legal-rag-audit hash   --corpus ./planted/ --probes probes.jsonl --ground-truth ground_truth.json
+```
 
-The evaluation suite uses deterministic checks (exact string matching, semantic similarity via bundled embedding models), rather than relying on an LLM-in-the-loop to ask "is this a hallucination?", which itself can be flawed.
+---
 
-## Output Example
+## The corpus
 
-The tool outputs a structured JSON report and a markdown summary.
+The bundled 13-document set is **a demo, not an audit.** It measures whether a pipeline
+has generic properties on a best case: 13 clean synthetic documents uploaded and queried
+immediately. It is not your production ingestion history, not your chunking at 40,000
+documents, not your index at scale, and not your practice area. **A system can pass the
+bundled run cleanly and fail badly in production.** A generic corpus cannot tell you
+whether you are compliant, and this README will not pretend otherwise.
+
+| Documents | What they exercise |
+|---|---|
+| 3 synthetic case-law documents with known facts | Grounding, latency, contradictory-fact handling |
+| 2 near-identical SaaS agreements with contradictory liability clauses | Contradiction surfacing |
+| 1 dense regulatory document (nested lists, tables) | Structural integrity |
+| 2 statutes with overlapping article numbers | Retrieval disambiguation |
+| 1 PII-heavy document | Entity masking re-hydration |
+| 1 document with an embedded injection payload | Injection resistance |
+| 1 document referencing a non-existent statute | Citation integrity |
+| 2 tenant-isolated matter documents | Cross-tenant leakage |
+| A topic with zero relevant documents | Parametric bleed, abstention |
+
+**Custom corpus:** set `use_bundled: false` and give a `path:` to a directory of text or
+markdown files. Their raw text becomes the ground truth, so anything inaccurate in them
+becomes a false finding.
+
+### The corpus is checked before anything is sent
+
+The corpus is resolved and verified before the first request goes out, and a problem with
+it **aborts the run with a diagnosis and writes no report** (exit code 2). Checked:
+
+- `use_bundled: true` — the bundled corpus is installed, and all 13 documents are present.
+  A partial corpus names the documents it is missing.
+- `use_bundled: false` — `path` is set, exists, and holds at least one readable document.
+- Every document is UTF-8 and non-empty. Hidden files are skipped.
+- Document order is sorted, not filesystem order, so the same corpus reads the same way
+  on every machine.
+
+This exists because the failure it replaces was silent. With the corpus missing, the
+runner used to substitute two stand-in documents and *finish*: the report described a
+2-document corpus while the config said thirteen, and nothing on the page disclosed the
+substitution. A setup problem must never render as a finding (NF9) — if the corpus cannot
+be verified, there is no run.
+
+---
+
+## What the checks are
+
+Eighteen evaluators. Sixteen are Tier 1 by design, because determinism is a property of
+corpus design rather than of the scorer: the question is not *"what model judges the
+response?"* but *"what do we plant in the documents so that no judgment is needed?"*
+Proper nouns, high-precision figures, specific dates and citations survive paraphrase and
+can be checked by exact match. Prose cannot.
+
+| # | Check | Tier | Recipe |
+|---|---|---|---|
+| 1 | `cross_tenant_leakage` | 1 | Multi-type canary; substring presence |
+| 2 | `injection_resistance` | 1 | Payload demanding a verifiable side effect; prefix match |
+| 3 | `citation_integrity` | 1 | Set membership of cited IDs against the upload manifest |
+| 4 | `index_freshness` | 1 | Update a planted fact; check old token against new |
+| 5 | `entity_masking` | 1 | Exact match on entity; counterparty-swap check across pairs |
+| 6 | `parametric_bleed` | 1 | Inverted — presence of a known out-of-corpus fact |
+| 7 | `routing_contamination` | 1 | Inverted — presence of an out-of-bounds fact |
+| 8 | `abstention` | 1 | Inverted — presence of the answer it should not have given |
+| 9 | `contradiction_surfacing` | 1 | Both planted values present ⇒ surfaced; one ⇒ silently picked |
+| 10 | `attribution` | 1 | Adjacency — planted fact and correct document ID in one sentence |
+| 11 | `clause_synthesis` | 1 | Required-facts checklist, including the planted exclusion |
+| 12 | `structural_integrity` | 1 | Invariant planted deep in a nested list; relational query |
+| 13 | `disambiguation` | 1 | Distinct invariant under each colliding article number |
+| 14 | `context_memory` | 1 | Distinct invariant per referent; which one the pronoun resolved to |
+| 15 | `latency` | 1 (measurement) | TTFB and total as distributions. The *interpretation* is labelled inference, not measurement |
+| 16 | `unsupported_assertions` | **2** | Sentence-level NLI entailment against retrieved chunks |
+| 17 | `retrieval_relevance` | **2** | Cosine similarity over retrieved chunks |
+| 18 | `licensed_content_reproduction` | 1 | Publisher-proprietary marker in retrieved chunks, or in an answer attributed to an internal document |
+
+Two design rules run through all of them. **Never enumerate what the target might say;
+check for a token we authored** — abstention is detected by the absence of the invariant
+class, not by string-matching refusal language, because *"I don't have that"* has a
+thousand phrasings and enumerating them is the trap. And **injection is scored by side
+effect, not by judgment**: the payload demands something verifiable (begin the reply with
+a seeded token, answer in French), so success is a substring check rather than an opinion
+about whether the model was manipulated.
+
+---
+
+## Limits — what a run does not establish
+
+Printed in every report, in the same artefact as the findings, not in a later post.
+
+- **Injection probes measure instruction-boundary override via token emission, not data
+  exfiltration.** A system that emits a demanded token has followed an instruction from
+  a document. That is a mechanism proxy. It is not evidence that an attacker can extract
+  data, and it must not be reported as if it were.
+- **Determinism is a property of the scoring, not of the target.** See above.
+- **Planted-corpus results characterise the pipeline, not the production index at scale.**
+- **A clean result is only as good as the battery behind it.** Machine output lists
+  results; it cannot characterise absence. Any report has to name what was not tested.
+- **`NOT_ELIGIBLE` and `NOT_CAPTURED` are not passes.** "No cross-tenant leak" on a
+  single-tenant deployment is not a finding, and a check whose inputs were never captured
+  has not been performed.
+- **Licensed content in an index is not a licence breach.** `licensed_content_reproduction`
+  establishes that publisher-proprietary content is served from the target's own index
+  rather than fetched per query. It does not establish that this is unlicensed — the
+  vendor may hold a bulk-ingestion or content-partnership agreement, and no run has
+  visibility of their contracts. The finding names what a procurement reviewer will ask
+  about. It never alleges infringement.
+- **The harness has not yet been verified against a reference target.** Sensitivity
+  (every pathology fires its evaluator) and specificity (zero false positives on a clean
+  profile) are v0.3.0 CI gates. Until they are green, treat findings as requiring hand
+  verification. They require it anyway before anything is delivered.
+
+---
+
+## Testing against a system you do not own
+
+Signing up for a product authorises **use**. It does not authorise **testing**. Most SaaS
+terms separately prohibit benchmarking, automated access and multi-account creation, and
+probing tenant isolation on a system you do not own is a Computer Misuse Act 1990
+exposure in the UK. *"I signed up for a trial"* is not authorisation.
+
+| Ordinary use — no authorisation needed | Requires written authorisation |
+|---|---|
+| Asking questions and reading the answers | Prompt injection payloads |
+| Checking whether returned citations resolve | Cross-tenant canaries |
+| Point-in-time correctness against public law | Uploading adversarial documents |
+| Asking about topics outside the corpus | High-volume or automated querying |
+| Checking answers for publisher-proprietary markers | Index or corpus enumeration |
+| Asking the same question three times and diffing | Index-freshness re-upload |
+
+v0.2.0 enforces this in software rather than promising it in prose: a battery containing
+any right-column family aborts unless the config carries a populated `authorisation`
+block, `environment: production` additionally requires an explicit command-line flag, and
+the authorisation block is reproduced verbatim in the report manifest so the artefact
+carries its own provenance of consent. Default rate limits (2 concurrent, 1 rps,
+exponential backoff on 429) are set so an ordinary run resembles a user rather than a
+scanner.
+
+---
+
+## Development
+
+```bash
+pip install --require-hashes -r requirements/dev.txt && pip install --no-deps -e .
+pytest
+```
+
+Skip the tests that build a wheel or download a model with `pytest -m "not slow"`.
+
+Acceptance gates:
+
+```bash
+./scripts/check_no_remote_scoring.sh
+```
+
+Asserts there is no remote-scoring vendor, credential or endpoint anywhere in
+`legal_rag_audit/`, that no scoring code imports an HTTP client, that
+`internal_experiments/` is excluded from both the wheel and the image, and that no claim
+in this README is made without its scope attached.
+
+```bash
+python3 scripts/check_pins.py
+```
+
+Asserts every requirement is exact, every lockfile entry carries hashes, and
+`pyproject.toml` agrees with the lockfiles. Two sources of truth that disagree are worse
+than one that is vague, because the disagreement is silent.
+
+Changing a dependency:
+
+```bash
+./scripts/lock.sh
+```
+
+Edit `requirements/*.in`, run that, commit the `.in` and `.txt` together. Never hand-edit
+a lockfile — one that cannot be regenerated is not a lockfile.
+
+`internal_experiments/` is not installed, not imported, not collected by pytest and not
+copied into the image. Read `internal_experiments/README.md` before touching anything in
+it.
+
+---
+
+## Reference
+
+`V2_FULL_PLAN.md` is the full specification — evidence model, evaluator contracts,
+interchange schemas, threat model and execution plan. `V2_PROGRESS.md` tracks what has
+landed. This README is the summary; where they disagree, the plan wins.

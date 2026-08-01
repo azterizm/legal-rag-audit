@@ -2,21 +2,21 @@ import re
 import logging
 from typing import List, Dict, Any
 from sentence_transformers import CrossEncoder
-import numpy as np
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 class HallucinationEvaluator:
-    def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-base", use_gemini: bool = False, gemini_model: str = "gemini-2.5-flash"):
-        self.use_gemini = use_gemini
-        self.gemini_model = gemini_model
-        self.similarity_threshold = 0.5 
-        if not use_gemini:
-            logger.info(f"Loading NLI cross-encoder model: {model_name}")
-            self.model = CrossEncoder(model_name)
-        else:
-            logger.info(f"Using Gemini API ({self.gemini_model}) for Hallucination evaluation.")
+    """Sentence-level entailment against retrieved source text, scored locally.
+
+    The model runs in-process. No request leaves this machine during scoring.
+    """
+
+    def __init__(self, model_name: str = "cross-encoder/nli-deberta-v3-base"):
+        self.model_name = model_name
+        self.similarity_threshold = 0.5
+        logger.info(f"Loading NLI cross-encoder model: {model_name}")
+        self.model = CrossEncoder(model_name)
 
     def _strip_html(self, text: str) -> str:
         return re.sub(r'<[^>]+>', '', text)
@@ -53,110 +53,7 @@ class HallucinationEvaluator:
             chunks.append(chunk)
         return chunks
 
-    def _evaluate_with_gemini(self, query: str, answer: str, source_texts: List[str], threshold: float) -> Dict[str, Any]:
-        claims = self._split_into_claims(answer)
-        if not claims:
-            return {"status": "PASS", "score": 0.0, "threshold": threshold, "details": []}
-
-        if not source_texts:
-            return {
-                "status": "FAIL", 
-                "score": 1.0, 
-                "threshold": threshold,
-                "details": [{
-                    "query": query,
-                    "claim": c,
-                    "max_entailment_score": 0.0,
-                    "source_match": None,
-                    "verdict": "HALLUCINATED"
-                } for c in claims]
-            }
-
-        import os
-        import json
-        import requests
-        
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            logger.error("GEMINI_API_KEY environment variable not set.")
-            return {"status": "ERROR", "score": 1.0, "threshold": threshold, "details": "Missing GEMINI_API_KEY"}
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={api_key}"
-        
-        # We concatenate all source texts to provide the full context
-        full_context = "\n\n".join(source_texts)
-        # Gemini 2.5 flash has a massive context window so we don't need sliding windows
-        
-        hallucinated_claims = []
-        all_evaluations = []
-        total_claims = len(claims)
-        
-        num_runs = 3
-        
-        for claim in tqdm(claims, desc="Evaluating Claims with Gemini", unit="claim"):
-            prompt = f"""You are a strict legal fact checker.
-
-Context:
-{full_context}
-
-Claim: "{claim}"
-
-Does the context completely support the claim? 
-Return ONLY a valid JSON object (no markdown, no markdown backticks) with exactly two keys:
-- "score": A float between 0.0 and 1.0. (0.0 = completely unsupported/hallucinated, 1.0 = perfectly supported/entailed)
-- "reasoning": A brief explanation of why this score was given."""
-            
-            scores = []
-            reasonings = []
-            for _ in range(num_runs):
-                try:
-                    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                    resp = requests.post(url, json=payload, timeout=30)
-                    resp.raise_for_status()
-                    response_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    if response_text.startswith("```json"):
-                        response_text = response_text[7:-3]
-                    elif response_text.startswith("```"):
-                        response_text = response_text[3:-3]
-                    
-                    data = json.loads(response_text)
-                    scores.append(float(data.get("score", 0.0)))
-                    reasonings.append(data.get("reasoning", "No reasoning provided."))
-                except Exception as e:
-                    logger.error(f"Gemini evaluation failed: {e}")
-                    scores.append(0.0)
-            
-            avg_score = sum(scores) / len(scores) if scores else 0.0
-            best_reasoning = reasonings[0] if reasonings else "Evaluation failed, no reasoning provided."
-            
-            evaluation_record = {
-                "claim": claim,
-                "score": round(avg_score, 3),
-                "reasoning": best_reasoning,
-                "verdict": "HALLUCINATED" if avg_score < self.similarity_threshold else "SUPPORTED"
-            }
-            all_evaluations.append(evaluation_record)
-            
-            if avg_score < self.similarity_threshold:
-                hallucinated_claims.append(evaluation_record)
-
-        score = len(hallucinated_claims) / total_claims if total_claims > 0 else 0.0
-        status = "FAIL" if score > threshold else "PASS"
-        
-        return {
-            "status": status,
-            "score": round(score, 3),
-            "threshold": threshold,
-            "details": {
-                "hallucinations": hallucinated_claims,
-                "all_evaluations": all_evaluations
-            }
-        }
-
     def evaluate(self, query: str, answer: str, source_texts: List[str], threshold: float) -> Dict[str, Any]:
-        if self.use_gemini:
-            return self._evaluate_with_gemini(query, answer, source_texts, threshold)
-            
         claims = self._split_into_claims(answer)
         if not claims:
             return {"status": "PASS", "score": 0.0, "threshold": threshold, "details": []}

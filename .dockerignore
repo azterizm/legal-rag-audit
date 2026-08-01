@@ -1,0 +1,36 @@
+# Nothing here reaches the image.
+
+# Excluded from the image by policy, not by accident.
+# See internal_experiments/README.md and V2_FULL_PLAN.md §4.2.
+internal_experiments/
+
+# VCS and local state
+.git/
+.gitignore
+.venv/
+venv/
+env/
+ENV/
+
+# Build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Local secrets and run output — must never be baked into a layer
+.env
+config.yaml
+reports/
+*.log
+
+# Planning documents, not shipped
+V1_PLAN.md
+V2_FULL_PLAN.md
+V2_PROGRESS.md
+
+# Scratch
+scratch_json.py
+check_nli.py

@@ -4,6 +4,7 @@ import logging
 import sys
 
 from legal_rag_audit.config import AuditConfig
+from legal_rag_audit.corpus_loader import CorpusError
 from legal_rag_audit.runner import TestRunner
 
 def main():
@@ -11,8 +12,6 @@ def main():
     parser.add_argument("-c", "--config", required=True, help="Path to config.yaml")
     parser.add_argument("-o", "--output", default="report", help="Base name for output report files")
     parser.add_argument("--skip-upload", action="store_true", help="Skip uploading the corpus, use local files for tests")
-    parser.add_argument("--use-gemini", action="store_true", help="Use Gemini API for evaluation instead of local models")
-    parser.add_argument("--gemini-model", default="gemini-2.5-flash", help="Specify the Gemini model to use for inference (default: gemini-2.5-flash)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose debug logging")
     
     args = parser.parse_args()
@@ -34,10 +33,16 @@ def main():
         logging.error(f"Failed to load config: {e}")
         sys.exit(1)
 
-    runner = TestRunner(config, skip_upload=args.skip_upload, use_gemini=args.use_gemini, gemini_model=args.gemini_model)
-    
+    runner = TestRunner(config, skip_upload=args.skip_upload)
+
     # Run the async runner loop
-    report = asyncio.run(runner.run_all())
+    try:
+        report = asyncio.run(runner.run_all())
+    except CorpusError as e:
+        # A setup problem, not a finding. No report is written — a report produced from
+        # a corpus we could not verify would describe the corpus, not the target.
+        logging.error(f"Corpus setup failed, aborting before any result is written:\n{e}")
+        sys.exit(2)
     
     import os
     

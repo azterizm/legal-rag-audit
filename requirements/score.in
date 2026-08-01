@@ -1,0 +1,10 @@
+# score runtime = generate runtime + the local scoring models.
+#
+# Everything below runs in-process on CPU. There is no remote scoring path
+# (V2_FULL_PLAN.md §4.2), so this set is what "instrument-scored" actually means and
+# the pinned versions are what a Tier 2 finding is reproducible against.
+#
+# Edit this file, then run scripts/lock.sh. Never edit score.txt by hand.
+-r generate.in
+sentence-transformers>=5.1.2
+tqdm>=4.67.1
