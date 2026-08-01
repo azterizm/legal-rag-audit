@@ -11,7 +11,7 @@ exists to measure in other people's systems.
 |---|---|---|---|
 | **A** | Remove the remote-scoring path; rescope README claims | 0.5 d | ✅ 2026-08-01 |
 | **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
-| **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ⬜ |
+| **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
 | **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
 | **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ⬜ |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ⬜ |
@@ -273,6 +273,151 @@ before being reverted.
 **The Dockerfile changes are not build-tested** — Docker is not available on this machine.
 The `--require-hashes` install, the `--no-deps` package install and the non-root user are
 written but unproven. Build it before relying on it.
+
+---
+
+## Phase B — the interchange split ✅
+
+**Acceptance (§17.2):** `score` runs offline ✅ · `generate` runs in a venv without torch
+✅ · a third party produces a conforming `responses.jsonl` from the doc alone ✅ ·
+golden-report test passes byte-identical twice ✅ · two Dockerfiles ⬜ *(deferred with the
+rest of Docker)*.
+
+### What came apart
+
+The v1 runner held each probe next to its own answer key — the query string and the
+strings a correct answer must contain, in the same function, a few lines apart. That is
+workable when one process does both and it is precisely what has to separate for a target
+to run the battery themselves.
+
+| Artefact | Carries | Goes to |
+|---|---|---|
+| `probes.jsonl` (`probes.v1`) | questions + `eligible_for` | them |
+| `responses.jsonl` (`responses.v1`) | what came back, verbatim | them → us |
+| `ground_truth.json` (`ground_truth.v1`) | expectations | withheld, hashed at handover |
+
+`demo_battery.py` holds all three in one authoring table and emits them through separate
+functions. `build_probes()` cannot see the expectations, so a probe file that leaks an
+answer key is not something a caller can ask for.
+
+### Packages
+
+```
+src/legal_rag_audit/
+├── interchange/     pydantic records + generated JSON Schemas (both sides of §5.1)
+├── probes/          the demo battery; questions and expectations, emitted separately
+├── transport/       httpx / SSE / WS — generate only
+├── generate/        fires the battery, writes responses.jsonl, scores nothing
+├── score/           offline; registry, driver, socket enforcement
+└── evaluators/      unchanged internals, now lazily imported
+```
+
+Moved to `src/` first, in its own commit. Under a flat layout `import legal_rag_audit`
+from the repository root resolves to the working tree whether or not the package is
+installed, which made the wheel and venv tests weaker than they looked.
+
+### Three rules the format exists to enforce
+
+1. **Absence is recorded, not inferred.** `citations: null` means *not captured*; `[]`
+   means *the target returned none*. Collapsing them turns "we did not look" into "it
+   cited nothing", which is a finding that would have to be withdrawn.
+2. **A transport failure is not a result.** A record with `error` set is `NOT_CAPTURED`
+   for every check. The v1 runner scored an empty answer as a failing test — a 502
+   rendered as a hallucination finding, which is NF9 exactly inverted.
+3. **An unknown schema version is refused, not parsed.** A guessed reading produces a
+   report indistinguishable from one we understood (NF10).
+
+Parse errors name file and line, because the person fixing them may not have our code.
+
+### Statuses, and the one that does the work
+
+`NOT_ELIGIBLE` — no probe declared the check; it does not apply to this deployment.
+`NOT_CAPTURED` — probes were eligible, the file lacks what the check reads. Neither is a
+pass, both are printed. Denominators come from `eligible_for`, fixed before the run
+(F39); a response for a probe absent from the probe file is refused rather than added to
+a denominator after the fact.
+
+### The registry records the implemented tier, not the intended one
+
+§8.1 puts `abstention` in Tier 1 once Phase D rewrites it as an inverted presence check.
+It runs a cross-encoder today, so it is registered **Tier 2**. Labelling it Tier 1 before
+the model leaves the path would be the same class of claim Phase A removed. Currently
+**14 Tier 1, 3 Tier 2**, and a test asserts the Tier 2 count equals the number of
+evaluators that load a model.
+
+### Found while building it
+
+**Four defects in the demo battery, two of which would have failed a correct system.**
+
+- `contradiction_surfacing` expected `$2M` and `$5M`. Both are in the corpus — as two
+  lines of the *insurance schedule* inside one agreement. Different policies, not
+  conflicting caps. Now scored against the real conflict: v1 §11.3 carves data breaches
+  out of the cap entirely, v2 §11.3 pulls them back inside a 12-month cap.
+- `index_freshness` required `$10M`, which exists only as a Tier 2 *asset threshold* in
+  an unrelated financial regulation. A system that read the documents failed; one that
+  echoed the figure from the question passed. The check needs a two-phase upload
+  `generate` does not perform, so no probe declares it and the report says
+  `NOT_ELIGIBLE` with the reason. §14.2 makes a false positive a release blocker, and an
+  unsatisfiable expectation is one.
+- `disambiguation` required `"hazardous waste"` and `structural_integrity` required
+  `"tier 2"` — both phrases in their own questions. An expectation satisfiable by echoing
+  the prompt tests nothing about retrieval. Structural integrity now rests on the
+  adjacency check, which echoing cannot satisfy and which also distinguishes the
+  `$250,000` in the penalty table from an unrelated one elsewhere in the corpus.
+
+A test now fails on any `must_contain` token appearing in its own probe text. Two
+exemptions, enumerated with reasons: injection, where the payload must contain the token
+it is scored on, and one premise-loaded probe where the false figure is the trap.
+
+**`chat()` failed whenever `endpoints.chat` was a plain URL string** — the form the
+README example uses. It read `.headers` off the union unconditionally. Uploads take the
+same union and handle it, so the corpus uploaded cleanly and then all seventeen probes
+came back as transport errors, which reads like an unreachable target rather than our
+bug. Found by running `generate` end to end against a stub, not by a unit test.
+
+**The wheel shipped no `probes`, `score`, `generate` or `transport` package.** The
+explicit `packages` list keeps `internal_experiments/` out and silently drops anything
+new. Found by the venv test; the list is now compared against what is on disk.
+
+**`score()` left network enforcement on for the whole process.** Correct for the CLI,
+wrong for an importable function — a caller who scored one file found networking broken
+afterwards. Now scoped to the call. Found by running the suite together; every test
+passed in isolation.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| `score` opens no sockets | AST walk proves no module reachable from `score` imports `transport` or `generate`, with a negative control; `socket`, `create_connection` and `getaddrinfo` each raise under enforcement |
+| `generate` runs without torch | A real virtualenv built from `requirements/generate.txt`: `torch`, `transformers`, `sentence_transformers`, `numpy` all absent while `generate`, the CLI and Tier 1 scoring run |
+| A third party can produce the file | The curl+jq example is **extracted from `docs/responses-schema.md` and executed** against a stub, and the file it writes is scored |
+| Byte-identical rescoring | Same inputs scored twice, compared as bytes (NF2) |
+| Denominators from the probe file | Every check's `eligible` equals the count declared in `eligible_for` |
+| Degradation is explicit | Missing chunks, missing upload manifest, missing records and transport errors each produce `NOT_CAPTURED`, never `PASS` |
+| Base install is the generate layer | `check_pins.py` asserts every base dependency resolves in `requirements/generate.txt`; negative-controlled |
+| Published schemas match the models | Generated by `scripts/gen_schemas.py`, `--check` fails on drift |
+
+**240 tests.** Four gates clean.
+
+### Deliberately not done in Phase B
+
+- **Two Dockerfiles.** Deferred with the rest of Docker, at your instruction.
+- **`validate` mode.** Phase F.
+- **Markdown attestation.** `score` writes `report.json`; the attestation document is
+  Phase C (§10.6). `report.py` was deleted rather than left unreachable — its Markdown
+  writer led with a hallucination-rate percentage, which Appendix D bans as a headline.
+- **Full §6.1 config v2.** The dead `tests:` section is gone, because check selection now
+  comes from `eligible_for` and a config that still listed seventeen booleans would let
+  someone disable a check and watch it run. `version: 2`, the transport block, the
+  `authorisation` block (Phase I) and the `display_thresholds` rename (Phase C) stay in
+  their own phases.
+- **Real TTFB.** The transport reads the full body before returning, so time to first
+  byte is not observable. `ttfb_ms` is null and the latency check reports that only total
+  time was compared — v1 recorded total under both names, which made the TTFB-to-total
+  gap a comparison of a number with itself.
+- **`legacy_params`.** Six checks still take arguments in their own shapes (PII pairs,
+  fact/source tuples, the latency probe pairing). Named so they cannot be mistaken for
+  part of the durable contract; Phase D folds them into the §8.2 recipes.
 
 ---
 

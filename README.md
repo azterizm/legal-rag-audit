@@ -72,24 +72,27 @@ they are being built against a written spec, not discovered.
 | Local-only scoring; no third-party inference path | **Shipped** |
 | Exact version pins + hash-pinned lockfiles, split by mode | **Shipped** |
 | Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
-| 17 evaluators against a configured endpoint | **Shipped** — single pass, flat report |
+| 17 evaluators against a configured endpoint | **Shipped** — single pass |
 | Licensed-content reproduction check (#18) | Specified — v0.4.0 |
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
-| JSON + Markdown report | **Shipped** — v1 shape, flat `tests` object |
+| JSON report with per-check counts and tiers | **Shipped** — Markdown attestation pending |
 | Non-root container, dependency layer installed under `--require-hashes` | **Shipped** — single image; two-image split pending |
-| `generate` / `score` / `validate` mode split | Specified — v0.2.0 |
-| `responses.jsonl` interchange format + published schema | Specified — v0.2.0 |
-| Tier 1 / Tier 2 tagging and tier-separated report | Specified — v0.2.0 |
+| `generate` / `score` mode split; scoring offline and enforced | **Shipped** — `validate` pending |
+| `responses.jsonl` interchange format + published schema | **Shipped** |
+| Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 14 Tier 1, 3 Tier 2 |
 | Run manifest: hashes, seed, signed commit SHA, model versions | Specified — v0.2.0 |
-| `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | Specified — v0.2.0 |
+| `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | **Shipped** |
 | Authorisation gating on injection / canary families | Specified — v0.2.0 |
 | Seeded plant generation with collision guard | Specified — v0.3.0 |
 | N-pass execution and variance as a first-class finding | Specified — v0.3.0 |
 | Pathological reference target, sensitivity/specificity CI gates | Specified — v0.3.0 |
 | Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
 
-Until the mode split lands, one command runs everything in a single process and the
-report carries no tier labels or manifest. Read any current output as a v1 artefact.
+The mode split has landed: `generate` and `score` are separate commands, and scoring
+runs with sockets disabled. What a current report still lacks is the run manifest — the
+hashes, seed and signed commit SHA that let a stranger reconstruct the run — and the
+Markdown attestation. Until those arrive, a report is readable evidence but not yet a
+handover document.
 
 ---
 
@@ -427,22 +430,38 @@ target:
 
 ## Running it
 
+Two steps, on two machines. The first is yours and optional; the second is ours and
+offline.
+
 ```bash
 export TARGET_API_KEY="your-api-token"
-legal-rag-audit -c config.yaml -o output_report
+legal-rag-audit generate -c config.yaml -o responses.jsonl --probes probes.jsonl
 ```
 
-Writes `reports/output_report.json` and `reports/output_report.md`. Exits non-zero if the
-run produced a failing verdict.
-
-The v0.2.0 surface, once the mode split lands:
+Fires the battery at your endpoints and records what came back. It scores nothing, so it
+has no verdict to be wrong about. Replace it with your own harness if you prefer — see
+[the response schema](docs/responses-schema.md).
 
 ```bash
-legal-rag-audit validate -c config.yaml
-legal-rag-audit generate -c config.yaml -o responses.jsonl
-legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json -o out/
-legal-rag-audit hash   --corpus ./planted/ --probes probes.jsonl --ground-truth ground_truth.json
+legal-rag-audit score --responses responses.jsonl \
+                      --ground-truth ground_truth.json \
+                      --probes probes.jsonl \
+                      -o out/
 ```
+
+Writes `out/report.json`. Opens no sockets: an attempt raises.
+
+```bash
+legal-rag-audit schema --print responses.v1
+```
+
+Prints the published contract, so implementing against it needs no clone.
+
+Exit codes are a contract: **0** ran clean, **1** ran with findings, **2** did not run —
+a setup problem, with a diagnosis. A run that could not start never exits the way a clean
+one does.
+
+Still to come: `validate` (v0.2.1), `plant` and `hash` (v0.3.0).
 
 ---
 
