@@ -187,7 +187,7 @@ def test_document_order_is_stable(tmp_path):
 
 def test_runner_no_longer_carries_a_silent_fallback():
     """The two stand-in documents must not come back."""
-    runner_source = (REPO_ROOT / "legal_rag_audit" / "runner.py").read_text(
+    runner_source = (REPO_ROOT / "src" / "legal_rag_audit" / "runner.py").read_text(
         encoding="utf-8"
     )
     assert "fallback dummy docs" not in runner_source
@@ -197,6 +197,6 @@ def test_runner_no_longer_carries_a_silent_fallback():
 
 
 def test_cli_exits_with_a_diagnosis_rather_than_a_traceback():
-    cli_source = (REPO_ROOT / "legal_rag_audit" / "cli.py").read_text(encoding="utf-8")
+    cli_source = (REPO_ROOT / "src" / "legal_rag_audit" / "cli.py").read_text(encoding="utf-8")
     assert "CorpusError" in cli_source
     assert "sys.exit(2)" in cli_source

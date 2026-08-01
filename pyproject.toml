@@ -44,10 +44,16 @@ test = [
 # is what keeps it out. scripts/check_no_remote_scoring.sh asserts this.
 packages = ["legal_rag_audit", "legal_rag_audit.evaluators"]
 
+[tool.setuptools.package-dir]
+# src layout (§5.2). The repository root is not importable, so `import legal_rag_audit`
+# from the root resolves to the *installed* package rather than silently to the working
+# tree. That distinction is what makes the wheel and venv tests in tests/ mean anything.
+"" = "src"
+
 [tool.setuptools.package-data]
 # The bundled demo corpus is data, not code, so setuptools does not ship it by default.
 # Without this the wheel installs without a corpus and `use_bundled: true` has nothing
-# to read. legal_rag_audit/corpus_loader.py aborts loudly in that case; this is what
+# to read. src/legal_rag_audit/corpus_loader.py aborts loudly in that case; this is what
 # stops it happening. tests/test_corpus_packaging.py asserts it against the built wheel.
 legal_rag_audit = ["corpus/*.txt", "corpus/*.md"]
 

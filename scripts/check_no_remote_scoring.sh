@@ -13,15 +13,12 @@
 #      to the *target*. That is the system under test, not a scoring sub-processor.
 #      Vendor credential names (GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY) are
 #      matched explicitly instead, so nothing is lost.
-#   2. The package lives at `legal_rag_audit/`, not `src/legal_rag_audit/`. The src
-#      layout move belongs to the Phase B package refactor.
-#
 # internal_experiments/ is the one permitted location and is excluded from the wheel
 # (explicit `packages` list in pyproject.toml) and the image (.dockerignore).
 
 set -uo pipefail
 
-PACKAGE_DIR="legal_rag_audit"
+PACKAGE_DIR="src/legal_rag_audit"
 
 VENDOR_PATTERN='gemini|openai|anthropic|generativelanguage|api\.openai\.com|GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|google\.generativeai|--use-gemini|use_gemini|allow_remote_scoring|allow-remote-scoring'
 

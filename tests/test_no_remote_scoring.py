@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_DIR = REPO_ROOT / "legal_rag_audit"
+PACKAGE_DIR = REPO_ROOT / "src" / "legal_rag_audit"
 EXPERIMENTS_DIR = REPO_ROOT / "internal_experiments"
 
 VENDOR_PATTERN = re.compile(

@@ -595,7 +595,7 @@ Acceptance gates:
 ```
 
 Asserts there is no remote-scoring vendor, credential or endpoint anywhere in
-`legal_rag_audit/`, that no scoring code imports an HTTP client, that
+`src/legal_rag_audit/`, that no scoring code imports an HTTP client, that
 `internal_experiments/` is excluded from both the wheel and the image, and that no claim
 in this README is made without its scope attached.
 

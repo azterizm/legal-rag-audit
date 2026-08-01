@@ -120,9 +120,9 @@ never failed is decoration.
    matches vendor credential names explicitly instead (`GEMINI_API_KEY`,
    `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), plus vendor names, vendor endpoints and the
    removed flag spellings. Nothing is lost and the exclusion is documented in the script.
-2. **`src/` layout.** The plan's §5.2 tree is `src/legal_rag_audit/`; the package is at
-   the repository root. The move belongs with the Phase B package refactor, so the gate
-   scans `legal_rag_audit/`.
+2. **`src/` layout.** The plan's §5.2 tree is `src/legal_rag_audit/`; at the time this
+   gate was written the package was still at the repository root. Resolved at the start
+   of Phase B — the gate now scans `src/legal_rag_audit/`.
 
 ### Note on `pip-audit`
 
