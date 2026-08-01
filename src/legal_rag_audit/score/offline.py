@@ -73,7 +73,17 @@ def enforce_offline() -> None:
 
 
 def release_offline() -> None:
-    """Undo enforcement. For tests only — nothing in the scoring path calls this."""
+    """Undo enforcement.
+
+    Enforcement is process-global — it replaces attributes on the `socket` module — so
+    leaving it on outlives the call that turned it on. In the CLI that is harmless,
+    because scoring is the whole process. As a library function it is not: `score()`
+    would silently break networking for everything else in a caller's program, forever,
+    as a side effect of scoring one file.
+
+    So `score()` scopes it (see `offline()`), and the claim it makes is the accurate
+    one: nothing reaches the network *while scoring runs*.
+    """
     global _ENFORCED
     if not _ENFORCED:
         return

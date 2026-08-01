@@ -166,6 +166,50 @@ def test_enforcement_is_idempotent():
     assert not is_enforced()
 
 
+def test_score_does_not_leave_the_process_unable_to_open_a_socket(tmp_path):
+    """Enforcement is scoped to the call, not to the process.
+
+    It works by replacing attributes on the `socket` module, so leaving it on outlives
+    the call that turned it on. In the CLI that is harmless — scoring is the whole
+    process — but `score()` is also an importable function, and a caller who scores one
+    file should not find networking permanently broken afterwards as a side effect.
+
+    The claim being made is the accurate one: nothing reaches the network *while
+    scoring runs*. This was found by running the suite together; every test passed in
+    isolation.
+    """
+    from legal_rag_audit.interchange import (
+        Response,
+        write_ground_truth,
+        write_probes,
+        write_responses,
+    )
+    from legal_rag_audit.probes import build_ground_truth, build_probes
+
+    probes = build_probes()
+    write_probes(tmp_path / "probes.jsonl", probes)
+    write_ground_truth(tmp_path / "gt.json", build_ground_truth())
+    write_responses(
+        tmp_path / "responses.jsonl",
+        [
+            Response(run_id="r", probe_id=p.probe_id, query=p.text, answer="An answer.")
+            for p in probes
+        ],
+    )
+
+    assert not is_enforced()
+    score(
+        str(tmp_path / "responses.jsonl"),
+        str(tmp_path / "gt.json"),
+        str(tmp_path / "probes.jsonl"),
+        skip_tier2=True,
+    )
+    assert not is_enforced(), "score() left enforcement on for the whole process"
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.close()
+
+
 def test_scoring_a_real_file_runs_with_enforcement_on(tmp_path):
     """The end this all exists for: a genuine score() call, sockets blocked throughout."""
     from legal_rag_audit.interchange import (

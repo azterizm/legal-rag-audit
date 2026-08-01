@@ -22,6 +22,7 @@ from what the results turned out to be (F39, §3.5 rule 3).
 
 import logging
 from collections import defaultdict
+from contextlib import nullcontext
 from typing import Any, Optional
 
 from ..config import ThresholdsConfig
@@ -34,7 +35,7 @@ from ..interchange import (
     load_probes,
     load_responses,
 )
-from .offline import enforce_offline
+from .offline import offline
 from .registry import (
     ANSWER,
     BY_NAME,
@@ -212,10 +213,29 @@ def score(
     `probes_path` is optional only because a response file records the probes it
     answered; when it is absent, eligibility is reconstructed from the ground truth,
     which is weaker and the report says so.
-    """
-    if enforce:
-        enforce_offline()
 
+    Network enforcement is scoped to this call. It is on for every line of scoring and
+    off when the call returns, so importing this function does not leave a caller's
+    process unable to open a socket. `enforce=False` is for a caller that has already
+    entered `offline()` around a wider region.
+    """
+    with offline() if enforce else nullcontext():
+        return _score(
+            responses_path,
+            ground_truth_path,
+            probes_path,
+            thresholds,
+            skip_tier2,
+        )
+
+
+def _score(
+    responses_path: str,
+    ground_truth_path: str,
+    probes_path: Optional[str],
+    thresholds: Optional[ThresholdsConfig],
+    skip_tier2: bool,
+) -> dict[str, Any]:
     # Checked once, before anything is read, rather than discovered part-way through a
     # run. A missing scoring dependency is our misconfiguration, not a property of the
     # target — a report that silently dropped two checks because of it would attribute
