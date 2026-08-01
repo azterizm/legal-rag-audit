@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "RetrievedChunk": {
+      "additionalProperties": true,
+      "description": "One chunk the target's retriever returned for this query.\n\nExtra keys are allowed: chunk metadata is the target's shape, not ours, and\ndiscarding their scores or offsets would make the evidence bundle less useful than\nthe raw file they already have.",
+      "properties": {
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Id"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "RetrievedChunk",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/legal-rag-audit/schemas/responses.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "description": "One `(probe_id, pass_index)` result.",
+      "properties": {
+        "answer": {
+          "title": "Answer",
+          "type": "string"
+        },
+        "citations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citations"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Status"
+        },
+        "pass_index": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Pass Index",
+          "type": "integer"
+        },
+        "probe_id": {
+          "title": "Probe Id",
+          "type": "string"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "raw_response": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Response"
+        },
+        "retrieved_chunks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RetrievedChunk"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved Chunks"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema": {
+          "const": "responses.v1",
+          "default": "responses.v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        },
+        "total_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Ms"
+        },
+        "ttfb_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttfb Ms"
+        }
+      },
+      "required": [
+        "schema",
+        "run_id",
+        "probe_id",
+        "query",
+        "answer"
+      ],
+      "title": "Response",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "Optional first line of the file, declaring what the producer could capture.\n\nWithout it, an absent field is ambiguous \u2014 we cannot tell \"the target emits no\ncitations\" from \"our script did not record them\". With it, that ambiguity is\nresolved by the person who actually knows. Every check it disables is named in the\nreport rather than quietly dropped.",
+      "properties": {
+        "citations_captured": {
+          "title": "Citations Captured",
+          "type": "boolean"
+        },
+        "document_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Ids"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "record": {
+          "const": "capture_notes",
+          "title": "Record",
+          "type": "string"
+        },
+        "retrieved_chunks_captured": {
+          "title": "Retrieved Chunks Captured",
+          "type": "boolean"
+        },
+        "schema": {
+          "const": "responses.v1",
+          "default": "responses.v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "record",
+        "citations_captured",
+        "retrieved_chunks_captured"
+      ],
+      "title": "CaptureNotes",
+      "type": "object"
+    }
+  ],
+  "title": "Response file (JSONL) \u2014 one record per line"
+}

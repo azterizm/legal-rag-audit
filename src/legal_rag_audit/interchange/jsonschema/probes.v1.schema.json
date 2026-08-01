@@ -1,0 +1,82 @@
+{
+  "$id": "https://github.com/legal-rag-audit/schemas/probes.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One question, addressed to the target.",
+  "properties": {
+    "as_at_date": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "As At Date"
+    },
+    "eligible_for": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Eligible For",
+      "type": "array"
+    },
+    "family": {
+      "title": "Family",
+      "type": "string"
+    },
+    "intent": {
+      "enum": [
+        "positive",
+        "no_correct_answer"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "passes": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Passes",
+      "type": "integer"
+    },
+    "probe_id": {
+      "title": "Probe Id",
+      "type": "string"
+    },
+    "schema": {
+      "const": "probes.v1",
+      "default": "probes.v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "tenant": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "probe_id",
+    "family",
+    "intent",
+    "text",
+    "eligible_for"
+  ],
+  "title": "Probe file (JSONL) \u2014 one probe per line",
+  "type": "object"
+}

@@ -42,7 +42,12 @@ test = [
 # Explicit, not discovered. internal_experiments/ carries the removed remote-scoring
 # path (V2_FULL_PLAN.md §4.2) and must never enter a wheel or sdist; an explicit list
 # is what keeps it out. scripts/check_no_remote_scoring.sh asserts this.
-packages = ["legal_rag_audit", "legal_rag_audit.evaluators"]
+packages = [
+    "legal_rag_audit",
+    "legal_rag_audit.evaluators",
+    "legal_rag_audit.interchange",
+    "legal_rag_audit.interchange.jsonschema",
+]
 
 [tool.setuptools.package-dir]
 # src layout (§5.2). The repository root is not importable, so `import legal_rag_audit`
@@ -56,6 +61,10 @@ packages = ["legal_rag_audit", "legal_rag_audit.evaluators"]
 # to read. src/legal_rag_audit/corpus_loader.py aborts loudly in that case; this is what
 # stops it happening. tests/test_corpus_packaging.py asserts it against the built wheel.
 legal_rag_audit = ["corpus/*.txt", "corpus/*.md"]
+# The published JSON Schemas ship inside the package so `schema --print` works from an
+# installed wheel. A target implementing responses.v1 should not have to clone anything
+# (F35). tests/test_interchange.py asserts they are present in the built wheel.
+"legal_rag_audit.interchange.jsonschema" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
