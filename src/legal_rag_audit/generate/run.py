@@ -1,0 +1,309 @@
+"""`generate` — fire the battery at the target, write `responses.jsonl`.
+
+This mode scores nothing. It asks questions, records what came back verbatim, and
+stops. That separation is the point of §5.1: the target can run this, or replace it
+entirely with their own tooling, and `score` cannot tell the difference. Anything this
+module decided about whether an answer was *good* would be a decision the target had
+no way to reproduce or contest.
+
+Two rules it follows because the report depends on them:
+
+* **A failed request is recorded as a failure, not as an answer.** A timeout produces a
+  record with `error` set and an empty `answer`. Score reads that as NOT_CAPTURED. The
+  alternative — an empty string that looks like the target said nothing — is how a
+  network problem becomes a finding about somebody's product (NF9).
+* **What could not be captured is declared.** The capture-notes header states whether
+  citations and retrieved chunks were available at all, and lists the document
+  identifiers the target issued at upload. Checks that need what is missing are named
+  in the report rather than silently dropped (F40).
+"""
+
+import asyncio
+import logging
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from ..config import AuditConfig
+from ..corpus_loader import load_corpus
+from ..interchange import (
+    CaptureNotes,
+    Probe,
+    Response,
+    RetrievedChunk,
+    write_probes,
+    write_responses,
+)
+from ..probes import build_probes, validate_battery
+from ..transport import TargetClient
+
+logger = logging.getLogger(__name__)
+
+
+class GenerationError(Exception):
+    """The run could not be set up. Aborts before any file is written (NF9)."""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+
+
+class Generator:
+    """Runs the battery once per pass and collects the raw results."""
+
+    def __init__(self, config: AuditConfig, passes: int = 1, skip_upload: bool = False):
+        if passes < 1:
+            raise GenerationError(f"passes must be at least 1, got {passes}")
+        self.config = config
+        self.passes = passes
+        self.skip_upload = skip_upload
+        self.run_id = uuid.uuid4().hex[:16]
+        self.client = TargetClient(config.target)
+        self.document_ids: list[str] = []
+        #: Set once we know whether the target emits these at all, rather than guessed
+        #: per record.
+        self.saw_citations = False
+        self.saw_chunks = False
+
+    async def run(self, probes: list[Probe]) -> tuple[list[Response], CaptureNotes]:
+        try:
+            await self._upload_corpus()
+            responses: list[Response] = []
+            for pass_index in range(1, self.passes + 1):
+                if self.passes > 1:
+                    logger.info(f"Pass {pass_index} of {self.passes}")
+                for probe in probes:
+                    responses.append(await self._ask(probe, pass_index))
+        finally:
+            await self.client.close()
+
+        notes = CaptureNotes(
+            record="capture_notes",
+            citations_captured=self.saw_citations,
+            retrieved_chunks_captured=self.saw_chunks,
+            document_ids=self.document_ids or None,
+            notes=(
+                f"Produced by legal-rag-audit generate against "
+                f"{self.config.target.name!r}."
+            ),
+        )
+        return responses, notes
+
+    async def _upload_corpus(self) -> None:
+        # Resolved and checked before a single request goes out. A corpus problem is a
+        # setup problem: it aborts here rather than surfacing later as a finding (NF9).
+        documents = load_corpus(
+            use_bundled=self.config.corpus.use_bundled,
+            path=self.config.corpus.path,
+        )
+        logger.info(f"Corpus resolved: {len(documents)} documents.")
+
+        if self.skip_upload:
+            logger.info("Skipping upload; the target is assumed to hold the corpus.")
+            # No identifiers were issued to us, so citation integrity has no set to
+            # test membership against. Left empty rather than filled with our own
+            # filenames, which the target never agreed to use.
+            return
+
+        for doc in documents:
+            try:
+                resp = await self.client.upload_document(
+                    doc["filename"], doc["content"], metadata={"id": doc["id"]}
+                )
+            except Exception as e:
+                raise GenerationError(
+                    f"Upload of {doc['filename']} failed: {e}\n"
+                    f"  Every check depends on the target holding the corpus. Aborting\n"
+                    f"  rather than producing a response file scored against documents\n"
+                    f"  the target may not have."
+                ) from None
+
+            if isinstance(resp, dict) and (
+                resp.get("status") == "error"
+                or resp.get("success") is False
+                or "error" in resp
+            ):
+                raise GenerationError(
+                    f"Upload of {doc['filename']} returned a success status with an "
+                    f"error body: {resp}\n"
+                    f"  A 200 that did not store the document is the failure mode this\n"
+                    f"  check exists to catch."
+                )
+
+            issued = resp.get("id") if isinstance(resp, dict) else None
+            self.document_ids.append(str(issued) if issued else doc["id"])
+
+        logger.info(f"Uploaded {len(documents)} documents.")
+
+    async def _ask(self, probe: Probe, pass_index: int) -> Response:
+        started = _now()
+        t0 = time.monotonic()
+        try:
+            result = await self.client.chat(probe.text)
+        except Exception as e:
+            elapsed = int((time.monotonic() - t0) * 1000)
+            logger.error(f"{probe.probe_id}: request failed: {e}")
+            return Response(
+                run_id=self.run_id,
+                probe_id=probe.probe_id,
+                pass_index=pass_index,
+                query=probe.text,
+                tenant=probe.tenant,
+                answer="",
+                total_ms=elapsed,
+                http_status=_status_of(e),
+                error=f"{type(e).__name__}: {e}",
+                started_at=started,
+            )
+
+        total_ms = int((time.monotonic() - t0) * 1000)
+        answer = result.get("answer", "") or ""
+        raw = result.get("raw")
+
+        citations = result.get("citations")
+        if isinstance(citations, list):
+            self.saw_citations = True
+            citations = [str(c) for c in citations]
+        else:
+            citations = None
+
+        chunks = await self._retrieve_chunks(probe.text, raw)
+        if chunks is not None:
+            self.saw_chunks = True
+
+        return Response(
+            run_id=self.run_id,
+            probe_id=probe.probe_id,
+            pass_index=pass_index,
+            query=probe.text,
+            tenant=probe.tenant,
+            answer=answer,
+            citations=citations,
+            retrieved_chunks=chunks,
+            # TODO(D): the transport reads the full body before returning, so time to
+            # first byte is not observable here. Recording total under both names —
+            # which v1 did — makes the TTFB-to-total gap in evaluator 15 compare a
+            # number with itself. Left null so the check reports it as not captured
+            # rather than silently scoring a vacuous comparison.
+            ttfb_ms=None,
+            total_ms=total_ms,
+            http_status=200,
+            error=None,
+            started_at=started,
+            raw_response=raw if raw else None,
+        )
+
+    async def _retrieve_chunks(
+        self, query: str, raw: Any
+    ) -> Optional[list[RetrievedChunk]]:
+        """Chunks from the dedicated retrieval endpoint, or from the chat body.
+
+        Returns None — not `[]` — when the target exposes no way to see them. The
+        difference decides whether retrieval relevance is scored against an empty
+        retrieval or reported as not captured.
+        """
+        endpoint = self.config.target.endpoints.retrieval
+        if endpoint is not None:
+            try:
+                url, method, headers, kwargs = self.client._prepare_request(
+                    endpoint,
+                    default_payload={"query": query},
+                    variables={"QUERY": query},
+                )
+                r = await self.client.client.request(
+                    method, url, headers=headers, **kwargs
+                )
+                if r.status_code == 200:
+                    data = r.json().get("data", [])
+                    return [
+                        RetrievedChunk(
+                            text=item.get("content", "") or item.get("text", ""),
+                            doc_id=item.get("doc_id") or item.get("id"),
+                        )
+                        for item in data
+                        if isinstance(item, dict)
+                    ]
+                logger.warning(
+                    f"Retrieval endpoint returned {r.status_code}; "
+                    f"chunks not captured for this probe."
+                )
+                return None
+            except Exception as e:
+                logger.warning(f"Retrieval endpoint failed: {e}")
+                return None
+
+        found = _chunks_in_body(raw)
+        return found
+
+    async def close(self) -> None:
+        await self.client.close()
+
+
+def _status_of(exc: Exception) -> Optional[int]:
+    """The HTTP status behind an exception, when there was one."""
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None)
+
+
+def _chunks_in_body(raw: Any) -> Optional[list[RetrievedChunk]]:
+    """Chunks embedded in the chat response, if the target puts them there."""
+    candidates: list[Any] = []
+    if isinstance(raw, dict):
+        candidates = raw.get("chunks") or []
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict) and "chunks" in item:
+                candidates.extend(item["chunks"] or [])
+    else:
+        return None
+
+    if not candidates:
+        return None
+
+    chunks = []
+    for item in candidates:
+        if isinstance(item, dict):
+            chunks.append(
+                RetrievedChunk(
+                    text=item.get("content", "") or item.get("text", ""),
+                    doc_id=item.get("doc_id") or item.get("id"),
+                )
+            )
+        elif isinstance(item, str):
+            chunks.append(RetrievedChunk(text=item))
+    return chunks or None
+
+
+def generate(
+    config: AuditConfig,
+    responses_path: str,
+    probes_path: Optional[str] = None,
+    passes: int = 1,
+    skip_upload: bool = False,
+) -> int:
+    """Run the battery and write the response file. Returns the record count."""
+    validate_battery()
+    probes = build_probes(passes=passes)
+
+    if probes_path:
+        write_probes(probes_path, probes)
+        logger.info(f"Probe file written to {probes_path} ({len(probes)} probes).")
+
+    generator = Generator(config, passes=passes, skip_upload=skip_upload)
+    responses, notes = asyncio.run(generator.run(probes))
+    write_responses(responses_path, responses, capture_notes=notes)
+
+    failed = sum(1 for r in responses if not r.usable)
+    logger.info(
+        f"Wrote {len(responses)} records to {responses_path} "
+        f"({len(responses) - failed} with answers, {failed} with transport errors)."
+    )
+    if failed:
+        logger.warning(
+            f"{failed} of {len(responses)} probes did not return an answer. Those "
+            f"records are NOT_CAPTURED at scoring time; they are not findings."
+        )
+    return len(responses)

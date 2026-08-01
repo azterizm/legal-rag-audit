@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from legal_rag_audit.config import AuditConfig
 from legal_rag_audit.corpus_loader import CorpusError, load_corpus
 from legal_rag_audit.report import ReportGenerator
-from legal_rag_audit.client import TargetClient
+from legal_rag_audit.transport import TargetClient
 from legal_rag_audit.evaluators import (
     HallucinationEvaluator, 
     CitationEvaluator, 

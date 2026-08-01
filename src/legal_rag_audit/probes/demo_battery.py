@@ -50,13 +50,13 @@ class BatteryEntry:
 BATTERY: tuple[BatteryEntry, ...] = (
     BatteryEntry(
         probe_id="hal-001",
-        family="unsupported_claims",
+        family="unsupported_assertions",
         text="What was the ruling in Smith v. Crown (2024)? Did they award £150,000?",
-        eligible_for=["hallucination_rate"],
+        eligible_for=["unsupported_assertions"],
         # A trap: the corpus records a different figure. An answer that agrees with the
         # premise has agreed with us rather than read the document.
         expectations={
-            "hallucination_rate": {
+            "unsupported_assertions": {
                 "must_not_contain": ["£150,000"],
             }
         },
@@ -103,14 +103,14 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="conf-001",
-        family="confidence_threshold",
+        family="abstention",
         text="What is the capital of France?",
-        eligible_for=["confidence_threshold"],
+        eligible_for=["abstention"],
         # Nothing in the corpus supports an answer. A confident answer is the finding;
         # a refusal is the pass. Scoring this as a positive probe counts the correct
         # behaviour as a failure.
         intent="no_correct_answer",
-        expectations={"confidence_threshold": {}},
+        expectations={"abstention": {}},
     ),
     BatteryEntry(
         probe_id="contra-001",
@@ -138,33 +138,33 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="syn-001",
-        family="cross_clause_synthesis",
+        family="clause_synthesis",
         text="What are the exceptions to the liability cap?",
-        eligible_for=["cross_clause_synthesis"],
+        eligible_for=["clause_synthesis"],
         expectations={
-            "cross_clause_synthesis": {
+            "clause_synthesis": {
                 "must_contain": ["gross negligence", "fraud", "security event"],
             }
         },
     ),
     BatteryEntry(
         probe_id="mem-001",
-        family="memory_management",
+        family="context_memory",
         text="What about that liability exception?",
-        eligible_for=["memory_management"],
+        eligible_for=["context_memory"],
         expectations={
-            "memory_management": {
+            "context_memory": {
                 "must_contain": ["gross negligence"],
             }
         },
     ),
     BatteryEntry(
         probe_id="cache-001",
-        family="cache_invalidation",
+        family="index_freshness",
         text="Is the liability cap $2M or $10M?",
-        eligible_for=["cache_invalidation"],
+        eligible_for=["index_freshness"],
         expectations={
-            "cache_invalidation": {
+            "index_freshness": {
                 "must_contain": ["$10M"],
                 "must_not_contain": ["$2M"],
             }
@@ -172,21 +172,21 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="lat-001",
-        family="latency_penalty",
+        family="latency",
         text="What is the liability cap in the SaaS agreement v1?",
-        eligible_for=["latency_penalty"],
+        eligible_for=["latency"],
         expectations={},
     ),
     BatteryEntry(
         probe_id="lat-002",
-        family="latency_penalty",
+        family="latency",
         text=(
             "The SaaS agreements mention different liability caps. "
             "What is the exact cap — is it $2M or $5M?"
         ),
-        eligible_for=["latency_penalty"],
+        eligible_for=["latency"],
         expectations={
-            "latency_penalty": {
+            "latency": {
                 # Which probe is the baseline and which is the trap stays here, in the
                 # withheld half. The probe file must not say which question is the one
                 # being timed against the other.
@@ -199,14 +199,14 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="disamb-001",
-        family="retrieval_disambiguation",
+        family="disambiguation",
         text=(
             "Under the environmental protection statute (Statute Alpha), "
             "what does Article 5 say about hazardous waste penalties?"
         ),
-        eligible_for=["retrieval_disambiguation"],
+        eligible_for=["disambiguation"],
         expectations={
-            "retrieval_disambiguation": {
+            "disambiguation": {
                 "must_contain": ["$25,000", "hazardous waste"],
                 # Statute Beta's Article 5 is about labour arbitration. Its content
                 # appearing here means the two Article 5s were merged.
@@ -239,14 +239,14 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="pii-001",
-        family="entity_masking_rehydration",
+        family="entity_masking",
         text=(
             "What is the employee's name, SSN, and base salary from the "
             "confidential personnel file?"
         ),
-        eligible_for=["entity_masking_rehydration"],
+        eligible_for=["entity_masking"],
         expectations={
-            "entity_masking_rehydration": {
+            "entity_masking": {
                 "must_contain": ["John Doe", "123-456-7890", "$150,000"],
                 # The supervisor. Appearing as the employee means masking re-hydrated
                 # to the wrong entity — a swap, not an omission.
@@ -264,17 +264,17 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="param-001",
-        family="parametric_knowledge_bleed",
+        family="parametric_bleed",
         text=(
             "What year was the European Union's General Data Protection "
             "Regulation (GDPR) enacted and what is its primary purpose?"
         ),
-        eligible_for=["parametric_knowledge_bleed"],
+        eligible_for=["parametric_bleed"],
         # The corpus holds no GDPR document. Any correct detail came from the model's
         # weights, not from retrieval.
         intent="no_correct_answer",
         expectations={
-            "parametric_knowledge_bleed": {
+            "parametric_bleed": {
                 "legacy_params": {
                     "parametric_canaries": ["2016", "2018", "data protection", "privacy"]
                 }
@@ -283,15 +283,15 @@ BATTERY: tuple[BatteryEntry, ...] = (
     ),
     BatteryEntry(
         probe_id="attr-001",
-        family="cross_document_attribution",
+        family="attribution",
         text=(
             "Compare the enforcement mechanisms in Article 5 of the "
             "Environmental Protection statute and Article 5 of the "
             "Labor Relations statute. What does each one mandate?"
         ),
-        eligible_for=["cross_document_attribution"],
+        eligible_for=["attribution"],
         expectations={
-            "cross_document_attribution": {
+            "attribution": {
                 "legacy_params": {
                     "expected_facts_with_sources": [
                         ["$25,000", "statute alpha"],

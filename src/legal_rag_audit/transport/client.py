@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 import httpx
 from jsonpath_ng.ext import parse
 
-from legal_rag_audit.config import TargetConfig
+from ..config import TargetConfig
 
 logger = logging.getLogger(__name__)
 
