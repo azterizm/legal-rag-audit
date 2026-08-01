@@ -1,2 +1,0 @@
-[console_scripts]
-legal-rag-audit = legal_rag_audit.cli:main

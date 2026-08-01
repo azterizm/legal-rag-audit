@@ -1,9 +1,0 @@
-pydantic>=2.0.0
-PyYAML>=6.0
-httpx>=0.25.0
-websockets>=11.0.0
-jsonpath-ng>=1.6.0
-sentence-transformers>=2.2.2
-
-[test]
-pytest>=7.0.0

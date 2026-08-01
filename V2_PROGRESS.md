@@ -1,0 +1,355 @@
+# legal-rag-audit v2 — execution progress
+
+Tracks [V2_FULL_PLAN.md](V2_FULL_PLAN.md) §17. One section per phase. Each phase records
+what landed, what was deliberately deferred, and how the acceptance criteria were checked
+— because "acceptance passed" with no record of how is the same class of claim this tool
+exists to measure in other people's systems.
+
+**Status legend:** ✅ complete · 🟡 in progress · ⬜ not started
+
+| Phase | Deliverable | Effort | Status |
+|---|---|---|---|
+| **A** | Remove the remote-scoring path; rescope README claims | 0.5 d | ✅ 2026-08-01 |
+| **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
+| **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ⬜ |
+| **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
+| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ⬜ |
+| **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ⬜ |
+| **E** | N-pass execution + variance reporting | 1 d | ⬜ |
+| **F** | `validate` mode | 0.5 d | ⬜ |
+| **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ⬜ |
+| **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ⬜ |
+| **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ⬜ |
+| **I** | Authorisation controls + retention position | 0.5 d | ⬜ |
+
+Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
+
+---
+
+## Phase A — decontaminate ✅
+
+Closes defect 1 in §19: the remote-scoring path contradicted both the determinism claim
+and the zero-exfiltration claim, and until it was gone every other claim in the README
+was contaminated by it.
+
+### What was there
+
+The contradiction was live, not theoretical.
+
+- `--use-gemini` / `--gemini-model` were real CLI flags, threaded through `TestRunner`
+  into four evaluators.
+- Three evaluators POSTed corpus text and target answers to
+  `generativelanguage.googleapis.com`: `hallucination.py`, `retrieval.py`,
+  `confidence.py`. On that path a third party is a sub-processor and every run is a
+  data-transfer event.
+- The hallucination path issued **three generation calls per claim and averaged the
+  scores**. Same responses in, different report out — §4.2(a) exactly.
+- `conflict.py` carried `use_gemini` / `gemini_model` constructor parameters it never
+  read.
+- The remote paths imported `requests`, which appeared in neither `pyproject.toml` nor
+  `requirements.txt` — an undeclared runtime dependency reachable only from the path that
+  was being denied.
+
+### What landed
+
+**Code**
+
+- Remote scoring removed from `legal_rag_audit/` entirely. `HallucinationEvaluator`,
+  `RetrievalEvaluator` and `ConfidenceEvaluator` now take a model name only; the
+  branching, the vendor calls and the dead parameters are gone.
+- `--use-gemini` and `--gemini-model` removed from the CLI. The surface is now
+  `-c/--config`, `-o/--output`, `--skip-upload`, `-v/--verbose`.
+- Removed an unused `numpy` import from `hallucination.py` — another undeclared
+  dependency reference.
+- Declared `tqdm`, which the local scoring path genuinely uses and which was riding in
+  transitively via `sentence-transformers`.
+- `requirements.txt` reorganised along the §5.3 mode boundary, so the Phase B split has
+  an obvious seam.
+
+**Quarantine, per §4.2 option 2**
+
+- `internal_experiments/remote_scoring/gemini.py` holds the removed code as three plain
+  functions, with the non-determinism and sub-processor properties documented at the top.
+- `internal_experiments/README.md` states the exclusion mechanism and the conditions on
+  ever using it again: claims rescoped in the same paragraph, `remote_scoring: true` in
+  the manifest, findings segregated into Tier 2, and it never enters the published path.
+- Exclusion is enforced four ways: explicit `packages = [...]` in `pyproject.toml` (not
+  discovery), `.dockerignore`, `norecursedirs` so pytest never collects it, and the
+  acceptance script.
+- The two root-level `test_gemini_*.py` files were not tests — they needed a live API key
+  and printed to stdout, while sitting where pytest would collect them. Moved and renamed
+  to `manual_*_check.py`.
+
+**Acceptance gates, as executable checks rather than one-time verification**
+
+- `scripts/check_no_remote_scoring.sh` — vendor markers, HTTP-client imports in the
+  scoring path, wheel exclusion, image exclusion, README claims.
+- `scripts/check_readme_claims.py` — Appendix D, enforced **per paragraph**, because
+  §4.2 requires scoping to sit in the same paragraph as the claim rather than in a
+  footnote.
+- `tests/test_no_remote_scoring.py` — 78 tests, the first repository tests.
+
+**README** — rewritten to the v2 register (tiers, counts-not-percentages, three modes,
+mechanical check names, hardened invocation, limits, authorisation boundary), with an
+**Implementation status** table marking every specified-but-unbuilt capability. Writing a
+README that describes `validate`/`generate`/`score` as if they exist would have been the
+same defect Phase A is closing.
+
+### Acceptance
+
+| Criterion | Result |
+|---|---|
+| `grep -ri "gemini\|openai\|api_key" src/` clean | ✅ adapted — see note below |
+| README contains no unqualified determinism or exfiltration claim | ✅ enforced per paragraph by `check_readme_claims.py` |
+| `pip-audit` clean | ✅ 49 packages, full declared set, fresh resolution; see note |
+| Package still imports and the CLI surface is intact | ✅ `--use-gemini` / `--gemini-model` gone; `-c`, `-o`, `--skip-upload`, `-v` remain |
+| `pytest` | ✅ 78 passed |
+| Built wheel contains no vendor marker and no `internal_experiments/` | ✅ inspected the actual `.whl`, not the config that produces it |
+| Local scoring path still works after the surgery | ✅ real inference through `RetrievalEvaluator`; three identical runs on the same input |
+
+All four gate checks were **negative-controlled** — each was made to fail on purpose
+(unqualified determinism, unscoped exfiltration claim, banned vocabulary, a vendor marker
+planted in an evaluator) and each fired before the change was reverted. A gate that has
+never failed is decoration.
+
+### Two adaptations, recorded rather than silent
+
+1. **The grep pattern.** `api_key` cannot be excluded literally: §6.1 of the plan itself
+   mandates `auth.type: api_key` and `token_env: TARGET_API_KEY` for authenticating to
+   the *target*, which is the system under test, not a scoring sub-processor. The gate
+   matches vendor credential names explicitly instead (`GEMINI_API_KEY`,
+   `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), plus vendor names, vendor endpoints and the
+   removed flag spellings. Nothing is lost and the exclusion is documented in the script.
+2. **`src/` layout.** The plan's §5.2 tree is `src/legal_rag_audit/`; the package is at
+   the repository root. The move belongs with the Phase B package refactor, so the gate
+   scans `legal_rag_audit/`.
+
+### Note on `pip-audit`
+
+Clean: a fresh resolution of the **full** declared set — 49 packages, generate and score
+paths together, including `torch` and `transformers` — reports no known vulnerabilities.
+The generate/validate subset (15 packages) is clean on its own.
+
+One thing the audit surfaced that is worth keeping visible. This machine's existing
+environment carries `idna==3.11` (PYSEC-2026-215, fixed in 3.15), reached transitively
+through `httpx`; a fresh install resolves `idna==3.18` and is unaffected. Nothing in the
+declared set pins a vulnerable version — but nothing pins a safe one either. **This is
+exactly the gap Phase B2 closes.** An unpinned `>=` requirement means the audit result
+depends on when you installed, which is not a property a reproducibility claim can rest
+on. Until the hash-pinned lockfile lands, `pip-audit` describes a moment rather than the
+artefact, and the two results above differ only because they were resolved on different
+days.
+
+### Deferred out of Phase A, deliberately
+
+- **`docs/limits.md` as a file.** The limits are in the README as a section; the `docs/`
+  tree arrives with Phase B.
+- **Config key renames.** `thresholds` → `display_thresholds`, and the `hallucination_rate`
+  key → mechanical names, are Phase C. The README states plainly that the current numbers
+  are settings rather than standards, and why the rename is coming.
+- **The abstention evaluator's refusal list.** `ConfidenceEvaluator` still enumerates
+  canonical refusal phrasings, which §8.2 #8 identifies as the trap the design exists to
+  avoid. The limitation is now documented in the class docstring; the inverted rewrite is
+  Phase D.
+- **`ContradictionSurfacingEvaluator` outcome split.** Both-present vs exactly-one-present
+  are collapsed into PASS/FAIL. §8.2 #9 wants them distinguished and the silently-picked
+  side recorded. Noted in the code; Phase D.
+- **Dockerfile split.** One image still installs the full dependency set including
+  `pytest`. `.dockerignore` now exists and excludes the quarantine, secrets, run output
+  and planning documents. The two-image split is Phase B.
+
+### Found while verifying
+
+**The bundled corpus was not in the wheel.** Inspecting the built artefact showed
+`legal_rag_audit/corpus/*.txt` absent: `pyproject.toml` declared no `package-data`, so
+setuptools shipped only `.py` files. Fixed in A+ below.
+
+**Repository hygiene**, worth clearing before a public tag:
+
+- `legal_rag_audit.egg-info/` and `output.log` are git-tracked build/run artefacts.
+  `.gitignore` covers `*.egg-info/`, but tracking predates it.
+- `check_nli.py` and `scratch_json.py` are scratch scripts at the repository root.
+- `PLAN.md` is staged for deletion; `V1_PLAN.md` is untracked.
+
+---
+
+## Phase A+ — dependency pinning and corpus integrity ✅
+
+Two items pulled forward on request. Neither is a full phase: the pinning is the lockfile
+half of B2, and the corpus fix closes the defect found while verifying Phase A.
+
+### Exact, hash-pinned dependencies
+
+Nothing is loose anywhere. Ranges made three claims untrue at once — NF11 said a third
+party reconstructs the run from the manifest and a signed commit, but `>=` resolves to
+different software depending on the day; a Tier 2 threshold is meaningless without the
+model and library version behind it; and `pip-audit` described a moment rather than the
+artefact, which is how `idna==3.11` (PYSEC-2026-215) was installed here while the declared
+set looked clean.
+
+**Structure** — three layers along the §5.3 mode boundary, `.in` authored and `.txt`
+generated:
+
+| Layer | Packages | Role |
+|---|---|---|
+| `requirements/generate.txt` | 14 | `generate`/`validate` runtime. No ML stack |
+| `requirements/score.txt` | 66 | adds local scoring models |
+| `requirements/dev.txt` | 92 | adds test and release tooling |
+
+- **Universal resolution** (`uv pip compile --universal`) — one lockfile installs on macOS
+  arm64 and Linux x86_64, with the differences carried as environment markers.
+  Per-platform lockfiles would silently disagree with each other.
+- **Hashes on every entry** (`--generate-hashes`, installed with `--require-hashes`). A
+  pin fixes the version; a hash fixes the bytes. A substituted artefact fails the install
+  rather than reaching a run.
+- `pyproject.toml` pins exactly too, so `pip install -e .` gives the same versions without
+  hash verification.
+- `scripts/lock.sh` regenerates. `scripts/check_pins.py` asserts nothing is loose, every
+  entry is hashed, and `pyproject.toml` agrees with the lockfiles — two sources of truth
+  that disagree are worse than one that is vague, because the disagreement is silent.
+- The Dockerfile now installs the dependency layer under `--require-hashes`, installs the
+  package with `--no-deps` so the lockfile stays the only source of versions, and runs
+  non-root.
+- Top-level `requirements.txt` removed; `requires-python` raised to `>=3.11` per §5.4.
+
+**Verified:** both lockfiles install hash-verified into clean virtualenvs (`generate` 14
+packages, `score` 47 applicable on this platform out of 66 marker-gated). `pip-audit`
+clean on both. `torch`, `transformers`, `sentence_transformers` and `numpy` are all
+confirmed *absent* from the generate environment, and `config`, `client` and
+`corpus_loader` import there with no ML stack present — §5.3's boundary now has a real
+test behind it rather than an intention.
+
+**Still open in B2:** SBOM, GPG-signed tags, cosign, SLSA provenance, public CI scanning,
+base-image digest pinning (a tag is mutable, so `python:3.11-slim` is a pin in name only),
+and CPU-only torch — the current lock takes default torch, which pulls CUDA packages under
+Linux markers.
+
+### Corpus packaging and guardrail
+
+Two different defects, fixed together.
+
+**Packaging.** `[tool.setuptools.package-data]` now ships `corpus/*.txt` and `corpus/*.md`.
+Verified by building the wheel and opening it: 13 of 13 documents present, then installed
+non-editable into a clean virtualenv and loaded from site-packages. Testing the config
+that produces an artefact is not testing the artefact.
+
+**Behaviour.** The silent fallback is gone. `legal_rag_audit/corpus_loader.py` resolves and
+verifies the corpus before the first request and raises `CorpusError`; the CLI prints the
+diagnosis and exits 2 **without writing a report**. Checks: bundled corpus installed and
+all 13 documents present (naming any that are missing), custom `path` set and non-empty,
+every document UTF-8 and non-empty, hidden files skipped, and sorted document order so the
+corpus reads identically on every machine.
+
+Why it mattered more than the packaging bug: with the corpus absent the runner substituted
+two hard-coded stand-in documents and *completed*. The report then described a 2-document
+corpus while the config said thirteen, and nothing on the page disclosed the substitution.
+A setup problem rendering as a finding is exactly what NF9 forbids, and it is the failure
+class this tool sells against.
+
+The bundled corpus stays what it is — a generic demo so someone can try the harness on a
+best case. Real engagements run a domain corpus authored per target (§9.4, §9.5). The
+guardrail is about the corpus being present and readable, not about it being right for
+anyone's jurisdiction.
+
+### Acceptance
+
+| Criterion | Result |
+|---|---|
+| No loose specifier in `pyproject.toml` or any lockfile | ✅ |
+| Every lockfile entry carries hashes | ✅ |
+| Lockfiles install under `--require-hashes` | ✅ both layers, clean virtualenvs |
+| `pip-audit` on the installed pinned sets | ✅ clean |
+| ML stack unreachable from the generate layer | ✅ asserted against a real install |
+| Bundled corpus present in the built wheel | ✅ 13/13, wheel opened and inspected |
+| Missing corpus aborts with a diagnosis, writes no report | ✅ exit 2, verified through the CLI |
+| `pytest` | ✅ 113 passed |
+
+Negative-controlled as before: a loosened pin, a version drift between `pyproject.toml`
+and the lockfile, and a lockfile entry with its hashes stripped each made the gate fail
+before being reverted.
+
+### Not verified
+
+**The Dockerfile changes are not build-tested** — Docker is not available on this machine.
+The `--require-hashes` install, the `--no-deps` package install and the non-root user are
+written but unproven. Build it before relying on it.
+
+---
+
+## Plan amendment — evaluator 18, licensed-content reproduction
+
+**Date: 2026-08-01.** Specification only. No code; the check lands with Phase G.
+
+*"Do you hold rights to all content in your index?"* is a standard TPRM question, and one
+of the very few where this harness can return evidence rather than a policy answer.
+Ingesting a commercial publisher's edition into a vector index is a different act from
+querying it per seat, and the 17 evaluators had no probe for it.
+
+**Why it is Tier 1.** The publisher's editorial layer — headnotes, Key Numbers, star
+pagination, citation numbers, signal marks — does not exist in the primary source. Its
+presence in a response is an exact-match check with no model anywhere in the path. The
+identifier class is additionally safe for us to hold and to quote: publisher-assigned
+strings are identifiers, not protected expression.
+
+**Where the compliance question actually sits** is *where the content lives*, not whether
+it was ever lawfully read. So the check scores three outcomes and never collapses them:
+`in_index` (marker in `retrieved_chunks`, or in an answer attributed to an internal
+document — their retriever returned it), `external_fetch` (marker cited to the publisher's
+own service — consistent with licensed per-query access, recorded as an outcome and not a
+finding), and `unattributed` (no citation, no retrieval evidence — `NOT_CAPTURED`, and
+never a licensing finding).
+
+**Two properties worth noting.**
+
+It is **existing-corpus only**. We cannot plant licensed content — planting it would be
+the infringement we are asking about. That makes it the strongest argument yet for F25
+being Must: it needs `chat` and nothing else.
+
+It is **structural but free-runnable**, which §16.2 says the structural class is not.
+Asking a question and reading the answer is ordinary use, so it needs no upload, no second
+account, no authorisation and no automation — while still saying something about
+architecture rather than about a rate. On a public trial it belongs in the 10–15 queries
+alongside non-determinism.
+
+**The controlling risk, and the control.** A finding here alleges unlawful conduct by a
+named company if it is written carelessly, which is a worse failure than a retracted
+metric. Presence in an index is **not** a licence breach — the vendor may hold a
+bulk-ingestion or content-partnership agreement, and no run can see their contracts. A
+mandatory limit line is printed with every instance, `external_fetch` never counts as a
+finding, and the wording names what a procurement reviewer will ask rather than asserting
+infringement.
+
+### Edits made to V2_FULL_PLAN.md
+
+§8.1 row 18 · §8.2 full contract · §3.4 sufficiency (1 instance) · §6.6 report JSON shape ·
+§9.2 existing-corpus ground truth · §10.5 mechanical names · §11.2 F43 (Must) · §13
+ordinary-use class · §14.1 `serve_licensed_content` profile · §14.2 sensitivity gate ·
+§16.1 free-tier boundary · §16.2 the exception and its caution · §17.1/§17.2 Phase G
+(effort 3–4 d → 4–5 d) · §18 v0.4.0 · §20.1 items 7 and 8 · §20.2 risk row · Appendix A
+"editorial layer" · Appendix B. Counts propagated everywhere they were asserted.
+
+**One sequencing defect found and fixed while propagating.** The sensitivity gate was
+written as a fixed number. Raising it to 18/18 would have made it unmeetable at v0.3.0,
+because Phase F2 ships the reference target while evaluator 18 arrives in Phase G. It is
+now expressed as *every shipped evaluator* — 17/17 at v0.3.0, 18/18 at v0.4.0 — and the
+plan specifies the gate be written against the evaluator registry rather than a constant,
+so shipping an evaluator without a pathology profile fails the build instead of quietly
+shrinking the denominator.
+
+### Open, and needed before Phase G
+
+- **§20.1 item 7 — how licensed reference material is held without our doing the thing we
+  are asking about.** Resolution: ship the identifier class only. The editorial-prose
+  class needs a licence we would have to hold; where a paid engagement warrants it, match
+  by shingle hash so no licensed text is stored, and quote at most a short excerpt.
+- **§20.1 item 8 — publisher and jurisdiction coverage at launch.** Bound it to the two
+  target practice areas. A partial marker set is honest if the report says which
+  publishers were checked; an implied claim of full coverage is not.
+
+### README
+
+Evaluator table extended to 18, `licensed_content_reproduction` added to the mechanical
+check names, the "presence is not a breach" limit added to the Limits section, and the
+marker check added to the ordinary-use column of the authorisation table. It is marked
+**Specified — v0.4.0** in the implementation-status table; the "17 evaluators" row stays
+as it is, because 17 is what currently runs.
