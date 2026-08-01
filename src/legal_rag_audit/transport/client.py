@@ -130,7 +130,12 @@ class TargetClient:
         import uuid
         req_uuid = str(uuid.uuid4())
         
-        chat_headers = {**self.headers, **self.config.endpoints.chat.headers}
+        # `chat` may be a bare URL string or a full endpoint object (§6.1 allows both,
+        # and the README example uses the string form). A string has no `.headers`, so
+        # reading it directly made every chat request fail with an AttributeError while
+        # uploads — which take the same union — worked fine.
+        endpoint_headers = getattr(self.config.endpoints.chat, "headers", None) or {}
+        chat_headers = {**self.headers, **endpoint_headers}
         variables = {"QUERY": query, "UUID": req_uuid}
         for k, v in chat_headers.items():
             variables[k] = str(v)
