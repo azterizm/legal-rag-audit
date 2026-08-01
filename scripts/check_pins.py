@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Assert the dependency set is exactly pinned and internally consistent.
 
-Three properties, all of which have to hold for NF11 (a third party reconstructs the run
+Four properties, all of which have to hold for NF11 (a third party reconstructs the run
 from the manifest and the repository at a signed commit):
 
   1. Nothing is loose. Every requirement in pyproject.toml and every line in the
@@ -10,6 +10,10 @@ from the manifest and the repository at a signed commit):
      than one that is vague, because the disagreement is silent.
   3. Every lockfile entry carries hashes. A pinned version fixes what you asked for; a
      hash fixes what you received.
+  4. The base dependency set is the `generate` layer and no more (F31, §5.3). This is
+     the one a *target* installs, so a base install must not reach the ML stack. Checked
+     against the generate lockfile rather than against a list of banned names, because a
+     list only catches the packages someone thought to ban.
 
 Run via scripts/lock.sh, or directly.
 """
@@ -67,7 +71,8 @@ def main() -> int:
     project = pyproject["project"]
 
     declared: dict[str, str] = {}
-    all_requirements = list(project.get("dependencies", []))
+    base_requirements = list(project.get("dependencies", []))
+    all_requirements = list(base_requirements)
     for extra_reqs in project.get("optional-dependencies", {}).values():
         all_requirements.extend(extra_reqs)
 
@@ -128,6 +133,28 @@ def main() -> int:
                     f"pin drift: pyproject.toml has {name}=={version} but "
                     f"requirements/{layer}.txt has {name}=={'/'.join(sorted(locked))}. "
                     f"Run scripts/lock.sh."
+                )
+
+    # 4: the base install is the generate layer, not a superset of it.
+    #
+    # A target installing the package gets `dependencies` and nothing else. If a name
+    # lands there that the generate lockfile does not resolve, the base install has
+    # quietly grown past the boundary §5.3 draws — which is how the ML stack ends up on
+    # a machine that was only ever meant to fire HTTP requests.
+    generate_lock = locks.get("generate", {})
+    if generate_lock:
+        for requirement in base_requirements:
+            match = PIN_RE.match(requirement.strip())
+            if not match:
+                continue
+            name = normalise(match.group(1))
+            if name not in generate_lock:
+                failures.append(
+                    f"pyproject.toml declares {name} as a base dependency, but it is "
+                    f"not in requirements/generate.txt. The base set is the generate "
+                    f"layer (F31, §5.3) — move it to an optional-dependencies extra, "
+                    f"or add it to requirements/generate.in if it genuinely belongs "
+                    f"in the set a target installs."
                 )
 
     if failures:

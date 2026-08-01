@@ -39,25 +39,6 @@ class CorpusConfig(BaseModel):
     path: Optional[str] = None
     use_bundled: bool = False
 
-class TestsConfig(BaseModel):
-    hallucination_rate: bool = False
-    citation_integrity: bool = False
-    retrieval_relevance: bool = False
-    injection_resistance: bool = False
-    cross_tenant_leakage: bool = False
-    confidence_threshold: bool = False
-    contradiction_surfacing: bool = False
-    latency_penalty: bool = False
-    retrieval_disambiguation: bool = False
-    structural_integrity: bool = False
-    entity_masking_rehydration: bool = False
-    cross_document_attribution: bool = False
-    parametric_knowledge_bleed: bool = False
-    routing_contamination: bool = False
-    cross_clause_synthesis: bool = False
-    memory_management: bool = False
-    cache_invalidation: bool = False
-
 class TenantConfig(BaseModel):
     token_env: str
 
@@ -70,7 +51,6 @@ class ThresholdsConfig(BaseModel):
 class AuditConfig(BaseModel):
     target: TargetConfig
     corpus: CorpusConfig
-    tests: TestsConfig
     multi_tenant: Optional[Dict[str, TenantConfig]] = None
     thresholds: ThresholdsConfig = ThresholdsConfig()
 

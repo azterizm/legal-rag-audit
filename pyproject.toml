@@ -20,20 +20,32 @@ requires-python = ">=3.11"
 #
 # These pins fix the *version*. requirements/*.txt additionally fix the *bytes*, via
 # --require-hashes. Prefer the lockfiles; see README "Installation".
+#
+# The base set is the `generate` layer and nothing more: five pure-Python libraries a
+# reviewer can read (§5.3, F31). It is what a target installs to run the battery against
+# their own system, and it is the reason "read it in an afternoon" is literally true
+# rather than a slogan. The ML stack lives behind the `score` extra below, because
+# sentence-transformers pulls torch and transformers — several hundred transitive
+# packages that are fine on our machine and unacceptable on theirs.
 dependencies = [
     "httpx==0.28.1",
     "jsonpath-ng==1.8.0",
     "pydantic==2.13.4",
     "PyYAML==6.0.3",
     "websockets==17.0.1",
-    "sentence-transformers==5.6.1",
-    "tqdm==4.70.0",
 ]
 
 [project.scripts]
 legal-rag-audit = "legal_rag_audit.cli:main"
 
 [project.optional-dependencies]
+# `score` runs on our machine, offline. The boundary is enforced by
+# tests/test_dependency_boundary.py, which imports the scoring registry in a venv
+# installed from requirements/generate.txt and asserts torch is not importable there.
+score = [
+    "sentence-transformers==5.6.1",
+    "tqdm==4.70.0",
+]
 test = [
     "pytest==9.1.1",
 ]

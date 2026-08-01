@@ -149,54 +149,59 @@ ten minutes"* is then literally true rather than a slogan.
 
 ### Current component map
 
+The dashed line is the handover. Everything left of it can run on your infrastructure
+without us; everything right of it runs on ours, offline.
+
 ```mermaid
 flowchart TD
-    subgraph Input ["1. Configuration & Corpus Input"]
-        CLI["CLI Interface<br/>(cli.py)"]
-        CFG["Config Parser<br/>(config.py)"]
-        CORPUS["Corpus<br/>(bundled demo / custom directory)"]
+    subgraph Authoring ["Authored here, split before it leaves"]
+        BATTERY["Battery<br/>(probes/)"]
+        CORPUS["Corpus<br/>(bundled demo / your own directory)"]
     end
-    subgraph Core ["2. Orchestration"]
-        RUNNER["Test Runner<br/>(runner.py)"]
+    subgraph Theirs ["Your side — optional, replaceable"]
+        CFG["Config<br/>(config.py)"]
+        GEN["generate<br/>(generate/)"]
+        TRANSPORT["Transport (transport/)<br/>httpx REST & SSE · websockets · jsonpath-ng"]
     end
-    subgraph Client ["3. Target Integration Client (client.py)"]
-        HTTP["HTTP Client (httpx)<br/>REST & SSE Streaming"]
-        WS["WebSocket Client (websockets)<br/>Decoupled Async & Polling"]
-        JPATH["JSONPath Extractor (jsonpath-ng)<br/>Answer & Citation Extractor"]
+    subgraph Target ["Your RAG system"]
+        UPLOAD_EP["Upload<br/>(/documents)"]
+        CHAT_EP["Chat<br/>(/chat)"]
+        RET_EP["Retrieval<br/>(/search)"]
     end
-    subgraph Target ["4. Target RAG API"]
-        UPLOAD_EP["Upload Endpoint<br/>(/documents)"]
-        CHAT_EP["Chat Endpoint<br/>(/chat)"]
-        RET_EP["Retrieval Endpoint<br/>(/search)"]
+    subgraph Ours ["Our side — offline, no sockets"]
+        SCORE["score<br/>(score/)"]
+        E_EXACT["Tier 1 — exact-match & inverted<br/>(no model in the path)"]
+        E_NLI["Tier 2 — entailment & relevance<br/>(local NLI / embeddings)"]
+        REP_JSON["report.json"]
     end
-    subgraph Evaluators ["5. Local Scoring Engine (evaluators/)"]
-        E_EXACT["Exact-match & inverted checks<br/>(no model in the path)"]
-        E_NLI["Entailment & relevance<br/>(local NLI / embeddings)"]
-    end
-    subgraph Output ["6. Reporting (report.py)"]
-        REP_JSON["JSON Report"]
-        REP_MD["Markdown Report"]
-    end
-    CLI --> CFG
-    CLI --> RUNNER
-    CFG --> RUNNER
-    CORPUS --> RUNNER
-    RUNNER --> Client
-    Client -->|1. Ingest Corpus| UPLOAD_EP
-    Client -->|2. Query Probes| CHAT_EP
-    Client -->|3. Vector Search| RET_EP
-    UPLOAD_EP -.->|Upload Ack| Client
-    CHAT_EP -.->|Responses / SSE / WS| Client
-    RET_EP -.->|Raw Vector Chunks| Client
-    Client --> JPATH
-    JPATH --> RUNNER
-    RUNNER --> Evaluators
-    CORPUS -.->|Ground Truth Text| Evaluators
-    Evaluators --> RUNNER
-    RUNNER --> Output
-    Output --> REP_JSON
-    Output --> REP_MD
+
+    BATTERY -->|questions only| PROBES["probes.jsonl"]
+    BATTERY -->|expectations, withheld| GT["ground_truth.json"]
+    PROBES --> GEN
+    CFG --> GEN
+    CORPUS --> GEN
+    GEN --> TRANSPORT
+    TRANSPORT -->|1. ingest corpus| UPLOAD_EP
+    TRANSPORT -->|2. ask probes| CHAT_EP
+    TRANSPORT -->|3. retrieve| RET_EP
+    UPLOAD_EP -.->|document ids| TRANSPORT
+    CHAT_EP -.->|answers / SSE / WS| TRANSPORT
+    RET_EP -.->|chunks| TRANSPORT
+    TRANSPORT --> GEN
+    GEN --> RESP["responses.jsonl"]
+    RESP ==>|handover| SCORE
+    GT ==>|handover| SCORE
+    PROBES ==>|denominators| SCORE
+    SCORE --> E_EXACT
+    SCORE --> E_NLI
+    E_EXACT --> REP_JSON
+    E_NLI --> REP_JSON
 ```
+
+`generate` writes `responses.jsonl` and stops — it scores nothing, so it has no verdict
+to be wrong about. `score` reads that file plus the withheld ground truth and never
+opens a socket. Replacing `generate` with your own script changes nothing downstream;
+see [the response schema](docs/responses-schema.md).
 
 ---
 

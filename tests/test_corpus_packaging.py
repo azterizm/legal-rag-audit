@@ -7,12 +7,13 @@ so the corpus was absent from the wheel while every local editable install worke
 Testing the config that produces an artefact is not testing the artefact, so the wheel
 is built and opened here.
 
-The behavioural one: with the corpus missing, the runner substituted two stand-in
+The behavioural one: with the corpus missing, the v1 runner substituted two stand-in
 documents and *completed*. The report then described a 2-document corpus while the config
 said thirteen, and nothing on the page disclosed the substitution. That is a setup
 problem rendering as a finding, which NF9 forbids.
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -185,18 +186,61 @@ def test_document_order_is_stable(tmp_path):
     ]
 
 
-def test_runner_no_longer_carries_a_silent_fallback():
-    """The two stand-in documents must not come back."""
-    runner_source = (REPO_ROOT / "src" / "legal_rag_audit" / "runner.py").read_text(
-        encoding="utf-8"
-    )
-    assert "fallback dummy docs" not in runner_source
-    assert not re.search(r"Smith v\. Crown \(2024\).{0,200}capped at", runner_source), (
-        "runner.py appears to inline stand-in corpus documents again"
-    )
+def test_no_module_carries_a_silent_corpus_fallback():
+    """The two stand-in documents must not come back, anywhere.
+
+    They lived in runner.py, which Phase B deleted. Scanning the whole package rather
+    than one file means moving the code does not move it out of the test's view.
+    """
+    offenders = []
+    for path in (REPO_ROOT / "src" / "legal_rag_audit").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "fallback dummy docs" in source or re.search(
+            r"Smith v\. Crown \(2024\).{0,200}capped at", source
+        ):
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+    assert not offenders, f"stand-in corpus documents inlined in: {offenders}"
 
 
-def test_cli_exits_with_a_diagnosis_rather_than_a_traceback():
-    cli_source = (REPO_ROOT / "src" / "legal_rag_audit" / "cli.py").read_text(encoding="utf-8")
-    assert "CorpusError" in cli_source
-    assert "sys.exit(2)" in cli_source
+def test_cli_exits_2_on_a_corpus_problem(tmp_path):
+    """A setup problem exits 2 with a diagnosis — not 0, not 1, not a traceback.
+
+    Behavioural rather than a grep over cli.py: the exit code is the contract CI reads,
+    and it has to survive the code being rearranged.
+    """
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "target:\n"
+        "  name: nowhere\n"
+        "  endpoints:\n"
+        "    chat: http://127.0.0.1:1/chat\n"
+        "    upload: http://127.0.0.1:1/upload\n"
+        "corpus:\n"
+        f"  path: {tmp_path / 'does-not-exist'}\n"
+        "  use_bundled: false\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "legal_rag_audit.cli",
+            "generate",
+            "-c",
+            str(config),
+            "-o",
+            str(tmp_path / "responses.jsonl"),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+    )
+    assert result.returncode == 2, (
+        f"expected exit 2 for a setup problem, got {result.returncode}\n"
+        f"{result.stdout}\n{result.stderr}"
+    )
+    assert "Traceback" not in result.stderr
+    assert not (tmp_path / "responses.jsonl").exists(), (
+        "a response file was written despite the corpus failing to resolve"
+    )

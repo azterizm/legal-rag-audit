@@ -1,71 +1,254 @@
+"""Command line surface (V2_FULL_PLAN.md §7).
+
+Three modes, and which side of the engagement runs each one is the whole design:
+
+    legal-rag-audit generate -c config.yaml -o responses.jsonl
+    legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json
+    legal-rag-audit schema --print responses.v1
+
+`generate` is theirs and optional — they may replace it with their own harness and hand
+back a conforming file. `score` is ours and runs offline. `schema` prints the published
+contract so nobody has to clone anything to implement against it (F35).
+
+`validate` is Phase F and is not here yet.
+
+Exit codes are a contract, because this runs in CI:
+
+    0  ran, no findings
+    1  ran, findings
+    2  did not run — a setup problem, diagnosed (NF9)
+
+Separating 2 from the other two is the point. A run that could not start must not exit
+the way a clean run does, and must not exit the way a run with findings does either.
+"""
+
 import argparse
-import asyncio
+import json
 import logging
 import sys
+from pathlib import Path
 
-from legal_rag_audit.config import AuditConfig
-from legal_rag_audit.corpus_loader import CorpusError
-from legal_rag_audit.runner import TestRunner
+from .config import AuditConfig
+from .corpus_loader import CorpusError
+from .interchange import InterchangeError, SchemaVersionError
 
-def main():
-    parser = argparse.ArgumentParser(description="Legal RAG Audit Tool")
-    parser.add_argument("-c", "--config", required=True, help="Path to config.yaml")
-    parser.add_argument("-o", "--output", default="report", help="Base name for output report files")
-    parser.add_argument("--skip-upload", action="store_true", help="Skip uploading the corpus, use local files for tests")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose debug logging")
-    
-    args = parser.parse_args()
-    
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    
-    file_handler = logging.FileHandler(".legal_rag_audit.log", mode='a')
-    console_handler = logging.StreamHandler()
-    
+EXIT_OK = 0
+EXIT_FINDINGS = 1
+EXIT_SETUP = 2
+
+
+def _configure_logging(verbose: bool) -> None:
     logging.basicConfig(
-        level=log_level, 
+        level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[file_handler, console_handler]
+        handlers=[
+            logging.FileHandler(".legal_rag_audit.log", mode="a"),
+            logging.StreamHandler(),
+        ],
     )
+
+
+def _abort(message: str) -> int:
+    logging.error(message)
+    return EXIT_SETUP
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    from .generate import GenerationError, generate
 
     try:
         config = AuditConfig.load_from_yaml(args.config)
     except Exception as e:
-        logging.error(f"Failed to load config: {e}")
-        sys.exit(1)
+        return _abort(f"Could not load {args.config}: {e}")
 
-    runner = TestRunner(config, skip_upload=args.skip_upload)
-
-    # Run the async runner loop
     try:
-        report = asyncio.run(runner.run_all())
+        generate(
+            config=config,
+            responses_path=args.output,
+            probes_path=args.probes,
+            passes=args.passes,
+            skip_upload=args.skip_upload,
+        )
     except CorpusError as e:
-        # A setup problem, not a finding. No report is written — a report produced from
-        # a corpus we could not verify would describe the corpus, not the target.
-        logging.error(f"Corpus setup failed, aborting before any result is written:\n{e}")
-        sys.exit(2)
-    
-    import os
-    
-    output_base = args.output
-    out_dir = os.path.dirname(output_base)
-    if not out_dir:
-        out_dir = "reports"
-        output_base = os.path.join(out_dir, output_base)
-        
-    os.makedirs(out_dir, exist_ok=True)
-    
-    # Save reports
-    json_path = f"{output_base}.json"
-    md_path = f"{output_base}.md"
-    
-    report.save_json(json_path)
-    report.save_markdown(md_path)
-    
-    logging.info(f"Report saved to {json_path} and {md_path}")
-    
-    # Exit with code 1 if failed
-    if report.summary["verdict"] == "FAIL":
-        sys.exit(1)
-        
+        return _abort(f"Corpus setup failed, aborting before any request was sent:\n{e}")
+    except GenerationError as e:
+        return _abort(f"Generation failed, no response file written:\n{e}")
+
+    # generate makes no judgement about the answers, so it has no findings to report.
+    return EXIT_OK
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    from .score import ScoringError, score
+    from .score.offline import OfflineViolation
+    from .score.registry import GroundTruthIncomplete
+
+    try:
+        report = score(
+            responses_path=args.responses,
+            ground_truth_path=args.ground_truth,
+            probes_path=args.probes,
+            skip_tier2=args.skip_tier2,
+        )
+    except (InterchangeError, SchemaVersionError) as e:
+        return _abort(f"Could not read the input files:\n{e}")
+    except GroundTruthIncomplete as e:
+        return _abort(f"The ground-truth manifest is incomplete:\n{e}")
+    except ScoringError as e:
+        return _abort(f"Scoring could not run:\n{e}")
+    except OfflineViolation as e:
+        return _abort(str(e))
+
+    out_dir = Path(args.output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = out_dir / "report.json"
+    report_path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+    logging.info(f"Report written to {report_path}")
+    _print_summary(report["summary"], report["capture"])
+
+    return EXIT_FINDINGS if report["summary"]["verdict"] == "FAIL" else EXIT_OK
+
+
+def _print_summary(summary: dict, capture: dict) -> None:
+    """Counts against declared denominators. Never a single headline rate (§3.5)."""
+    print()
+    print(f"  checks registered   {summary['checks_registered']}")
+    print(f"  passed              {summary['passed']}")
+    print(f"  findings            {summary['failed']}")
+    print(f"  not eligible        {summary['not_eligible']}")
+    print(f"  not captured        {summary['not_captured']}")
+    if summary["tier1_findings"]:
+        print(f"  Tier 1 (measured)   {', '.join(summary['tier1_findings'])}")
+    if summary["tier2_findings"]:
+        print(f"  Tier 2 (instrument) {', '.join(summary['tier2_findings'])}")
+    if capture["transport_errors"]:
+        print(
+            f"  transport errors    {capture['transport_errors']} of "
+            f"{capture['records']} records carried no answer — not captured, "
+            f"not findings"
+        )
+    print()
+
+
+def cmd_schema(args: argparse.Namespace) -> int:
+    from .interchange import available_schemas, read_schema_document
+
+    if args.list:
+        for version in available_schemas():
+            print(version)
+        return EXIT_OK
+
+    if not args.print_version:
+        return _abort("Nothing to do: pass --print <version> or --list.")
+
+    try:
+        document = read_schema_document(args.print_version)
+    except SchemaVersionError as e:
+        return _abort(str(e))
+
+    print(json.dumps(document, indent=2))
+    return EXIT_OK
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="legal-rag-audit",
+        description="Retrieval integrity diagnostic for legal RAG systems.",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable debug logging"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    gen = sub.add_parser(
+        "generate",
+        help="fire the battery at the target and write responses.jsonl",
+        description=(
+            "Asks the battery and records what came back. Scores nothing. You may "
+            "replace this entirely with your own tooling — see docs/responses-schema.md."
+        ),
+    )
+    gen.add_argument("-c", "--config", required=True, help="path to config.yaml")
+    gen.add_argument(
+        "-o", "--output", default="responses.jsonl", help="where to write the responses"
+    )
+    gen.add_argument(
+        "--probes",
+        default=None,
+        help="also write the probe file here (the questions, without expectations)",
+    )
+    gen.add_argument(
+        "--passes",
+        type=int,
+        default=1,
+        help="repeat the battery N times; variance reporting arrives in Phase E",
+    )
+    gen.add_argument(
+        "--skip-upload",
+        action="store_true",
+        help="do not upload the corpus; assume the target already holds it",
+    )
+    gen.set_defaults(func=cmd_generate)
+
+    sc = sub.add_parser(
+        "score",
+        help="score a response file offline and write the report",
+        description=(
+            "Reads a response file and a ground-truth manifest. Opens no sockets: an "
+            "attempt raises (§5.1, F18)."
+        ),
+    )
+    sc.add_argument("--responses", required=True, help="path to responses.jsonl")
+    sc.add_argument(
+        "--ground-truth", required=True, help="path to the ground-truth manifest"
+    )
+    sc.add_argument(
+        "--probes",
+        default=None,
+        help=(
+            "path to the probe file. Denominators come from its eligible_for; without "
+            "it they are reconstructed from the ground truth, which is weaker and the "
+            "report says so"
+        ),
+    )
+    sc.add_argument(
+        "-o", "--output", default="reports", help="directory for report.json"
+    )
+    sc.add_argument(
+        "--skip-tier2",
+        action="store_true",
+        help=(
+            "score the Tier 1 checks only. The Tier 2 checks are reported as not run, "
+            "not omitted"
+        ),
+    )
+    sc.set_defaults(func=cmd_score)
+
+    schema = sub.add_parser(
+        "schema",
+        help="print a published JSON Schema",
+        description="The interchange contracts, so you can implement against them.",
+    )
+    schema.add_argument(
+        "--print", dest="print_version", metavar="VERSION", help="e.g. responses.v1"
+    )
+    schema.add_argument(
+        "--list", action="store_true", help="list the versions this build publishes"
+    )
+    schema.set_defaults(func=cmd_schema)
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    _configure_logging(args.verbose)
+    sys.exit(args.func(args))
+
+
 if __name__ == "__main__":
     main()
