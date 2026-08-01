@@ -43,6 +43,36 @@ def test_bundled_corpus_present_in_source_tree():
     assert set(BUNDLED_DOCUMENTS) <= present
 
 
+def test_every_subpackage_is_declared():
+    """An explicit `packages` list keeps internal_experiments out of the wheel, and
+    silently drops anything new that nobody remembered to add.
+
+    The failure is invisible in development: the package imports fine from the working
+    tree and is simply missing from the artefact. Phase B shipped a wheel with no
+    `probes`, `score` or `transport` package until this compared the two.
+    """
+    import tomllib
+
+    declared = set(
+        tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+            "tool"
+        ]["setuptools"]["packages"]
+    )
+    root = REPO_ROOT / "src" / "legal_rag_audit"
+    on_disk = {"legal_rag_audit"} | {
+        "legal_rag_audit." + str(p.parent.relative_to(root)).replace("/", ".")
+        for p in root.rglob("__init__.py")
+        if p.parent != root
+    }
+    assert on_disk <= declared, (
+        f"packages on disk but absent from pyproject.toml, so absent from the wheel: "
+        f"{sorted(on_disk - declared)}"
+    )
+    assert declared <= on_disk, (
+        f"packages declared but not present: {sorted(declared - on_disk)}"
+    )
+
+
 def test_package_data_is_declared():
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "[tool.setuptools.package-data]" in pyproject, (

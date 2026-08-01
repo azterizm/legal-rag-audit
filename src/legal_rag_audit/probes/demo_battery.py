@@ -45,8 +45,25 @@ class BatteryEntry:
     expectations: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-#: Facts planted in the bundled corpus by hand. Named here rather than inline so the
-#: same string is never typed twice — a typo in an expectation is a false finding.
+#: Registered checks that no probe below declares, and why.
+#:
+#: A check with no eligible probe reports NOT_ELIGIBLE, which is the true statement
+#: about a run that could not exercise it. That is better than an expectation the run
+#: cannot satisfy: a check that fails a correct system is a false positive, and §14.2
+#: makes a false positive a release blocker. Enumerated rather than implicit, so the set
+#: can only shrink on purpose.
+UNTESTABLE_ON_THE_DEMO_CORPUS = {
+    "index_freshness": (
+        "needs a two-phase upload — corpus, probe, revised corpus, probe — and generate "
+        "uploads one corpus state. With v1 and v2 of the agreement both present from the "
+        "start there is no stale index to detect. Arrives with the Phase D planting "
+        "pipeline."
+    ),
+}
+
+
+#: Facts already in the bundled corpus. Named here rather than inline so the same string
+#: is never typed twice — a typo in an expectation is a false finding.
 BATTERY: tuple[BatteryEntry, ...] = (
     BatteryEntry(
         probe_id="hal-001",
@@ -115,13 +132,20 @@ BATTERY: tuple[BatteryEntry, ...] = (
     BatteryEntry(
         probe_id="contra-001",
         family="contradiction_surfacing",
-        text="What is the limitation of liability cap across all SaaS agreements?",
+        text="Across the SaaS agreements, how is liability for a data breach limited?",
         eligible_for=["contradiction_surfacing"],
         expectations={
             "contradiction_surfacing": {
-                # Both sides of the contradiction must appear. Returning one silently
-                # is the failure being tested for.
-                "must_contain": ["$2M", "$5M"],
+                # The genuine conflict between the two versions: v1 §11.3 carves data
+                # breaches out of the cap entirely ("COMPLETELY UNCAPPED"), v2 §11.3
+                # pulls them back inside it ("12-MONTH LIABILITY CAP"). Both sides must
+                # appear; returning one silently is the failure being tested for.
+                #
+                # The v1 battery expected "$2M" and "$5M" here. Those strings are in the
+                # corpus, but as two lines of the insurance schedule in a single
+                # document — different policies, not conflicting caps. A correct system
+                # would not have surfaced them, so the check failed compliant targets.
+                "must_contain": ["uncapped", "12-month"],
             }
         },
     ),
@@ -158,18 +182,7 @@ BATTERY: tuple[BatteryEntry, ...] = (
             }
         },
     ),
-    BatteryEntry(
-        probe_id="cache-001",
-        family="index_freshness",
-        text="Is the liability cap $2M or $10M?",
-        eligible_for=["index_freshness"],
-        expectations={
-            "index_freshness": {
-                "must_contain": ["$10M"],
-                "must_not_contain": ["$2M"],
-            }
-        },
-    ),
+    # index_freshness has no probe here, deliberately. See UNTESTABLE_ON_THE_DEMO_CORPUS.
     BatteryEntry(
         probe_id="lat-001",
         family="latency",
@@ -207,7 +220,10 @@ BATTERY: tuple[BatteryEntry, ...] = (
         eligible_for=["disambiguation"],
         expectations={
             "disambiguation": {
-                "must_contain": ["$25,000", "hazardous waste"],
+                # "$25,000" only. The v1 battery also required "hazardous waste", which
+                # is a phrase in the question — an expectation a system satisfies by
+                # echoing the prompt tests nothing about retrieval.
+                "must_contain": ["$25,000"],
                 # Statute Beta's Article 5 is about labour arbitration. Its content
                 # appearing here means the two Article 5s were merged.
                 "must_not_contain": ["binding arbitration", "14 days", "strike notice"],
@@ -227,7 +243,14 @@ BATTERY: tuple[BatteryEntry, ...] = (
             "structural_integrity": {
                 # The header (Tier 2) and the nested table row ($250,000) are far apart
                 # in the document. Naive chunking severs them.
-                "must_contain": ["$250,000", "tier 2"],
+                #
+                # "tier 2" is in the question, so requiring it in the answer was
+                # satisfiable by echoing. The adjacency below is the check that cannot
+                # be echoed: the figure and the tier have to arrive in the same sentence,
+                # which only happens if the chunking kept them connected. $250,000 also
+                # appears in an unrelated document, and adjacency is what tells the two
+                # occurrences apart.
+                "must_contain": ["$250,000"],
                 "must_not_contain": ["$5,000", "$15,000"],
                 "adjacency": {
                     "fact": "$250,000",

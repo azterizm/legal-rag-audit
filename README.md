@@ -608,9 +608,18 @@ in this README is made without its scope attached.
 python3 scripts/check_pins.py
 ```
 
-Asserts every requirement is exact, every lockfile entry carries hashes, and
-`pyproject.toml` agrees with the lockfiles. Two sources of truth that disagree are worse
-than one that is vague, because the disagreement is silent.
+Asserts every requirement is exact, every lockfile entry carries hashes, that
+`pyproject.toml` agrees with the lockfiles, and that the base dependency set is the
+`generate` layer and no more. Two sources of truth that disagree are worse than one that
+is vague, because the disagreement is silent.
+
+```bash
+python3 scripts/gen_schemas.py --check
+```
+
+Asserts the published JSON Schemas still match the pydantic models that enforce them.
+The schemas are generated, never hand-edited: a published contract that `score` would
+reject is worse than none, because it sends someone away to build the wrong thing.
 
 Changing a dependency:
 

@@ -54,11 +54,19 @@ test = [
 # Explicit, not discovered. internal_experiments/ carries the removed remote-scoring
 # path (V2_FULL_PLAN.md §4.2) and must never enter a wheel or sdist; an explicit list
 # is what keeps it out. scripts/check_no_remote_scoring.sh asserts this.
+#
+# Every subpackage must be listed. tests/test_corpus_packaging.py compares this list
+# against what is actually on disk, because the failure mode is silent: an unlisted
+# package imports fine from the working tree and is simply absent from the wheel.
 packages = [
     "legal_rag_audit",
     "legal_rag_audit.evaluators",
+    "legal_rag_audit.generate",
     "legal_rag_audit.interchange",
     "legal_rag_audit.interchange.jsonschema",
+    "legal_rag_audit.probes",
+    "legal_rag_audit.score",
+    "legal_rag_audit.transport",
 ]
 
 [tool.setuptools.package-dir]
