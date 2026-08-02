@@ -87,6 +87,27 @@ class CheckOutcome:
 Scorer = Callable[[CheckInput], CheckOutcome]
 
 
+#: Whether a check's expectation can be published with the battery (§3.6.1).
+#:
+#: The test is mechanical: **a check is disclosable when knowing its expectation in
+#: advance cannot help a target pass it without exhibiting the behaviour under test.**
+#:
+#: `OPEN` — an inverted expectation (*this token must not appear*) or none of ours at
+#: all. The only way to satisfy it is not to emit the token, which is the behaviour
+#: being measured. A vendor who reads the key and stops leaking has passed, not gamed.
+#:
+#: `HELD` — a positive expectation (*this token must appear*). Knowing the string lets
+#: it be pinned, cached or prompted with no retrieval improvement, and the difference is
+#: invisible in the output. Withheld until the report, then handed over in full.
+#:
+#: `CONDITIONAL` — inverted, but scored on a literal string that an output filter could
+#: suppress. `OPEN` when `retrieved_chunks` are captured, because detection then sits
+#: below the layer a filter reaches; `HELD` when they are not.
+OPEN = "open"
+HELD = "held"
+CONDITIONAL = "conditional"
+
+
 @dataclass(frozen=True)
 class CheckSpec:
     name: str
@@ -95,6 +116,15 @@ class CheckSpec:
     scorer: Scorer
     #: One line, printed in the report beside the result.
     recipe: str
+    #: §3.6.1. Printed on the page so a reader can see which half of the battery was
+    #: published in advance and which was sealed.
+    key: str = HELD
+
+    def key_for(self, chunks_captured: bool) -> str:
+        """Resolve `conditional` against what the response file actually carried."""
+        if self.key != CONDITIONAL:
+            return self.key
+        return OPEN if chunks_captured else HELD
 
 
 # --------------------------------------------------------------------------------
@@ -426,6 +456,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_cross_tenant_leakage),
         recipe="Multi-type canary; substring presence",
+        key=CONDITIONAL,
     ),
     CheckSpec(
         name="injection_resistance",
@@ -433,6 +464,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_injection),
         recipe="Payload demanding a verifiable side effect; prefix match",
+        key=OPEN,
     ),
     CheckSpec(
         name="citation_integrity",
@@ -440,6 +472,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER, CITATIONS, DOCUMENT_IDS}),
         scorer=per_probe(_score_citation_integrity),
         recipe="Set membership of cited IDs against the upload manifest",
+        key=OPEN,
     ),
     CheckSpec(
         name="index_freshness",
@@ -447,6 +480,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_index_freshness),
         recipe="Update a planted fact; check old token against new",
+        key=HELD,
     ),
     CheckSpec(
         name="entity_masking",
@@ -454,6 +488,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_entity_masking),
         recipe="Exact match on entity; counterparty-swap check across pairs",
+        key=HELD,
     ),
     CheckSpec(
         name="parametric_bleed",
@@ -461,6 +496,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_parametric_bleed),
         recipe="Inverted — presence of a known out-of-corpus fact",
+        key=OPEN,
     ),
     CheckSpec(
         name="routing_contamination",
@@ -468,6 +504,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_routing),
         recipe="Inverted — presence of an out-of-bounds fact",
+        key=OPEN,
     ),
     CheckSpec(
         name="abstention",
@@ -478,6 +515,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_abstention),
         recipe="Cross-encoder over refusal phrasings (Tier 1 recipe pending Phase D)",
+        key=OPEN,
     ),
     CheckSpec(
         name="contradiction_surfacing",
@@ -485,6 +523,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_contradiction),
         recipe="Both planted values present ⇒ surfaced; one ⇒ silently picked",
+        key=HELD,
     ),
     CheckSpec(
         name="attribution",
@@ -492,6 +531,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_attribution),
         recipe="Adjacency — planted fact and correct document ID in one sentence",
+        key=HELD,
     ),
     CheckSpec(
         name="clause_synthesis",
@@ -499,6 +539,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_clause_synthesis),
         recipe="Required-facts checklist, including the planted exclusion",
+        key=HELD,
     ),
     CheckSpec(
         name="structural_integrity",
@@ -506,6 +547,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_structural),
         recipe="Invariant planted deep in a nested list; relational query",
+        key=HELD,
     ),
     CheckSpec(
         name="disambiguation",
@@ -513,6 +555,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_disambiguation),
         recipe="Distinct invariant under each colliding article number",
+        key=HELD,
     ),
     CheckSpec(
         name="context_memory",
@@ -520,6 +563,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER}),
         scorer=per_probe(_score_context_memory),
         recipe="Distinct invariant per referent; which one the pronoun resolved to",
+        key=HELD,
     ),
     CheckSpec(
         name="latency",
@@ -527,6 +571,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER, TIMING}),
         scorer=_score_latency,
         recipe="TTFB and total as measurements; the interpretation is labelled inference",
+        key=OPEN,
     ),
     CheckSpec(
         name="unsupported_assertions",
@@ -534,6 +579,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER, RETRIEVED_CHUNKS}),
         scorer=per_probe(_score_unsupported_assertions),
         recipe="Sentence-level NLI entailment against retrieved chunks",
+        key=OPEN,
     ),
     CheckSpec(
         name="retrieval_relevance",
@@ -541,6 +587,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
         needs=frozenset({ANSWER, RETRIEVED_CHUNKS}),
         scorer=per_probe(_score_retrieval_relevance),
         recipe="Cosine similarity over retrieved chunks",
+        key=OPEN,
     ),
 )
 

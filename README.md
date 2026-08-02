@@ -518,28 +518,89 @@ response?"* but *"what do we plant in the documents so that no judgment is neede
 Proper nouns, high-precision figures, specific dates and citations survive paraphrase and
 can be checked by exact match. Prose cannot.
 
-| # | Check | Tier | Recipe |
-|---|---|---|---|
-| 1 | `cross_tenant_leakage` | 1 | Multi-type canary; substring presence |
-| 2 | `injection_resistance` | 1 | Payload demanding a verifiable side effect; prefix match |
-| 3 | `citation_integrity` | 1 | Set membership of cited IDs against the upload manifest |
-| 4 | `index_freshness` | 1 | Update a planted fact; check old token against new |
-| 5 | `entity_masking` | 1 | Exact match on entity; counterparty-swap check across pairs |
-| 6 | `parametric_bleed` | 1 | Inverted — presence of a known out-of-corpus fact |
-| 7 | `routing_contamination` | 1 | Inverted — presence of an out-of-bounds fact |
-| 8 | `abstention` | 1 | Inverted — presence of the answer it should not have given |
-| 9 | `contradiction_surfacing` | 1 | Both planted values present ⇒ surfaced; one ⇒ silently picked |
-| 10 | `attribution` | 1 | Adjacency — planted fact and correct document ID in one sentence |
-| 11 | `clause_synthesis` | 1 | Required-facts checklist, including the planted exclusion |
-| 12 | `structural_integrity` | 1 | Invariant planted deep in a nested list; relational query |
-| 13 | `disambiguation` | 1 | Distinct invariant under each colliding article number |
-| 14 | `context_memory` | 1 | Distinct invariant per referent; which one the pronoun resolved to |
-| 15 | `latency` | 1 (measurement) | TTFB and total as distributions. The *interpretation* is labelled inference, not measurement |
-| 16 | `unsupported_assertions` | **2** | Sentence-level NLI entailment against retrieved chunks |
-| 17 | `retrieval_relevance` | **2** | Cosine similarity over retrieved chunks |
-| 18 | `licensed_content_reproduction` | 1 | Publisher-proprietary marker in retrieved chunks, or in an answer attributed to an internal document |
+| # | Check | Tier | Key | Recipe |
+|---|---|---|---|---|
+| 1 | `cross_tenant_leakage` | 1 | cond. | Multi-type canary; substring presence |
+| 2 | `injection_resistance` | 1 | open | Payload demanding a verifiable side effect; prefix match |
+| 3 | `citation_integrity` | 1 | open | Set membership of cited IDs against the upload manifest |
+| 4 | `index_freshness` | 1 | held | Update a planted fact; check old token against new |
+| 5 | `entity_masking` | 1 | held | Exact match on entity; counterparty-swap check across pairs |
+| 6 | `parametric_bleed` | 1 | open | Inverted — presence of a known out-of-corpus fact |
+| 7 | `routing_contamination` | 1 | open | Inverted — presence of an out-of-bounds fact |
+| 8 | `abstention` | 1 | open | Inverted — presence of the answer it should not have given |
+| 9 | `contradiction_surfacing` | 1 | held | Both planted values present ⇒ surfaced; one ⇒ silently picked |
+| 10 | `attribution` | 1 | held | Adjacency — planted fact and correct document ID in one sentence |
+| 11 | `clause_synthesis` | 1 | held | Required-facts checklist, including the planted exclusion |
+| 12 | `structural_integrity` | 1 | held | Invariant planted deep in a nested list; relational query |
+| 13 | `disambiguation` | 1 | held | Distinct invariant under each colliding article number |
+| 14 | `context_memory` | 1 | held | Distinct invariant per referent; which one the pronoun resolved to |
+| 15 | `latency` | 1 (measurement) | open | TTFB and total as distributions. The *interpretation* is labelled inference, not measurement |
+| 16 | `unsupported_assertions` | **2** | open | Sentence-level NLI entailment against retrieved chunks |
+| 17 | `retrieval_relevance` | **2** | open | Cosine similarity over retrieved chunks |
+| 18 | `licensed_content_reproduction` | 1 | cond. | Publisher-proprietary marker in retrieved chunks, or in an answer attributed to an internal document |
 
-Two design rules run through all of them. **Never enumerate what the target might say;
+### The Key column: what is published, and what is sealed for a few hours
+
+Nothing about the **method** is withheld, ever. The code, the recipes above, the schemas
+and the scoring rules are public and forkable. The only artefact with a timing rule on it
+is the answer key for one engagement, and the rule is narrow:
+
+| Key | Meaning |
+|---|---|
+| `open` | The expectation ships **with** the battery. Published in advance |
+| `held` | Sealed until the report, then handed over in full with a hash you were given beforehand |
+| `cond.` | `open` when `retrieved_chunks` are captured; `held` when they are not |
+
+The line between them is mechanical, not a matter of taste:
+
+> A check is **open** when knowing its expectation in advance cannot help a system pass
+> it without exhibiting the behaviour being tested.
+
+An *inverted* check says **this token must not appear**. The only way to satisfy it is not
+to emit the token — which is the behaviour under test. Read the key for
+`routing_contamination`, stop leaking out-of-bounds facts, and you have not gamed the
+check; you have passed it. So it is published.
+
+A *positive* check says **this token must appear**. Knowing the string lets it be pinned,
+cached or prompted with no retrieval improvement at all, and the difference is invisible
+in the output. Those eight are sealed — for the length of a run.
+
+**Eight of the eighteen checks are published with their answer keys.** For the other
+eight, telling you the value we are testing whether you retrieved would test nothing.
+
+Every report prints the key beside each check and counts them, so the withholding is a
+bounded fact on the page rather than an atmosphere.
+
+### Why anything is sealed at all
+
+Not to keep a secret from you. **To stop us being accused of inventing the expectations
+after seeing your answers.**
+
+You receive `ground_truth_manifest_hash` at handover, before a single response exists.
+You receive the manifest itself with the report, and can verify it hashes to the value
+you were already holding. There is no window in which we could have edited it.
+
+Without that, every finding is answerable with one sentence — *"you decided what counted
+as a failure once you saw the failure"* — and there is no way to refute it. The hash makes
+that sentence unsayable. It constrains the auditor more than it constrains the vendor,
+which is the point of a document written to survive being handed to a third party.
+
+This is the same instrument as trial pre-registration: the protocol is published, and it
+is published *first*.
+
+Two further notes, because the sealing is smaller than it sounds. Capturing
+`retrieved_chunks` moves the conditional checks into the open half, because detection
+then sits below the layer an output filter can reach — that is a concrete reason to
+expose retrieval, not a request with nothing behind it. And per-engagement seeded plants
+mean a key disclosed after one run is worth nothing for the next: **regeneration is the
+durable property, secrecy only buys hours.**
+
+The bundled demo battery is fully open, keys and all. It ships in the same package as the
+corpus it describes, so anyone can read both.
+
+### Two design rules
+
+**Never enumerate what the target might say;
 check for a token we authored** — abstention is detected by the absence of the invariant
 class, not by string-matching refusal language, because *"I don't have that"* has a
 thousand phrasings and enumerating them is the trap. And **injection is scored by side

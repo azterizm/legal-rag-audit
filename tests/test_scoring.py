@@ -357,6 +357,104 @@ def test_a_clean_run_produces_no_findings(tmp_path):
     assert not unexpected, f"unexpected findings on a compliant run: {unexpected}"
 
 
+# ------------------------------------------------------------- §3.6.1 disclosure keys
+
+
+def test_every_check_declares_whether_its_key_is_published():
+    from legal_rag_audit.score.registry import CONDITIONAL, HELD, OPEN
+
+    assert {s.key for s in REGISTRY} <= {OPEN, HELD, CONDITIONAL}
+
+
+def test_the_open_half_matches_the_plan():
+    """§3.6.1's table and the registry have to say the same thing.
+
+    Two documents describing which half of the battery is published, disagreeing
+    silently, is worse than one — and this is the classification a buyer is told about.
+    """
+    from legal_rag_audit.score.registry import CONDITIONAL, HELD, OPEN
+
+    by_key = {}
+    for spec in REGISTRY:
+        by_key.setdefault(spec.key, set()).add(spec.name)
+
+    assert by_key[OPEN] == {
+        "injection_resistance",
+        "citation_integrity",
+        "parametric_bleed",
+        "routing_contamination",
+        "abstention",
+        "latency",
+        "unsupported_assertions",
+        "retrieval_relevance",
+    }
+    assert by_key[HELD] == {
+        "index_freshness",
+        "entity_masking",
+        "contradiction_surfacing",
+        "attribution",
+        "clause_synthesis",
+        "structural_integrity",
+        "disambiguation",
+        "context_memory",
+    }
+    assert by_key[CONDITIONAL] == {"cross_tenant_leakage"}
+
+
+def test_an_inverted_expectation_is_never_withheld():
+    """The criterion, asserted rather than asserted-about.
+
+    A check whose ground truth is purely `must_not_contain` cannot be passed by knowing
+    it — the only way to satisfy it is not to emit the token, which is the behaviour
+    under test. Withholding such a key buys nothing and costs the openness.
+    """
+    from legal_rag_audit.score.registry import BY_NAME, HELD
+
+    for expectation in build_ground_truth().expectations:
+        spec = BY_NAME.get(expectation.check)
+        if spec is None or spec.key != HELD:
+            continue
+        assert expectation.must_contain or expectation.legacy_params, (
+            f"{expectation.check} is withheld but its expectation is purely inverted; "
+            f"knowing it cannot help a target pass, so it belongs in the open half"
+        )
+
+
+def test_chunk_capture_opens_the_conditional_checks(tmp_path):
+    """The concrete benefit offered for exposing retrieval.
+
+    Cross-tenant leakage is scored on a literal canary. Without chunk capture an output
+    filter passes the check while isolation stays broken, so the key stays sealed. With
+    chunks, detection sits below the layer a filter reaches and the key can be published.
+    """
+    probes = [p for p in build_probes() if p.probe_id == "xt-001"]
+    base = dict(
+        run_id="r", probe_id="xt-001", query=probes[0].text, answer="Nothing here."
+    )
+
+    without = run(tmp_path, [Response(**base)], probes=probes)
+    assert without["checks"]["cross_tenant_leakage"]["key"] == "held"
+
+    with_chunks = run(
+        tmp_path,
+        [Response(**base, retrieved_chunks=[RetrievedChunk(text="tenant a matter")])],
+        probes=probes,
+        notes=CaptureNotes(
+            record="capture_notes",
+            citations_captured=False,
+            retrieved_chunks_captured=True,
+        ),
+    )
+    assert with_chunks["checks"]["cross_tenant_leakage"]["key"] == "open"
+
+
+def test_the_summary_counts_what_was_published(tmp_path):
+    """Withholding stated as a bounded number, not an atmosphere."""
+    report = run(tmp_path, answers(build_probes()))
+    assert report["summary"]["published_keys"] == 8
+    assert report["summary"]["withheld_keys"] == 9  # 8 held + cross-tenant, no chunks
+
+
 def test_the_summary_reports_counts_not_a_rate(tmp_path):
     """§3.5 and Appendix D. A headline percentage needs a denominator the reader
     cannot see, and gets quoted without one."""
@@ -368,6 +466,8 @@ def test_the_summary_reports_counts_not_a_rate(tmp_path):
         "failed",
         "not_eligible",
         "not_captured",
+        "published_keys",
+        "withheld_keys",
         "tier1_findings",
         "tier2_findings",
         "verdict",

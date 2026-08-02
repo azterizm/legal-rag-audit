@@ -116,6 +116,11 @@ def score_check(
     result: dict[str, Any] = {
         "check": spec.name,
         "tier": spec.tier,
+        # Whether this check's expectation was published with the battery or sealed
+        # until the report (§3.6.1). On the page, because a reader is entitled to know
+        # which half of the battery the target could see in advance — and because the
+        # answer for two checks depends on what the response file carried.
+        "key": spec.key_for(bool(response_file.retrieved_chunks_captured())),
         "recipe": spec.recipe,
         "eligible": len(eligible),
         "scored": 0,
@@ -367,6 +372,10 @@ def _summarise(checks: list[dict[str, Any]]) -> dict[str, Any]:
         "failed": by_status[FAIL],
         "not_eligible": by_status[NOT_ELIGIBLE],
         "not_captured": by_status[NOT_CAPTURED],
+        # How much of the battery was published in advance (§3.6.1). Stated so the
+        # withholding is a bounded, countable fact rather than an atmosphere.
+        "published_keys": sum(1 for c in checks if c["key"] == "open"),
+        "withheld_keys": sum(1 for c in checks if c["key"] == "held"),
         "tier1_findings": tier1_failed,
         "tier2_findings": tier2_failed,
         "verdict": FAIL if (tier1_failed or tier2_failed) else PASS,

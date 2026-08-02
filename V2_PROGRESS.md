@@ -421,6 +421,79 @@ passed in isolation.
 
 ---
 
+## Plan amendment — the withheld half is half, and disclosure is enforced
+
+**Question raised:** does withholding `ground_truth.json` read as manufactured mystique?
+Showing everything demonstrates competence; withholding invites the reading that the
+opacity is deliberate.
+
+**Answer, and the correction.** The premise was that the manifest is obfuscated and only
+we can read it. It is not. §3.6 already required shipping it in full with the report; the
+withholding is a *timing* rule lasting the length of a run, and the direction it protects
+is the one people assume backwards. The vendor tuning to an early key is the obvious
+risk. The damaging one is the accusation pointed at us — *"you decided what counted as a
+failure after you saw the failure"* — which is unanswerable without a hash published
+before any response existed, and which voids every finding in the document. The
+pre-commitment constrains the auditor more than the vendor.
+
+**But the objection had real force**, and the plan overstated what secrecy buys by
+treating the manifest as one undifferentiated sealed object. It is not one thing.
+
+### §3.6.1 — the split, on a mechanical criterion
+
+> A check is **disclosable** when knowing its expectation in advance cannot help a target
+> pass it without exhibiting the behaviour under test.
+
+That tracks §8.1's inverted/positive split, for the same underlying reason. An inverted
+expectation — *this token must not appear* — can only be satisfied by not emitting the
+token, which is the behaviour being measured; a vendor who reads the key and stops
+leaking has passed, not gamed. A positive expectation — *this token must appear* — can be
+pinned, cached or prompted with no retrieval improvement, invisibly.
+
+**8 open, 8 held, 2 conditional.** The conditional pair (`cross_tenant_leakage`,
+`licensed_content_reproduction`) is inverted but scored on a literal string an output
+filter could suppress; capturing `retrieved_chunks` moves detection below that layer and
+opens them. That is a concrete benefit to offer for exposing retrieval.
+
+The open half becomes the free published battery (§9.4), and the withholding becomes one
+sentence rather than a policy: *eight of eighteen ship with their answer keys; the other
+eight test whether you retrieved a value, and telling you the value first would test
+nothing.*
+
+### Where secrecy is not the durable property
+
+Per-engagement seeded plants (Phase D) mean a key disclosed after run *n* is worthless
+for run *n+1*. Withholding buys hours; **regeneration** is what makes a repeat engagement
+meaningful. A design depending on a key staying secret indefinitely would be fragile in
+exactly the way §1.3 forbids.
+
+### Landed in code, not only in the plan
+
+- `CheckSpec.key` — `open` / `held` / `conditional`, with `key_for(chunks_captured)`
+  resolving the conditional pair against what the response file carried.
+- Every check prints its key in `report.json`; the summary counts `published_keys` and
+  `withheld_keys`, so the withholding is a bounded number on the page.
+- Tests assert the registry's classification matches §3.6.1 name for name, that chunk
+  capture opens the conditional check, and — the criterion itself — that **no purely
+  inverted expectation is ever marked withheld**, since withholding one buys nothing and
+  costs the openness.
+- README gains a Key column and the two sections that answer the objection where a buyer
+  reads it.
+
+### New requirement — F44, disclosure enforced by the tool
+
+§3.6's disclosure half was an undertaking in a document with nothing implementing it.
+Phase C acceptance now requires `score` to write the ground-truth manifest into the output
+directory beside the report and record its hash in the run manifest, with a test asserting
+the written copy hashes to the recorded value. Disclosure becomes a property of the tool.
+
+**Still unbuilt:** the `hash` subcommand for pre-run handover (F38) and the manifest
+emitter, both Phase C. Until they land, the pre-commitment mechanism is specified and not
+yet operable — the half of the bargain that answers this objection is the half not yet
+written.
+
+---
+
 ## Plan amendment — evaluator 18, licensed-content reproduction
 
 **Date: 2026-08-01.** Specification only. No code; the check lands with Phase G.

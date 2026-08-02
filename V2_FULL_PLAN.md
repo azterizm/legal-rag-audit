@@ -176,9 +176,57 @@ A probe failing 3 of 3 is a defect. A probe failing 1 of 3 is non-reproducibilit
 
 ### 3.6 Pre-commitment: hash the ground truth before the run
 
-The client receives the corpus and the probe file. They do **not** receive the ground-truth manifest (which probe expects which token) until the report is delivered — otherwise the battery is gameable. To stop that being a trust ask in the other direction, we publish `ground_truth_manifest_hash` **at handover**, before any response exists, and ship the manifest itself with the report. Anyone can verify we did not author the expectations after seeing the answers.
+**Nothing about the method is withheld, ever.** The code, the evaluator recipes, the schemas, the scoring rules and the tier definitions are public and forkable. The only artefact with a timing rule attached is the *answer key for one engagement*, and it is withheld for the length of a run — hours — then handed over complete.
 
-This is the harness equivalent of preregistration ([Source Map §6](../../../Business/Technical%20Consultancy/Content%20Creation/Legal%20Tech/Source%20Map%20-%20What%20Content%20Can%20Stand%20On.md)), and it costs nothing.
+The sequence:
+
+1. **At handover:** they receive the corpus and the probe file, plus `ground_truth_manifest_hash`.
+2. **They run.** No expectation has been disclosed for the withheld class (below).
+3. **With the report:** they receive the ground-truth manifest in full and can verify it hashes to the value published in step 1.
+
+This is preregistration ([Source Map §6](../../../Business/Technical%20Consultancy/Content%20Creation/Legal%20Tech/Source%20Map%20-%20What%20Content%20Can%20Stand%20On.md)), and the direction it protects is the one people assume backwards. The obvious risk is the vendor tuning to a key they hold early. The **more damaging** risk is the accusation pointed at us: *"you decided what counted as a failure after you saw the failure."* Without a hash published before any response existed, that is unanswerable, and it voids every finding in the document. The hash makes it unmakeable. It constrains the auditor more than the vendor, which is why it belongs in a method whose entire purpose is to survive being handed to a third party (§1.1).
+
+#### 3.6.1 Only half the battery needs withholding
+
+Treating the manifest as one undifferentiated secret overstates what the secrecy buys and understates the openness available. The test is mechanical:
+
+> **A check is disclosable when knowing its expectation in advance cannot help a target pass it without exhibiting the behaviour under test.**
+
+That criterion tracks §8.1's inverted/positive split almost exactly, and for the same underlying reason. An **inverted** expectation says *this token must not appear*. The only way to satisfy it is not to emit the token — which is the behaviour being measured. A vendor who reads the key and stops leaking out-of-bounds facts has not gamed the check; they have passed it. A **positive** expectation says *this token must appear*, and knowing the string lets it be pinned, cached, prompted or hard-coded with no retrieval improvement whatsoever. That is gaming, and it is invisible in the output.
+
+| # | Check | Class | Why |
+|---|---|---|---|
+| 2 | `injection_resistance` | **Disclosable** | The payload names the side effect it demands, so the probe discloses the token at run time regardless. Publishing it in advance reveals nothing new |
+| 3 | `citation_integrity` | **Disclosable** | The expectation is set membership against identifiers *the target itself issued*. There is no token of ours to withhold |
+| 6 | `parametric_bleed` | **Disclosable** | Inverted. Suppressing the out-of-corpus fact **is** abstaining |
+| 7 | `routing_contamination` | **Disclosable** | Inverted. Suppressing out-of-bounds facts **is** correct routing |
+| 8 | `abstention` | **Disclosable** | Inverted. Suppressing the answer it should not have given **is** abstaining |
+| 15 | `latency` | **Disclosable** | Measurements. There is no token to emit or suppress |
+| 16 | `unsupported_assertions` | **Disclosable** | Tier 2, scored by entailment against the chunks *they* returned. No fixed expected string exists |
+| 17 | `retrieval_relevance` | **Disclosable** | As above — similarity against their own chunks |
+| 1 | `cross_tenant_leakage` | **Conditional** | Inverted, but the canary is a literal string. With `retrieved_chunks` captured it is disclosable — a blocklist on the output does not stop the token appearing in retrieval. Without chunk capture, output filtering passes the check while tenant isolation stays broken, so it is **withheld** |
+| 18 | `licensed_content_reproduction` | **Conditional** | Same shape. Markers are matched in `retrieved_chunks`; without chunk capture the marker can be filtered from prose while the licensed edition stays in the index |
+| 4 | `index_freshness` | **Withheld** | Positive. Knowing the new value lets it be returned without the index being refreshed |
+| 5 | `entity_masking` | **Withheld** | Positive, and the tokens are the PII values themselves |
+| 9 | `contradiction_surfacing` | **Withheld** | Positive on both sides. Knowing both values lets them be recited without either being retrieved |
+| 10 | `attribution` | **Withheld** | Positive plus adjacency. The fact/identifier pairing is exactly what would be hard-coded |
+| 11 | `clause_synthesis` | **Withheld** | Positive checklist. The list is the answer |
+| 12 | `structural_integrity` | **Withheld** | Positive. The whole check is whether a value buried in a nested structure was reached; handing over the value defeats it entirely |
+| 13 | `disambiguation` | **Withheld** | Positive. Knowing which invariant belongs to which colliding article is the disambiguation |
+| 14 | `context_memory` | **Withheld** | Positive. Knowing which referent's invariant is expected resolves the anaphor for them |
+
+**Eight disclosable, eight withheld, two conditional on whether `retrieved_chunks` were captured.**
+
+#### 3.6.2 What follows from the split
+
+**Publish the disclosable half outright**, with expectations, as part of the open battery. It is the lead-generation surface (§9.4), it is free to give away, and it makes the withholding answerable in one sentence rather than as a policy: *"eight of the eighteen checks are published with their answer keys; the other eight test whether your system retrieved a value, and telling you the value first would test nothing."*
+
+**The conditional pair is a reason to ask for `retrieved_chunks`.** Chunk capture upgrades cross-tenant leakage and licensed-content reproduction from withheld to disclosable, because detection moves below the layer an output filter can reach. That is a concrete benefit to offer a target for exposing retrieval, rather than a request with nothing behind it.
+
+**Seeded regeneration is the durable defence, not secrecy.** Per-engagement plants (Phase D) mean a key disclosed after run *n* is worthless for run *n+1*. Withholding buys hours; regeneration is what makes a repeat engagement meaningful. A design that depended on a key staying secret forever would be fragile in exactly the way §1.3 says this tool must not be.
+
+> [!IMPORTANT]
+> **The demo battery's ground truth is not withheld and cannot be.** It ships in the same package as the corpus it describes (§9.4), so anyone can read both. That is correct: the bundled run is a demonstration of the method, not evidence about a target, and a report produced from it says so.
 
 ---
 
@@ -622,26 +670,30 @@ It must also catch everything else that would otherwise surface as a *scored fai
 
 ### 8.1 The reclassification, at a glance
 
-| # | Evaluator | Tier | Determinism recipe |
-|---|---|---|---|
-| 1 | Cross-tenant leakage | **1** | Multi-type canary; substring presence |
-| 2 | Prompt injection resistance | **1** | Payload demanding a verifiable side effect; prefix/exact match |
-| 3 | Citation integrity | **1** | Set membership of cited IDs against the uploaded doc manifest |
-| 4 | Index freshness / cache invalidation | **1** | Update a planted fact to a new invariant; check old vs new token |
-| 5 | Entity masking re-hydration | **1** | Exact match on entity; counterparty-swap check across pairs |
-| 6 | Parametric knowledge bleed | **1** | **Inverted** — presence of a known out-of-corpus fact |
-| 7 | Contextual routing / namespace contamination | **1** | **Inverted** — presence of an out-of-bounds fact |
-| 8 | Confidence threshold / abstention | **1** | **Inverted** — presence of the answer it should not have given |
-| 9 | Contradiction surfacing | **1** | Both planted conflicting values present ⇒ surfaced; one ⇒ silently picked |
-| 10 | Cross-document attribution | **1** | Adjacency — planted fact and correct document identifier in the same unit |
-| 11 | Cross-clause synthesis | **1** | Required-facts checklist, including the planted exclusion |
-| 12 | Structural integrity (chunking) | **1** | Invariant planted deep in a nested list; relational query; presence check |
-| 13 | Retrieval disambiguation | **1** | Distinct invariant under each colliding article number; which appeared |
-| 14 | Context window / memory management | **1** | Distinct invariant per referent; which one the pronoun resolved to |
-| 15 | Latency penalty | **1** (measurement) | TTFB and total are numbers. **The *interpretation* as catch-and-regenerate is inference — labelled separately** |
-| 16 | **Hallucination / grounding** → `unsupported_assertions` | **2** | NLI or embedding entailment. Irreducible |
-| 17 | **Retrieval relevance** | **2** | Cosine similarity over chunks. Irreducible |
-| 18 | **Licensed-content reproduction** | **1** | Publisher-proprietary marker present in retrieved chunks, or in an answer attributed to an internal document |
+| # | Evaluator | Tier | Key | Determinism recipe |
+|---|---|---|---|---|
+| 1 | Cross-tenant leakage | **1** | cond. | Multi-type canary; substring presence |
+| 2 | Prompt injection resistance | **1** | open | Payload demanding a verifiable side effect; prefix/exact match |
+| 3 | Citation integrity | **1** | open | Set membership of cited IDs against the uploaded doc manifest |
+| 4 | Index freshness / cache invalidation | **1** | held | Update a planted fact to a new invariant; check old vs new token |
+| 5 | Entity masking re-hydration | **1** | held | Exact match on entity; counterparty-swap check across pairs |
+| 6 | Parametric knowledge bleed | **1** | open | **Inverted** — presence of a known out-of-corpus fact |
+| 7 | Contextual routing / namespace contamination | **1** | open | **Inverted** — presence of an out-of-bounds fact |
+| 8 | Confidence threshold / abstention | **1** | open | **Inverted** — presence of the answer it should not have given |
+| 9 | Contradiction surfacing | **1** | held | Both planted conflicting values present ⇒ surfaced; one ⇒ silently picked |
+| 10 | Cross-document attribution | **1** | held | Adjacency — planted fact and correct document identifier in the same unit |
+| 11 | Cross-clause synthesis | **1** | held | Required-facts checklist, including the planted exclusion |
+| 12 | Structural integrity (chunking) | **1** | held | Invariant planted deep in a nested list; relational query; presence check |
+| 13 | Retrieval disambiguation | **1** | held | Distinct invariant under each colliding article number; which appeared |
+| 14 | Context window / memory management | **1** | held | Distinct invariant per referent; which one the pronoun resolved to |
+| 15 | Latency penalty | **1** (measurement) | open | TTFB and total are numbers. **The *interpretation* as catch-and-regenerate is inference — labelled separately** |
+| 16 | **Hallucination / grounding** → `unsupported_assertions` | **2** | open | NLI or embedding entailment. Irreducible |
+| 17 | **Retrieval relevance** | **2** | open | Cosine similarity over chunks. Irreducible |
+| 18 | **Licensed-content reproduction** | **1** | cond. | Publisher-proprietary marker present in retrieved chunks, or in an answer attributed to an internal document |
+
+**Key** (§3.6.1) — whether the expectation can be published with the battery. `open`: knowing it in advance cannot help a target pass without exhibiting the behaviour under test, so it ships with the probe file. `held`: a positive expectation whose token could be pinned, cached or prompted without retrieval improving, so it is withheld until the report. `cond.`: `open` when `retrieved_chunks` are captured — detection then sits below the layer an output filter reaches — and `held` when they are not.
+
+**8 open, 8 held, 2 conditional.** The open half is the free published battery (§9.4).
 
 ### 8.2 Per-evaluator contracts
 
@@ -975,6 +1027,7 @@ instrument at a stated threshold and are contestable on both. Both are labelled 
 | F41 | Evidence bundle: verbatim excerpts for every Tier 1 instance, written alongside the report | **Must** |
 | F42 | Pathological reference target shipped in-repo, with a documented pathology→evaluator matrix (§14) | **Should** |
 | F43 | Licensed-content reproduction check: publisher-proprietary markers matched in `retrieved_chunks` and in answers attributed to internal document IDs, with the `in_index` / `external_fetch` / `unattributed` split preserved and never collapsed | **Must** |
+| F44 | `score` writes the ground-truth manifest into the output directory alongside the report and records its hash in the run manifest, so the disclosure half of §3.6 is enforced by the tool rather than promised. Every check carries its `open` / `held` / `conditional` key (§3.6.1) on the page | **Must** |
 
 ### 11.3 Non-functional
 
@@ -1377,9 +1430,11 @@ Ordering rationale: the blocking contradiction first, then the thing that makes 
 - `tier` field on every evaluator; report sections rendered separately with tier definitions printed.
 - Manifest emitter with all hashes and versions; `hash` subcommand for pre-run handover (F38).
 - JSON writer to `report.v2.schema.json`; Markdown attestation writer (§10.6); evidence bundle writer (F41).
+- **Disclosure writer (F44):** `score` copies the ground-truth manifest into the output directory alongside the report and records its hash in the run manifest.
+- `key` field per check in the report — `open` / `held` / `conditional` per §3.6.1 — with the conditional pair resolved against whether `retrieved_chunks` were captured.
 - `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses everywhere (F40); denominators sourced only from probe-file eligibility (F39).
 - Distributions for Tier 2 with the configured line marked (F24).
-- **Acceptance:** a report generated from the mock target's `clean` profile reads as a defensible clean attestation with a real "not tested" section; a report from a pathological profile leads with Tier 1 and names three mechanisms.
+- **Acceptance:** a report generated from the mock target's `clean` profile reads as a defensible clean attestation with a real "not tested" section; a report from a pathological profile leads with Tier 1 and names three mechanisms; **every `score` run writes the ground-truth manifest next to the report, and a test asserts the written copy hashes to the value in the run manifest** — disclosure is a property of the tool, not an undertaking in a document.
 
 **Phase D — Tier 1 conversion (4 d)**
 - `plants/` module: seeded HMAC generation per type, collision guard, ground-truth manifest emitter.
