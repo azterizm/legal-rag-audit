@@ -1,11 +1,15 @@
 """Command line surface (V2_FULL_PLAN.md §7).
 
-Three modes, and which side of the engagement runs each one is the whole design:
+Four modes, and which side of the engagement runs each one is the whole design:
 
+    legal-rag-audit hash   --corpus ./planted/ --probes probes.jsonl \
+                           --ground-truth ground_truth.json -o handover.json
     legal-rag-audit generate -c config.yaml -o responses.jsonl
-    legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json
+    legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json \
+                          --handover handover.json -o out/
     legal-rag-audit schema --print responses.v1
 
+`hash` runs first and is ours: it seals the answer key before any response exists.
 `generate` is theirs and optional — they may replace it with their own harness and hand
 back a conforming file. `score` is ours and runs offline. `schema` prints the published
 contract so nobody has to clone anything to implement against it (F35).
@@ -26,7 +30,6 @@ import argparse
 import json
 import logging
 import sys
-from pathlib import Path
 
 from .config import AuditConfig
 from .corpus_loader import CorpusError
@@ -79,6 +82,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 
 def cmd_score(args: argparse.Namespace) -> int:
+    from .interchange import unrecorded_gaps
+    from .provenance import HashError, PreCommitmentError
     from .score import ScoringError, score
     from .score.offline import OfflineViolation
     from .score.registry import GroundTruthIncomplete
@@ -89,30 +94,38 @@ def cmd_score(args: argparse.Namespace) -> int:
             ground_truth_path=args.ground_truth,
             probes_path=args.probes,
             skip_tier2=args.skip_tier2,
+            config_path=args.config,
+            handover_path=args.handover,
+            output_dir=args.output,
         )
     except (InterchangeError, SchemaVersionError) as e:
         return _abort(f"Could not read the input files:\n{e}")
+    except PreCommitmentError as e:
+        return _abort(str(e))
     except GroundTruthIncomplete as e:
         return _abort(f"The ground-truth manifest is incomplete:\n{e}")
+    except HashError as e:
+        return _abort(f"Could not compute a provenance digest:\n{e}")
     except ScoringError as e:
         return _abort(f"Scoring could not run:\n{e}")
     except OfflineViolation as e:
         return _abort(str(e))
 
-    out_dir = Path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    report_path = out_dir / "report.json"
-    report_path.write_text(
-        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    # A gap here is a defect in the manifest, not in the run: a §6.5 field that is
+    # neither populated nor explained reads as completeness on the page. Loud, and
+    # not fatal — the findings are still sound and suppressing them would be worse.
+    if gaps := unrecorded_gaps(report["manifest"]):
+        logging.warning(
+            f"Run manifest has unexplained gaps: {', '.join(gaps)}. "
+            f"Every §6.5 field should be populated or listed in `not_recorded`."
+        )
 
-    logging.info(f"Report written to {report_path}")
-    _print_summary(report["summary"], report["capture"])
+    _print_summary(report["summary"], report["capture"], report["manifest"])
 
     return EXIT_FINDINGS if report["summary"]["verdict"] == "FAIL" else EXIT_OK
 
 
-def _print_summary(summary: dict, capture: dict) -> None:
+def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
     """Counts against declared denominators. Never a single headline rate (§3.5)."""
     print()
     print(f"  checks registered   {summary['checks_registered']}")
@@ -131,6 +144,46 @@ def _print_summary(summary: dict, capture: dict) -> None:
             f"not findings"
         )
     print()
+    # The two lines that make the report checkable by someone who does not trust it.
+    print(f"  findings digest     {manifest['scoring']['findings_hash']}")
+    print(f"  ground truth        {manifest['inputs']['ground_truth_manifest_hash']}")
+    if manifest["pre_commitment"]["status"] == "verified":
+        print(
+            f"  pre-commitment      verified against "
+            f"{manifest['pre_commitment']['handover_record']} "
+            f"(committed {manifest['pre_commitment']['created']})"
+        )
+    else:
+        print("  pre-commitment      none supplied — this run claims none")
+    print()
+
+
+def cmd_hash(args: argparse.Namespace) -> int:
+    from .interchange import write_handover
+    from .provenance import HashError, build_handover
+
+    if not (args.corpus or args.probes or args.ground_truth):
+        return _abort(
+            "Nothing to hash. Pass at least one of --corpus, --probes, "
+            "--ground-truth."
+        )
+
+    try:
+        record = build_handover(
+            corpus=args.corpus,
+            probes=args.probes,
+            ground_truth=args.ground_truth,
+            note=args.note,
+        )
+    except HashError as e:
+        return _abort(str(e))
+
+    if args.output:
+        write_handover(args.output, record)
+        logging.info(f"Handover record written to {args.output}")
+
+    print(json.dumps(record.to_document(), indent=2, ensure_ascii=False))
+    return EXIT_OK
 
 
 def cmd_schema(args: argparse.Namespace) -> int:
@@ -215,7 +268,27 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sc.add_argument(
-        "-o", "--output", default="reports", help="directory for report.json"
+        "-o",
+        "--output",
+        default="reports",
+        help=(
+            "directory for report.json, manifest.json and the disclosed "
+            "ground_truth.json"
+        ),
+    )
+    sc.add_argument(
+        "--handover",
+        default=None,
+        help=(
+            "path to the handover record from `hash`. The digests published before "
+            "the run are recomputed; a ground truth that has moved since aborts"
+        ),
+    )
+    sc.add_argument(
+        "-c",
+        "--config",
+        default=None,
+        help="the config `generate` ran with, so its hash is recorded in the manifest",
     )
     sc.add_argument(
         "--skip-tier2",
@@ -226,6 +299,27 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sc.set_defaults(func=cmd_score)
+
+    hs = sub.add_parser(
+        "hash",
+        help="digest the corpus, probes and ground truth for handover",
+        description=(
+            "The pre-commitment record (§3.6, F38). Run this before the engagement "
+            "and give the output to the client: it fixes the answer key while it is "
+            "still sealed. `score --handover` recomputes the digests and refuses to "
+            "score a ground truth that has moved since."
+        ),
+    )
+    hs.add_argument("--corpus", default=None, help="the corpus directory as handed over")
+    hs.add_argument("--probes", default=None, help="path to probes.jsonl")
+    hs.add_argument("--ground-truth", default=None, help="path to ground_truth.json")
+    hs.add_argument(
+        "-o", "--output", default=None, help="write the record here as well as stdout"
+    )
+    hs.add_argument(
+        "--note", default=None, help="free text: who received this, and when"
+    )
+    hs.set_defaults(func=cmd_hash)
 
     schema = sub.add_parser(
         "schema",

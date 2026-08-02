@@ -65,6 +65,7 @@ packages = [
     "legal_rag_audit.interchange",
     "legal_rag_audit.interchange.jsonschema",
     "legal_rag_audit.probes",
+    "legal_rag_audit.provenance",
     "legal_rag_audit.score",
     "legal_rag_audit.transport",
 ]

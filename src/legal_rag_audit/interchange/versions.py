@@ -15,6 +15,8 @@ from typing import Final
 PROBES_V1: Final = "probes.v1"
 RESPONSES_V1: Final = "responses.v1"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
+HANDOVER_V1: Final = "handover.v1"
+RUN_MANIFEST_V1: Final = "run_manifest.v1"
 
 #: Every schema identifier this build can read. Keys are the identifier as it appears
 #: in the file; values are what the identifier is for, used in error messages.
@@ -22,6 +24,8 @@ SUPPORTED: Final[dict[str, str]] = {
     PROBES_V1: "probe file",
     RESPONSES_V1: "response file",
     GROUND_TRUTH_V1: "ground-truth manifest",
+    HANDOVER_V1: "pre-commitment record",
+    RUN_MANIFEST_V1: "run manifest",
 }
 
 

@@ -28,14 +28,19 @@ from typing import Any, Optional
 from ..config import ThresholdsConfig
 from ..interchange import (
     GroundTruth,
+    PreCommitment,
     Probe,
     Response,
     ResponseFile,
     load_ground_truth,
+    load_handover,
     load_probes,
     load_responses,
+    now_utc,
 )
+from ..provenance import build_run_manifest, verify_pre_commitment
 from .offline import offline
+from .output import write_bundle
 from .registry import (
     ANSWER,
     BY_NAME,
@@ -212,12 +217,23 @@ def score(
     thresholds: Optional[ThresholdsConfig] = None,
     enforce: bool = True,
     skip_tier2: bool = False,
+    config_path: Optional[str] = None,
+    handover_path: Optional[str] = None,
+    output_dir: Optional[str] = None,
 ) -> dict[str, Any]:
     """Score a run. Returns the report body.
 
     `probes_path` is optional only because a response file records the probes it
     answered; when it is absent, eligibility is reconstructed from the ground truth,
     which is weaker and the report says so.
+
+    `handover_path` turns the pre-commitment of §3.6 from an undertaking into a
+    precondition: the digests published before the run are recomputed here, and a
+    ground truth that has moved since aborts the run.
+
+    `output_dir` is where the report, the manifest and the disclosed ground truth are
+    written. A caller that wants only the dict may leave it out; the CLI never does,
+    because F44 makes disclosure a property of the tool.
 
     Network enforcement is scoped to this call. It is on for every line of scoring and
     off when the call returns, so importing this function does not leave a caller's
@@ -231,6 +247,9 @@ def score(
             probes_path,
             thresholds,
             skip_tier2,
+            config_path,
+            handover_path,
+            output_dir,
         )
 
 
@@ -240,7 +259,24 @@ def _score(
     probes_path: Optional[str],
     thresholds: Optional[ThresholdsConfig],
     skip_tier2: bool,
+    config_path: Optional[str] = None,
+    handover_path: Optional[str] = None,
+    output_dir: Optional[str] = None,
 ) -> dict[str, Any]:
+    started = now_utc()
+
+    # The pre-commitment gate, first, because it decides whether this run is entitled
+    # to produce a report at all (§3.6). Everything below it is scoring; this is about
+    # whether the answer key is the one that was sealed before the responses existed.
+    if handover_path:
+        handover = load_handover(handover_path)
+        pre_commitment = verify_pre_commitment(
+            handover, handover_path, ground_truth_path, probes_path
+        )
+    else:
+        handover = None
+        pre_commitment = PreCommitment(status="absent")
+
     # Checked once, before anything is read, rather than discovered part-way through a
     # run. A missing scoring dependency is our misconfiguration, not a property of the
     # target — a report that silently dropped two checks because of it would attribute
@@ -296,7 +332,12 @@ def _score(
         for spec in REGISTRY
     ]
 
-    return {
+    passes = max((r.pass_index for r in response_file.responses), default=1)
+
+    # The findings, and nothing else. Hashed as they stand here, before the manifest
+    # is attached — NF2's byte-identical claim is about these and cannot be about a
+    # block that records when the run happened.
+    findings = {
         "checks": {c["check"]: c for c in checks},
         "summary": _summarise(checks),
         "capture": {
@@ -307,13 +348,51 @@ def _score(
                 response_file.capture_notes
                 and response_file.capture_notes.document_ids
             ),
-            "passes": max((r.pass_index for r in response_file.responses), default=1),
+            "passes": passes,
             "records": len(response_file.responses),
             "transport_errors": sum(
                 1 for r in response_file.responses if not r.usable
             ),
         },
     }
+
+    manifest = build_run_manifest(
+        findings=findings,
+        checks=checks,
+        probes=probes,
+        response_file=response_file,
+        responses_path=responses_path,
+        ground_truth_path=ground_truth_path,
+        probes_path=probes_path,
+        config_path=config_path,
+        thresholds=thresholds,
+        eligibility_source=eligibility_source,
+        passes=passes,
+        started=started,
+        finished=now_utc(),
+        skip_tier2=skip_tier2,
+        pre_commitment=pre_commitment,
+        handover=handover,
+    )
+
+    # Manifest first: a reader meets the provenance before the findings, which is the
+    # order the argument has to be made in.
+    report = {"manifest": manifest.to_document(), **findings}
+
+    if output_dir:
+        write_bundle(output_dir, report, ground_truth_path)
+
+    return report
+
+
+def findings_of(report: dict[str, Any]) -> dict[str, Any]:
+    """The report without its manifest — what NF2's determinism claim covers.
+
+    Two runs over the same inputs produce identical findings and different manifests.
+    Both halves of that are correct, and a determinism test that could not tell them
+    apart would be testing the clock.
+    """
+    return {k: v for k, v in report.items() if k != "manifest"}
 
 
 def _probes_from(response_file: ResponseFile, ground_truth: GroundTruth) -> list[Probe]:

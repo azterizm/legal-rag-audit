@@ -13,7 +13,7 @@ exists to measure in other people's systems.
 | **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
 | **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
 | **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
-| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ⬜ |
+| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | 🟡 tiering, manifest, `hash` and F44 done; report.v2 writer, Markdown attestation, evidence bundle, Tier 2 distributions outstanding |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ⬜ |
 | **E** | N-pass execution + variance reporting | 1 d | ⬜ |
 | **F** | `validate` mode | 0.5 d | ⬜ |
@@ -487,10 +487,8 @@ Phase C acceptance now requires `score` to write the ground-truth manifest into 
 directory beside the report and record its hash in the run manifest, with a test asserting
 the written copy hashes to the recorded value. Disclosure becomes a property of the tool.
 
-**Still unbuilt:** the `hash` subcommand for pre-run handover (F38) and the manifest
-emitter, both Phase C. Until they land, the pre-commitment mechanism is specified and not
-yet operable — the half of the bargain that answers this objection is the half not yet
-written.
+**Since built.** See the Phase C section below — the pre-commitment mechanism is now
+operable, and F44 is enforced by a test rather than by a paragraph.
 
 ---
 
@@ -571,3 +569,154 @@ check names, the "presence is not a breach" limit added to the Limits section, a
 marker check added to the ordinary-use column of the authorisation table. It is marked
 **Specified — v0.4.0** in the implementation-status table; the "17 evaluators" row stays
 as it is, because 17 is what currently runs.
+
+---
+
+## Phase C (part 1) — the pre-commitment, made operable 🟡
+
+**Date: 2026-08-02.** The `hash` subcommand (F38), the run manifest emitter (§6.5, F23)
+and the disclosure writer (F44). The rest of Phase C — the `report.v2.schema.json`
+writer, the Markdown attestation (§10.6), the evidence bundle (F41) and Tier 2
+distributions (F24) — is still outstanding.
+
+The reason this came before the report writer: §3.6 was the one argument in the whole
+document with nothing implementing it. A method that *says* it pre-commits and does not
+is weaker than one that never claimed to, because the claim is checkable and the check
+fails.
+
+### The mechanism is now a precondition, not an undertaking
+
+Three commands, and the join between them is the point:
+
+```bash
+legal-rag-audit hash --corpus ./corpus/ --probes probes.jsonl \
+                     --ground-truth ground_truth.json -o handover.json
+legal-rag-audit generate -c config.yaml -o responses.jsonl
+legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json \
+                      --probes probes.jsonl --handover handover.json -o out/
+```
+
+`score --handover` recomputes the digests and **aborts on a mismatch** — exit 2, no
+report, nothing written. Not a warning in the manifest, not a flag on the page. A report
+produced from a key that changed after the responses came back cannot be told apart from
+one produced honestly, which is the entire reason the digest was published first. If the
+tool would emit it with a caveat, the caveat is the only thing standing between us and
+the accusation, and a caveat is not a control.
+
+The corpus is the exception and is labelled as one: `score` reads no corpus (§5.1), so
+its digest is *carried* from the handover record with `corpus_hash_provenance` saying
+so. A manifest that presented a carried value as a computed one would overclaim in
+exactly the direction this section exists to prevent.
+
+### The digests are recomputable without this software
+
+A hash only our tool can reproduce is a hash nobody checks. Every digest ships with its
+recipe, in the handover record and in the manifest:
+
+- **Files** — plain SHA-256 of the bytes. `shasum -a 256 <file>`.
+- **Trees** — SHA-256 over a listing of `<hex>  <relative path>` lines, sorted as byte
+  strings, dot-prefixed paths excluded. The recipe string carries the shell pipeline that
+  reproduces it, and `tests/test_manifest.py` **executes that pipeline** and compares it
+  to the tool's answer. If the two ever diverge, the instruction we printed in a handover
+  document is false, which is worse than printing none.
+
+The dot-file exclusion is a real decision with a real cost — a dot-file inside a corpus
+is outside the commitment. It is worth paying: a `.DS_Store` dropped in by Finder would
+otherwise change the digest of a corpus nobody touched, and a pre-commitment that fires
+on filesystem noise trains people to ignore it.
+
+### What the manifest refuses to leave out
+
+The §6.5 checklist is in code as `REQUIRED_BY_SECTION_6_5`, and `unrecorded_gaps()`
+asserts every field is either populated or explained in `not_recorded`. This build cannot
+know four of them, and says so in the artefact rather than omitting them:
+
+| Field | Why it is null |
+|---|---|
+| `run.seed` | Nothing here is seeded. Seeded planting is Phase D; the demo corpus carries fixed facts, and recording a seed would describe a step that did not happen |
+| `run.corpus_mode` | Not established by `score`, which reads no corpus. Phase D records it when `plant` produces one |
+| `inputs.corpus_hash` | Only knowable from a handover record. Populated when `--handover` is passed |
+| `authorisation` | The §13 block is not in the config yet (Phase I). This run asserts nothing about consent |
+
+Same rule as F40, applied to provenance: an omitted field and an unknown value read
+identically on the page and are different statements.
+
+### Two decisions worth arguing with
+
+**The manifest reports whether the commit is signed. It does not verify the signature.**
+Verification means `git log --pretty=%G?`, which invokes gpg in a child process, and a
+gpg configured with `auto-key-retrieve` fetches missing keys from a keyserver. `score`
+runs inside `offline()`, which patches *this* process's sockets and cannot see a child's
+— so a verifying manifest would carry a network path on the inside of the guarantee this
+project makes most loudly (§5.1, F18). Reading the commit object's `gpgsig` header is a
+local object read and needs no gpg at all. The manifest records presence, the sha, and
+`git verify-commit <sha>` for the reader to run. That is also the better artefact:
+"we checked our own signature and it was fine" is not evidence to anyone deciding whether
+to trust us. A test pins the git subcommands to `rev-parse`, `cat-file` and `status`.
+
+**Tier 2 model names are duplicated in `instruments.py` rather than read off the
+evaluators.** The manifest must state which model *would have* scored a check on a
+`--skip-tier2` run, and reading the name off the class would import sentence-transformers
+— and therefore torch — to write a manifest for a run that loaded no models at all. The
+duplication is checked by an AST reader that parses the evaluator sources without
+importing them, so the drift test runs in the torch-free environment the duplication
+exists to serve.
+
+### NF2 was narrowed, deliberately
+
+The report now carries a manifest with `started` and `finished`, so "the same inputs
+produce a byte-identical report" can no longer be literally true. The claim is now about
+the findings: `findings_of(report)` drops the manifest, and `manifest.scoring.findings_hash`
+is the digest of what remains.
+
+This was already a latent flake. The old test passed only because two runs landed inside
+the same second — it would have failed on a slow machine at a second boundary. The
+findings digest replaces "diff the two files" with one string to compare, which is also
+the form a client can check.
+
+### Found while building it
+
+- **A signature check inside the offline region.** The first version ran
+  `git log --pretty=%G?`. Caught before commit; see above.
+- **The determinism tests were passing on the clock.** Same-second timestamps made them
+  pass and hid the narrowing. Now explicit, with a test that the digest actually moves
+  when an answer changes — a hash that never changes proves nothing about what it covers.
+- **`abstention` has an undisclosed threshold.** `registry.py` calls
+  `ConfidenceEvaluator.evaluate()` with no threshold, so the evaluator's own `0.5`
+  applies and nothing in the config can change it. Now in the manifest as
+  `"threshold_source": "evaluator default — not configurable in this build"`. §4.1 says a
+  Tier 2 threshold must be recorded; an operator-invisible one is the case that most
+  needed recording.
+- **Model weights are not pinned.** The library version is pinned; the checkpoint is
+  resolved by name at load time, so a re-run months later could load different weights
+  under the same name. Recorded as `weights_revision: null` with the reason. Not fixed
+  here — it needs a revision-pinning mechanism, and pretending otherwise in the manifest
+  would be the overclaim this section is about.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| The published tree recipe is the one the tool uses | The shell pipeline from `TREE_RECIPE` is executed with `shasum` and compared to `hash_tree()` |
+| A ground truth that moved aborts the run | Tamper the file after `hash`, score with `--handover`: `PreCommitmentError`, exit 2, no output directory |
+| The abort can be argued with | The message carries both digests, the path, and the handover timestamp |
+| Every run discloses the ground truth (F44) | `out/ground_truth.json` exists and hashes to `ground_truth_manifest_hash`; byte-identical to the input |
+| The manifest has no silent holes | `unrecorded_gaps()` is empty on a real run, and a negative control proves it can fail |
+| Every Tier 2 number names its instrument | Model, threshold, threshold source and kind present for all three, on a `--skip-tier2` run |
+| Provenance opens no network path | AST walk pins the git subcommands to local object reads |
+| The instrument table has not drifted | Evaluator defaults read by AST, without importing torch |
+| Battery composition is declared, not derived | Per-check counts equal `eligible_for` counts from the probe file |
+| Findings are still deterministic | `findings_of` byte-identical across two runs; digest equal; digest moves when an answer changes |
+
+**305 tests.** Four gates clean.
+
+### Deliberately not done
+
+- **`report.v2.schema.json` writer, Markdown attestation, evidence bundle, Tier 2
+  distributions.** The rest of Phase C.
+- **Model revision pinning.** Recorded as a gap in the manifest, not solved.
+- **The `authorisation` block.** Phase I owns the gate; recording a block the config
+  cannot express would be a field that is always null for no stated reason.
+- **Signing the release artefacts.** Phase B2. The manifest records the commit; cosign,
+  SLSA and SBOM are a separate piece of work, and Docker stays deferred at your
+  instruction.

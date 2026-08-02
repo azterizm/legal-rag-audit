@@ -23,23 +23,37 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from legal_rag_audit.interchange.ground_truth import GroundTruth  # noqa: E402
+from legal_rag_audit.interchange.handover import Handover  # noqa: E402
 from legal_rag_audit.interchange.probe import Probe  # noqa: E402
 from legal_rag_audit.interchange.response import (  # noqa: E402
     CaptureNotes,
     Response,
 )
+from legal_rag_audit.interchange.run_manifest import RunManifest  # noqa: E402
 from legal_rag_audit.interchange.versions import (  # noqa: E402
     GROUND_TRUTH_V1,
+    HANDOVER_V1,
     PROBES_V1,
     RESPONSES_V1,
+    RUN_MANIFEST_V1,
 )
 
 OUT_DIR = REPO_ROOT / "src" / "legal_rag_audit" / "interchange" / "jsonschema"
+
+VERSIONS = (
+    PROBES_V1,
+    RESPONSES_V1,
+    GROUND_TRUTH_V1,
+    HANDOVER_V1,
+    RUN_MANIFEST_V1,
+)
 
 TITLES = {
     PROBES_V1: "Probe file (JSONL) — one probe per line",
     RESPONSES_V1: "Response file (JSONL) — one record per line",
     GROUND_TRUTH_V1: "Ground-truth manifest (JSON) — withheld, hashed at handover",
+    HANDOVER_V1: "Handover record (JSON) — the pre-commitment, published before the run",
+    RUN_MANIFEST_V1: "Run manifest (JSON) — the provenance block of a report",
 }
 
 
@@ -75,6 +89,10 @@ def build(version: str) -> dict:
         }
     elif version == GROUND_TRUTH_V1:
         schema = require_schema_field(GroundTruth.model_json_schema(by_alias=True))
+    elif version == HANDOVER_V1:
+        schema = require_schema_field(Handover.model_json_schema(by_alias=True))
+    elif version == RUN_MANIFEST_V1:
+        schema = require_schema_field(RunManifest.model_json_schema(by_alias=True))
     else:
         raise SystemExit(f"unknown version {version!r}")
 
@@ -98,7 +116,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     drift = []
 
-    for version in (PROBES_V1, RESPONSES_V1, GROUND_TRUTH_V1):
+    for version in VERSIONS:
         path = OUT_DIR / f"{version}.schema.json"
         rendered = json.dumps(build(version), indent=2, sort_keys=True) + "\n"
 
@@ -117,7 +135,7 @@ def main() -> int:
         print("\n  Regenerate with: python3 scripts/gen_schemas.py")
         return 1
 
-    print("  clean" if args.check else f"  {3} schemas generated")
+    print("  clean" if args.check else f"  {len(VERSIONS)} schemas generated")
     return 0
 
 

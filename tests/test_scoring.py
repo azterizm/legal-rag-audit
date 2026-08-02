@@ -31,6 +31,7 @@ from legal_rag_audit.score import (
     PASS,
     REGISTRY,
     ScoringError,
+    findings_of,
     score,
 )
 
@@ -500,19 +501,49 @@ def test_the_registry_tier_matches_what_the_check_actually_runs():
 
 def test_the_same_inputs_produce_a_byte_identical_report(tmp_path):
     """Scoring determinism is a precondition, not a finding. Without it the report
-    dies to 'run it again'."""
+    dies to 'run it again'.
+
+    The claim is about the *findings*. The manifest records when the run happened and
+    cannot be identical between two runs — a determinism test that compared it whole
+    would either fail on the clock or, worse, pass only when two runs landed inside
+    the same second. `findings_of` is where that line is drawn.
+    """
     paths = make_run(tmp_path, answers(build_probes()))
-    first = json.dumps(score(*paths, skip_tier2=True), indent=2, sort_keys=True)
-    second = json.dumps(score(*paths, skip_tier2=True), indent=2, sort_keys=True)
+    first = json.dumps(findings_of(score(*paths, skip_tier2=True)), sort_keys=True)
+    second = json.dumps(findings_of(score(*paths, skip_tier2=True)), sort_keys=True)
     assert first == second
 
 
 def test_report_field_order_is_stable(tmp_path):
     """Byte-identical, not merely equal: a diff between two runs must be empty."""
     paths = make_run(tmp_path, answers(build_probes()))
-    first = json.dumps(score(*paths, skip_tier2=True))
-    second = json.dumps(score(*paths, skip_tier2=True))
+    first = json.dumps(findings_of(score(*paths, skip_tier2=True)))
+    second = json.dumps(findings_of(score(*paths, skip_tier2=True)))
     assert first == second
+
+
+def test_the_findings_digest_is_the_determinism_claim_in_one_string(tmp_path):
+    """NF2 has to be checkable by the person who received the report, not only by us.
+
+    Two runs, one digest to compare. Without this the claim is 'diff the files', which
+    fails on the timestamps and teaches the reader to ignore the difference.
+    """
+    paths = make_run(tmp_path, answers(build_probes()))
+    first = score(*paths, skip_tier2=True)
+    second = score(*paths, skip_tier2=True)
+
+    assert (
+        first["manifest"]["scoring"]["findings_hash"]
+        == second["manifest"]["scoring"]["findings_hash"]
+    )
+    # And it is a digest of the findings, not of a constant: change an answer and it
+    # moves. A hash that never changes proves nothing about what it covers.
+    other = run(tmp_path, answers(build_probes(), text="Something else entirely."))
+    if json.dumps(findings_of(other)) != json.dumps(findings_of(first)):
+        assert (
+            other["manifest"]["scoring"]["findings_hash"]
+            != first["manifest"]["scoring"]["findings_hash"]
+        )
 
 
 # ------------------------------------------------------------------- ground truth use

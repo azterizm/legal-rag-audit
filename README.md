@@ -80,7 +80,8 @@ they are being built against a written spec, not discovered.
 | `generate` / `score` mode split; scoring offline and enforced | **Shipped** — `validate` pending |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
 | Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 14 Tier 1, 3 Tier 2 |
-| Run manifest: hashes, seed, signed commit SHA, model versions | Specified — v0.2.0 |
+| Run manifest: hashes, commit SHA, model versions, battery composition | **Shipped** — seed and corpus mode arrive with `plant` |
+| `hash` handover record; `score` refuses a ground truth that moved | **Shipped** |
 | `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | **Shipped** |
 | Authorisation gating on injection / canary families | Specified — v0.2.0 |
 | Seeded plant generation with collision guard | Specified — v0.3.0 |
@@ -89,10 +90,10 @@ they are being built against a written spec, not discovered.
 | Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
 
 The mode split has landed: `generate` and `score` are separate commands, and scoring
-runs with sockets disabled. What a current report still lacks is the run manifest — the
-hashes, seed and signed commit SHA that let a stranger reconstruct the run — and the
-Markdown attestation. Until those arrive, a report is readable evidence but not yet a
-handover document.
+runs with sockets disabled. The run manifest has landed with it, so a report now carries
+the digests, the build that produced it and the instrument behind every Tier 2 number.
+What it still lacks is the Markdown attestation and the evidence bundle. Until those
+arrive, a report is complete evidence in a format built for a machine to read.
 
 ---
 
@@ -172,14 +173,21 @@ flowchart TD
         RET_EP["Retrieval<br/>(/search)"]
     end
     subgraph Ours ["Our side — offline, no sockets"]
+        HASH["hash<br/>(provenance/)"]
+        HANDOVER["handover.json"]
         SCORE["score<br/>(score/)"]
         E_EXACT["Tier 1 — exact-match & inverted<br/>(no model in the path)"]
         E_NLI["Tier 2 — entailment & relevance<br/>(local NLI / embeddings)"]
-        REP_JSON["report.json"]
+        REP_JSON["out/report.json<br/>+ manifest.json<br/>+ ground_truth.json"]
     end
 
     BATTERY -->|questions only| PROBES["probes.jsonl"]
     BATTERY -->|expectations, withheld| GT["ground_truth.json"]
+    PROBES --> HASH
+    GT --> HASH
+    CORPUS --> HASH
+    HASH -->|digests, published first| HANDOVER
+    HANDOVER ==>|pre-commitment| SCORE
     PROBES --> GEN
     CFG --> GEN
     CORPUS --> GEN
@@ -430,8 +438,20 @@ target:
 
 ## Running it
 
-Two steps, on two machines. The first is yours and optional; the second is ours and
-offline.
+Three steps, on two machines. The middle one is yours and optional; the outer two are
+ours, and the last runs offline.
+
+```bash
+legal-rag-audit hash --corpus ./corpus/ \
+                     --probes probes.jsonl \
+                     --ground-truth ground_truth.json \
+                     -o handover.json
+```
+
+Digests the three artefacts and writes the handover record. **This runs before you see a
+single answer**, and the record goes to you with the corpus — it is what fixes the sealed
+half of the battery while it is still sealed. Every digest carries the recipe that
+recomputes it, so verifying one needs `shasum` and nothing of ours.
 
 ```bash
 export TARGET_API_KEY="your-api-token"
@@ -446,10 +466,17 @@ has no verdict to be wrong about. Replace it with your own harness if you prefer
 legal-rag-audit score --responses responses.jsonl \
                       --ground-truth ground_truth.json \
                       --probes probes.jsonl \
+                      --handover handover.json \
                       -o out/
 ```
 
-Writes `out/report.json`. Opens no sockets: an attempt raises.
+Writes `out/report.json`, `out/manifest.json`, and `out/ground_truth.json` — the sealed
+half, disclosed in full, hashing to the value you were given at step one. Opens no
+sockets: an attempt raises.
+
+Passing `--handover` makes the pre-commitment a precondition rather than an undertaking.
+The digests are recomputed, and **a ground truth that changed since handover aborts the
+run** — no report, exit 2. That constraint is on us, not on you.
 
 ```bash
 legal-rag-audit schema --print responses.v1
@@ -461,7 +488,7 @@ Exit codes are a contract: **0** ran clean, **1** ran with findings, **2** did n
 a setup problem, with a diagnosis. A run that could not start never exits the way a clean
 one does.
 
-Still to come: `validate` (v0.2.1), `plant` and `hash` (v0.3.0).
+Still to come: `validate` (v0.2.1) and `plant` (v0.3.0).
 
 ---
 
@@ -579,6 +606,11 @@ after seeing your answers.**
 You receive `ground_truth_manifest_hash` at handover, before a single response exists.
 You receive the manifest itself with the report, and can verify it hashes to the value
 you were already holding. There is no window in which we could have edited it.
+
+Both halves are the tool's job, not ours to remember. `hash` writes the record; `score`
+recomputes the digests and **refuses to produce a report** if the ground truth moved, and
+writes the manifest into the output directory beside the findings on every run. If we
+edited the key after seeing your answers, there is no report to argue about.
 
 Without that, every finding is answerable with one sentence — *"you decided what counted
 as a failure once you saw the failure"* — and there is no way to refute it. The hash makes

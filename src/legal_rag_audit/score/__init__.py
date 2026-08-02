@@ -7,12 +7,14 @@ anything" a checkable property rather than a claim (§5.1, F18).
 
 from .offline import OfflineViolation, enforce_offline, is_enforced, offline
 from .registry import BY_NAME, REGISTRY, CheckSpec, tier1_checks, tier2_checks
+from .output import write_bundle
 from .run import (
     FAIL,
     NOT_CAPTURED,
     NOT_ELIGIBLE,
     PASS,
     ScoringError,
+    findings_of,
     score,
     score_check,
 )
@@ -28,10 +30,12 @@ __all__ = [
     "REGISTRY",
     "ScoringError",
     "enforce_offline",
+    "findings_of",
     "is_enforced",
     "offline",
     "score",
     "score_check",
     "tier1_checks",
     "tier2_checks",
+    "write_bundle",
 ]

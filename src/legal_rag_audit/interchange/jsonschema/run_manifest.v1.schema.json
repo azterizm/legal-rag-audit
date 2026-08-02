@@ -1,0 +1,560 @@
+{
+  "$defs": {
+    "BatteryComposition": {
+      "additionalProperties": false,
+      "description": "What was asked, declared before the run (\u00a73.5, F39).",
+      "properties": {
+        "eligible_by_check": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Eligible By Check",
+          "type": "object"
+        },
+        "no_correct_answer_probes": {
+          "title": "No Correct Answer Probes",
+          "type": "integer"
+        },
+        "positive_probes": {
+          "title": "Positive Probes",
+          "type": "integer"
+        },
+        "total_probes": {
+          "title": "Total Probes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_probes",
+        "positive_probes",
+        "no_correct_answer_probes"
+      ],
+      "title": "BatteryComposition",
+      "type": "object"
+    },
+    "CaptureSummary": {
+      "additionalProperties": false,
+      "description": "What the response file did not carry, and which checks that disabled.",
+      "properties": {
+        "checks_not_run": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Checks Not Run",
+          "type": "object"
+        },
+        "citations_captured": {
+          "title": "Citations Captured",
+          "type": "boolean"
+        },
+        "document_ids_supplied": {
+          "title": "Document Ids Supplied",
+          "type": "boolean"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "records": {
+          "title": "Records",
+          "type": "integer"
+        },
+        "retrieved_chunks_captured": {
+          "title": "Retrieved Chunks Captured",
+          "type": "boolean"
+        },
+        "transport_errors": {
+          "title": "Transport Errors",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "records",
+        "transport_errors",
+        "citations_captured",
+        "retrieved_chunks_captured",
+        "document_ids_supplied"
+      ],
+      "title": "CaptureSummary",
+      "type": "object"
+    },
+    "InputDigests": {
+      "additionalProperties": false,
+      "description": "The bytes this run was computed from.",
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "corpus_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corpus Hash"
+        },
+        "corpus_hash_provenance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corpus Hash Provenance"
+        },
+        "ground_truth_manifest_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ground Truth Manifest Hash"
+        },
+        "query_set_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Set Hash"
+        },
+        "recipes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Recipes",
+          "type": "object"
+        },
+        "responses_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Responses Hash"
+        }
+      },
+      "title": "InputDigests",
+      "type": "object"
+    },
+    "InstrumentRecord": {
+      "additionalProperties": false,
+      "description": "One model in the scoring path, and the line it was read against.",
+      "properties": {
+        "check": {
+          "title": "Check",
+          "type": "string"
+        },
+        "library": {
+          "title": "Library",
+          "type": "string"
+        },
+        "library_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Library Version"
+        },
+        "library_version_unavailable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Library Version Unavailable"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        },
+        "threshold_kind": {
+          "title": "Threshold Kind",
+          "type": "string"
+        },
+        "threshold_source": {
+          "title": "Threshold Source",
+          "type": "string"
+        },
+        "weights_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weights Revision"
+        },
+        "weights_revision_unavailable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weights Revision Unavailable"
+        }
+      },
+      "required": [
+        "check",
+        "role",
+        "model",
+        "library",
+        "threshold",
+        "threshold_source",
+        "threshold_kind"
+      ],
+      "title": "InstrumentRecord",
+      "type": "object"
+    },
+    "PreCommitment": {
+      "additionalProperties": false,
+      "description": "Whether the answer key was fixed before the responses existed (\u00a73.6).",
+      "properties": {
+        "carried": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Carried",
+          "type": "array"
+        },
+        "created": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created"
+        },
+        "handover_record": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handover Record"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "absent"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "verified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verified",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "PreCommitment",
+      "type": "object"
+    },
+    "RunFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "corpus_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corpus Mode"
+        },
+        "eligibility_source": {
+          "title": "Eligibility Source",
+          "type": "string"
+        },
+        "finished": {
+          "title": "Finished",
+          "type": "string"
+        },
+        "passes": {
+          "title": "Passes",
+          "type": "integer"
+        },
+        "remote_scoring": {
+          "default": false,
+          "title": "Remote Scoring",
+          "type": "boolean"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "started": {
+          "title": "Started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "started",
+        "finished",
+        "passes",
+        "eligibility_source"
+      ],
+      "title": "RunFacts",
+      "type": "object"
+    },
+    "ScoringFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "checks_registered": {
+          "title": "Checks Registered",
+          "type": "integer"
+        },
+        "findings_hash": {
+          "title": "Findings Hash",
+          "type": "string"
+        },
+        "findings_hash_recipe": {
+          "title": "Findings Hash Recipe",
+          "type": "string"
+        },
+        "instruments": {
+          "items": {
+            "$ref": "#/$defs/InstrumentRecord"
+          },
+          "title": "Instruments",
+          "type": "array"
+        },
+        "tier2_skipped": {
+          "title": "Tier2 Skipped",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "checks_registered",
+        "tier2_skipped",
+        "findings_hash",
+        "findings_hash_recipe"
+      ],
+      "title": "ScoringFacts",
+      "type": "object"
+    },
+    "ToolProvenance": {
+      "additionalProperties": false,
+      "description": "Which build produced the report.",
+      "properties": {
+        "commit_sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit Sha"
+        },
+        "commit_signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit Signature"
+        },
+        "commit_signature_verify_with": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit Signature Verify With"
+        },
+        "commit_unavailable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commit Unavailable"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "working_tree": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Working Tree"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "ToolProvenance",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/legal-rag-audit/schemas/run_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authorisation": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Authorisation"
+    },
+    "battery": {
+      "$ref": "#/$defs/BatteryComposition"
+    },
+    "capture": {
+      "$ref": "#/$defs/CaptureSummary"
+    },
+    "inputs": {
+      "$ref": "#/$defs/InputDigests"
+    },
+    "not_recorded": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Not Recorded",
+      "type": "object"
+    },
+    "pre_commitment": {
+      "$ref": "#/$defs/PreCommitment"
+    },
+    "run": {
+      "$ref": "#/$defs/RunFacts"
+    },
+    "schema": {
+      "const": "run_manifest.v1",
+      "default": "run_manifest.v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "scoring": {
+      "$ref": "#/$defs/ScoringFacts"
+    },
+    "tool": {
+      "$ref": "#/$defs/ToolProvenance"
+    }
+  },
+  "required": [
+    "schema",
+    "tool",
+    "inputs",
+    "pre_commitment",
+    "run",
+    "scoring",
+    "battery",
+    "capture"
+  ],
+  "title": "Run manifest (JSON) \u2014 the provenance block of a report",
+  "type": "object"
+}

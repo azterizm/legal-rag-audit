@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "HashedArtefact": {
+      "additionalProperties": false,
+      "description": "One digest, with everything needed to recompute it independently.",
+      "properties": {
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Files"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "tree"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "recipe": {
+          "title": "Recipe",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "digest",
+        "recipe"
+      ],
+      "title": "HashedArtefact",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/legal-rag-audit/schemas/handover.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What was committed to, when, and by which build.",
+  "properties": {
+    "corpus": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HashedArtefact"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created": {
+      "title": "Created",
+      "type": "string"
+    },
+    "ground_truth": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HashedArtefact"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "probes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HashedArtefact"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema": {
+      "const": "handover.v1",
+      "default": "handover.v1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "tool_commit_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Commit Sha"
+    },
+    "tool_version": {
+      "title": "Tool Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "created",
+    "tool_version"
+  ],
+  "title": "Handover record (JSON) \u2014 the pre-commitment, published before the run",
+  "type": "object"
+}
