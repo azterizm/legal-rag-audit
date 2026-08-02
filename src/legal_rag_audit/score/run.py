@@ -26,12 +26,15 @@ from contextlib import nullcontext
 from typing import Any, Optional
 
 from ..config import ThresholdsConfig
+from ..instruments import BY_CHECK, threshold_for
 from ..interchange import (
     GroundTruth,
     PreCommitment,
     Probe,
+    Report,
     Response,
     ResponseFile,
+    build_findings,
     load_ground_truth,
     load_handover,
     load_probes,
@@ -39,6 +42,7 @@ from ..interchange import (
     now_utc,
 )
 from ..provenance import build_run_manifest, verify_pre_commitment
+from . import distributions, evidence
 from .offline import offline
 from .output import write_bundle
 from .registry import (
@@ -191,6 +195,15 @@ def score_check(
     if outcome.partial:
         result["partial"] = outcome.partial
 
+    # F24. A Tier 2 verdict without its distribution hides how close to the line every
+    # record sat, and hides that the line is a setting of ours rather than a standard.
+    if spec.name in BY_CHECK:
+        result["distribution"] = distributions.build(
+            spec.name,
+            outcome.detail.get("per_probe", []),
+            threshold_for(spec.name, thresholds),
+        )
+
     if outcome.scored == 0 and outcome.status != FAIL:
         # Eligible, capable, and nothing was actually compared. That is not a pass.
         result["status"] = NOT_CAPTURED
@@ -334,13 +347,33 @@ def _score(
 
     passes = max((r.pass_index for r in response_file.responses), default=1)
 
-    # The findings, and nothing else. Hashed as they stand here, before the manifest
-    # is attached — NF2's byte-identical claim is about these and cannot be about a
-    # block that records when the run happened.
-    findings = {
-        "checks": {c["check"]: c for c in checks},
-        "summary": _summarise(checks),
-        "capture": {
+    # F41. Collected before the manifest so the evidence index is part of what the
+    # findings digest covers — the excerpts are evidence, not decoration on top of it.
+    by_probe_id = {p.probe_id: p for p in probes}
+    grouped_responses = _by_probe(response_file.responses)
+    instances = {
+        c["check"]: evidence.collect(
+            c["check"],
+            c["tier"],
+            c.get("detail", {}),
+            by_probe_id,
+            grouped_responses,
+        )
+        for c in checks
+        if c["status"] == FAIL
+    }
+    instances = {check: rows for check, rows in instances.items() if rows}
+
+    # The findings, and nothing else — in exactly the form they appear in the file, so
+    # the digest below is one a reader can recompute from the document they hold.
+    # NF2's byte-identical claim is about these and cannot be about a block that
+    # records when the run happened.
+    findings = build_findings(
+        tier1=[c["check"] for c in checks if c["tier"] == 1],
+        tier2=[c["check"] for c in checks if c["tier"] == 2],
+        checks={c["check"]: c for c in checks},
+        summary=_summarise(checks),
+        capture={
             "eligibility_source": eligibility_source,
             "citations_captured": response_file.citations_captured(),
             "retrieved_chunks_captured": response_file.retrieved_chunks_captured(),
@@ -354,7 +387,11 @@ def _score(
                 1 for r in response_file.responses if not r.usable
             ),
         },
-    }
+        evidence={
+            check: {"file": f"evidence/{check}.md", "instances": len(rows)}
+            for check, rows in instances.items()
+        },
+    )
 
     manifest = build_run_manifest(
         findings=findings,
@@ -376,11 +413,11 @@ def _score(
     )
 
     # Manifest first: a reader meets the provenance before the findings, which is the
-    # order the argument has to be made in.
-    report = {"manifest": manifest.to_document(), **findings}
+    # order the argument has to be made in (§10.1).
+    report = Report(manifest=manifest, **findings).to_document()
 
     if output_dir:
-        write_bundle(output_dir, report, ground_truth_path)
+        write_bundle(output_dir, report, ground_truth_path, instances, probes)
 
     return report
 
@@ -392,7 +429,7 @@ def findings_of(report: dict[str, Any]) -> dict[str, Any]:
     Both halves of that are correct, and a determinism test that could not tell them
     apart would be testing the clock.
     """
-    return {k: v for k, v in report.items() if k != "manifest"}
+    return {k: v for k, v in report.items() if k not in ("manifest", "schema")}
 
 
 def _probes_from(response_file: ResponseFile, ground_truth: GroundTruth) -> list[Probe]:

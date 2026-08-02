@@ -75,7 +75,8 @@ they are being built against a written spec, not discovered.
 | 17 evaluators against a configured endpoint | **Shipped** — single pass |
 | Licensed-content reproduction check (#18) | Specified — v0.4.0 |
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
-| JSON report with per-check counts and tiers | **Shipped** — Markdown attestation pending |
+| JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
+| Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
 | Non-root container, dependency layer installed under `--require-hashes` | **Shipped** — single image; two-image split pending |
 | `generate` / `score` mode split; scoring offline and enforced | **Shipped** — `validate` pending |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
@@ -90,10 +91,14 @@ they are being built against a written spec, not discovered.
 | Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
 
 The mode split has landed: `generate` and `score` are separate commands, and scoring
-runs with sockets disabled. The run manifest has landed with it, so a report now carries
-the digests, the build that produced it and the instrument behind every Tier 2 number.
-What it still lacks is the Markdown attestation and the evidence bundle. Until those
-arrive, a report is complete evidence in a format built for a machine to read.
+runs with sockets disabled. A run now produces a complete handover document — the
+provenance manifest, the findings, verbatim excerpts for every Tier 1 instance, the
+distribution behind every Tier 2 number, and the ground truth disclosed in full.
+
+Two sections of the attestation are deliberately left for a person to write: the
+representation delta needs their published claims quoted with a URL and a date, and the
+mechanism section needs an architectural reading this diagnostic cannot make. Generating
+either would be the failure the tool exists to measure in other people's systems.
 
 ---
 
@@ -178,7 +183,7 @@ flowchart TD
         SCORE["score<br/>(score/)"]
         E_EXACT["Tier 1 — exact-match & inverted<br/>(no model in the path)"]
         E_NLI["Tier 2 — entailment & relevance<br/>(local NLI / embeddings)"]
-        REP_JSON["out/report.json<br/>+ manifest.json<br/>+ ground_truth.json"]
+        REP_JSON["out/<br/>report.json · report.md<br/>manifest.json · ground_truth.json<br/>evidence/"]
     end
 
     BATTERY -->|questions only| PROBES["probes.jsonl"]
@@ -387,10 +392,12 @@ thresholds:
 
 > **`thresholds` are settings, not standards.** `0.85` and `0.02` are numbers someone put
 > in a config file. They are not a published benchmark and nothing about them is
-> authoritative. v0.2.0 renames the block `display_thresholds` and draws each one as a
-> marked line on a distribution rather than a pass/fail gate, because presenting a
-> setting as a standard is the exact failure this project exists to measure in other
-> people's systems. The rename makes the misuse impossible to commit by accident.
+> authoritative. Every Tier 2 result is now reported as a **distribution with the line
+> marked** rather than a bare pass/fail, and the report states where each number came
+> from — including `abstention`'s `0.5`, which is hard-coded in the evaluator and cannot
+> be set here at all. Presenting a setting as a standard is the exact failure this
+> project exists to measure in other people's systems. The `display_thresholds` rename
+> that makes the misuse harder to commit by accident is still to come.
 
 ### Endpoints
 
@@ -470,9 +477,17 @@ legal-rag-audit score --responses responses.jsonl \
                       -o out/
 ```
 
-Writes `out/report.json`, `out/manifest.json`, and `out/ground_truth.json` — the sealed
-half, disclosed in full, hashing to the value you were given at step one. Opens no
-sockets: an attempt raises.
+Writes:
+
+| File | What it is |
+|---|---|
+| `report.json` | The evidence. A published contract — `legal-rag-audit schema --print report.v2` |
+| `report.md` | The testimony. Provenance, findings, limits, in that order |
+| `manifest.json` | Digests, build, instruments — also embedded in `report.json` |
+| `ground_truth.json` | The sealed half, disclosed in full, hashing to the value you were given at step one |
+| `evidence/` | One file per Tier 1 finding: the excerpt, the token, the probe, the pass |
+
+Opens no sockets: an attempt raises.
 
 Passing `--handover` makes the pre-commitment a precondition rather than an undertaking.
 The digests are recomputed, and **a ground truth that changed since handover aborts the

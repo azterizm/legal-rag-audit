@@ -40,6 +40,16 @@ class Instrument:
     #: kinds of threshold and a report that prints both as "threshold: 0.85" invites
     #: the wrong reading.
     kind: str
+    #: Key in the evaluator's per-record result holding the number the line is read
+    #: against. F24 reports these as a distribution, because a Tier 2 check that
+    #: printed only PASS/FAIL would hide how close to the line every record sat —
+    #: and the line is a setting of ours, not a standard.
+    score_key: str
+    #: `higher` or `lower`. Which side of the line passes. Both exist here, and a
+    #: distribution drawn without it marks the line on the wrong side.
+    better: str
+    #: What the number is, for the axis label on the page.
+    unit: str
 
 
 INSTRUMENTS: Final[tuple[Instrument, ...]] = (
@@ -50,6 +60,9 @@ INSTRUMENTS: Final[tuple[Instrument, ...]] = (
         setting="max_hallucination_rate",
         default=0.02,
         kind="rate tolerated across the eligible probes",
+        score_key="score",
+        better="lower",
+        unit="fraction of the answer's claims the retrieved chunks did not entail",
     ),
     Instrument(
         check="retrieval_relevance",
@@ -58,6 +71,9 @@ INSTRUMENTS: Final[tuple[Instrument, ...]] = (
         setting="min_retrieval_relevance",
         default=0.85,
         kind="cosine similarity line a chunk must clear",
+        score_key="avg_similarity",
+        better="higher",
+        unit="mean cosine similarity between the query and the retrieved chunks",
     ),
     Instrument(
         check="abstention",
@@ -70,6 +86,9 @@ INSTRUMENTS: Final[tuple[Instrument, ...]] = (
         setting=None,
         default=0.5,
         kind="entailment line against canonical refusal phrasings",
+        score_key="max_similarity",
+        better="higher",
+        unit="strongest entailment against any canonical refusal",
     ),
 )
 
@@ -129,3 +148,11 @@ def describe(thresholds: Any) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def threshold_for(check: str, thresholds: Any) -> float:
+    """The line this check is read against, wherever it comes from."""
+    instrument = BY_CHECK[check]
+    if instrument.setting is None:
+        return instrument.default
+    return getattr(thresholds, instrument.setting, instrument.default)

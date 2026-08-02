@@ -25,6 +25,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from legal_rag_audit.interchange.ground_truth import GroundTruth  # noqa: E402
 from legal_rag_audit.interchange.handover import Handover  # noqa: E402
 from legal_rag_audit.interchange.probe import Probe  # noqa: E402
+from legal_rag_audit.interchange.report import Report  # noqa: E402
 from legal_rag_audit.interchange.response import (  # noqa: E402
     CaptureNotes,
     Response,
@@ -34,6 +35,7 @@ from legal_rag_audit.interchange.versions import (  # noqa: E402
     GROUND_TRUTH_V1,
     HANDOVER_V1,
     PROBES_V1,
+    REPORT_V2,
     RESPONSES_V1,
     RUN_MANIFEST_V1,
 )
@@ -46,6 +48,7 @@ VERSIONS = (
     GROUND_TRUTH_V1,
     HANDOVER_V1,
     RUN_MANIFEST_V1,
+    REPORT_V2,
 )
 
 TITLES = {
@@ -54,6 +57,7 @@ TITLES = {
     GROUND_TRUTH_V1: "Ground-truth manifest (JSON) — withheld, hashed at handover",
     HANDOVER_V1: "Handover record (JSON) — the pre-commitment, published before the run",
     RUN_MANIFEST_V1: "Run manifest (JSON) — the provenance block of a report",
+    REPORT_V2: "Report (JSON) — the evidence; report.md is the testimony",
 }
 
 
@@ -93,6 +97,8 @@ def build(version: str) -> dict:
         schema = require_schema_field(Handover.model_json_schema(by_alias=True))
     elif version == RUN_MANIFEST_V1:
         schema = require_schema_field(RunManifest.model_json_schema(by_alias=True))
+    elif version == REPORT_V2:
+        schema = require_schema_field(Report.model_json_schema(by_alias=True))
     else:
         raise SystemExit(f"unknown version {version!r}")
 

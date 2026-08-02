@@ -17,6 +17,11 @@ RESPONSES_V1: Final = "responses.v1"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
 HANDOVER_V1: Final = "handover.v1"
 RUN_MANIFEST_V1: Final = "run_manifest.v1"
+#: The one identifier whose number tracks the *tool* generation rather than the
+#: schema's, because §6.6 names the file `report.v2.schema.json` and the artefact is
+#: already discussed under that name. The rule above still applies from here: a
+#: breaking change makes `report.v3`.
+REPORT_V2: Final = "report.v2"
 
 #: Every schema identifier this build can read. Keys are the identifier as it appears
 #: in the file; values are what the identifier is for, used in error messages.
@@ -26,6 +31,7 @@ SUPPORTED: Final[dict[str, str]] = {
     GROUND_TRUTH_V1: "ground-truth manifest",
     HANDOVER_V1: "pre-commitment record",
     RUN_MANIFEST_V1: "run manifest",
+    REPORT_V2: "report",
 }
 
 

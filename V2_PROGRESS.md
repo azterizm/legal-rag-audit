@@ -13,7 +13,7 @@ exists to measure in other people's systems.
 | **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
 | **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
 | **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
-| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | 🟡 tiering, manifest, `hash` and F44 done; report.v2 writer, Markdown attestation, evidence bundle, Tier 2 distributions outstanding |
+| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ⬜ |
 | **E** | N-pass execution + variance reporting | 1 d | ⬜ |
 | **F** | `validate` mode | 0.5 d | ⬜ |
@@ -572,7 +572,7 @@ as it is, because 17 is what currently runs.
 
 ---
 
-## Phase C (part 1) — the pre-commitment, made operable 🟡
+## Phase C (part 1) — the pre-commitment, made operable ✅
 
 **Date: 2026-08-02.** The `hash` subcommand (F38), the run manifest emitter (§6.5, F23)
 and the disclosure writer (F44). The rest of Phase C — the `report.v2.schema.json`
@@ -720,3 +720,127 @@ the form a client can check.
 - **Signing the release artefacts.** Phase B2. The manifest records the commit; cosign,
   SLSA and SBOM are a separate piece of work, and Docker stays deferred at your
   instruction.
+
+---
+
+## Phase C (part 2) — the report ✅
+
+**Date: 2026-08-02.** `report.v2` as a published contract, the Markdown attestation
+(§10.6), the evidence bundle (F41) and Tier 2 distributions (F24). Phase C is complete
+apart from signed release artefacts, which belong to B2.
+
+A scoring run now writes a whole handover document rather than a JSON file:
+
+```
+out/
+  report.json        the evidence — a published contract
+  report.md          the testimony — §10.1 order, deal-enders first
+  manifest.json      provenance, also embedded in report.json
+  ground_truth.json  the sealed half, disclosed (F44)
+  evidence/          verbatim excerpts per Tier 1 finding (F41)
+```
+
+### One deviation from §6.6, and the reason
+
+The sketch nests checks under `tier1` and `tier2`. Shipped, they are keyed by name,
+with `tier1` / `tier2` as ordered *lists of names* carrying §10.1's reading order.
+
+Nesting makes a check's address depend on its tier — and the tier is expected to
+change. `abstention` is registered Tier 2 today because the shipped implementation runs
+a cross-encoder over refusal phrasings; §8.1 puts it in Tier 1 once Phase D rewrites it
+as an inverted check. A consumer whose path to a check breaks because we improved how
+it is scored would be right to complain.
+
+### The evidence bundle distinguishes two failures that are not the same
+
+- **A token appeared that should not have.** The evidence is a 160-character window of
+  the answer around the match, with the offset. Short, exact, disputable.
+- **A token that should have appeared did not.** There is no excerpt to take. The whole
+  answer is reproduced, because the claim is about everything the system *did* say —
+  calling a fragment an "excerpt" would imply we chose it, and a reader would be right
+  to ask what was in the rest.
+
+Attribution turned out to be a third shape and is handled as such: an *orphaned claim*
+is a fact that appeared without its source, so the absent string is the source marker,
+not the fact. Taking every string in the row would have named the correctly attributed
+facts as absent.
+
+Tier 1 only. Tier 2 evidence is the distribution — quoting a sentence a model scored
+0.83 would dress a threshold decision as an observation.
+
+### Tier 2 distributions (F24)
+
+Ten buckets across [0, 1], **fixed rather than fitted to the observed range**, because
+buckets that move with the data make two runs of the same check incomparable and
+comparability is the reason for printing a distribution at all. The line is marked on
+the correct side per instrument — `retrieval_relevance` passes at or above,
+`unsupported_assertions` at or below — and every distribution states that the line is a
+setting of this run rather than a published standard.
+
+The number is read by a key declared in `instruments.py` rather than guessed, because
+the three evaluators call it three different things (`score`, `avg_similarity`,
+`max_similarity`). A test asserts each evaluator still emits its declared key: if one
+is renamed, every Tier 2 distribution silently empties and nothing else fails.
+
+### What the attestation will not write
+
+§5 (representation delta) and §6 (mechanisms) are marked placeholders. The delta needs
+their published claims quoted with a URL and a retrieval date; the mechanism section
+needs an architectural reading. Neither is available to the tool, and generating either
+would be the failure this project exists to measure in other people's systems. The
+document says so in place of guessing, which is also the more useful instruction to the
+person who has to write them.
+
+### Found while building it
+
+- **The findings digest would have been unrecomputable.** The first version hashed the
+  raw check dicts and told the reader to hash the published document. The models fill
+  in absent optional fields as nulls, so the two differ for every check that ran
+  cleanly — the recipe printed in §7 of the attestation would have been a false
+  instruction, which is worse than printing none. `build_findings()` now serialises
+  through the models *before* hashing, and a test asserts
+  `hash_json(findings_of(report))` equals the recorded digest.
+- **The attestation makes a promise; a test now checks it.** §7 states the findings
+  digest a rescore will produce. A test rescores and compares. That section is where a
+  sceptical reader goes first, and a wrong number there discredits the document.
+- **`citations_captured` is three-valued and the model made it two.** `None` means *the
+  file does not say* — a response file where every record happens to carry null
+  citations is indistinguishable from one whose producer never looked. Coercing it to
+  `false` in the report would have claimed knowledge we do not have.
+- **Two defects in the rendered document**, found by reading the output rather than the
+  tests: a cross-reference to §6 for a section that was §7, and section numbering that
+  drifted from the §10.6 skeleton. The not-tested list now sits inside Limits, which is
+  where the skeleton puts it, restoring 0–8.
+- **`cache.py` has no quotable evidence.** `CacheInvalidationEvaluator` returns
+  `has_stale_data` / `has_fresh_data` as booleans and never echoes the tokens it was
+  given, so `index_freshness` instances fall back to reproducing the whole answer. It
+  is exempted by name with that reason, not silently. Phase D's rewrite is where the
+  tokens come back.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| A report from a failing profile leads with Tier 1 and quotes it | End-to-end run with planted leaks; `evidence/cross_tenant_leakage.md` carries the canary in context with its offset |
+| A clean profile reads as a defensible attestation with a real not-tested section | Single-probe clean run: "No Tier 1 check produced a finding", and every `NOT_ELIGIBLE` / `NOT_CAPTURED` check still on the page under "Neither of these is a pass" |
+| The findings digest is recomputable from the published document | `hash_json(findings_of(report))` equals `manifest.scoring.findings_hash` |
+| §7's reproduction promise holds | Rescore, compare against the digest the document printed |
+| No headline rate anywhere in the attestation | Regex over the rendered document finds no `%` |
+| No invented mechanism | §6 is a marked placeholder; asserted |
+| Tier 2 lines are marked on the correct side | Both directions tested against their real instruments |
+| Buckets are comparable between runs | Tight and spread distributions produce identical bucket ranges |
+| Distribution keys have not drifted | AST reads each evaluator's emitted string constants without importing torch |
+| Every failing evaluator contributes evidence | AST walk over all evaluators; exemptions are named with reasons |
+| The report matches its published schema | Generated from the model; every required field asserted present in a real report |
+
+**353 tests.** Four gates clean.
+
+### Deliberately not done
+
+- **Signed release artefacts.** Phase B2 — SBOM, cosign, SLSA. The manifest records the
+  commit and hands over `git verify-commit`; that is as far as this phase goes.
+- **The `display_thresholds` rename.** The distributions now carry the "setting, not a
+  standard" statement on every Tier 2 result, which was the substance of it. The rename
+  is cosmetic by comparison and belongs with the §6.1 config v2 work.
+- **Variance across passes.** §10.6 §4 says so on the page when `passes` is 1. Phase E.
+- **Docker**, still deferred at your instruction.
