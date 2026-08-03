@@ -70,14 +70,17 @@ they are being built against a written spec, not discovered.
 | Capability | Status |
 |---|---|
 | Local-only scoring; no third-party inference path | **Shipped** |
-| Exact version pins + hash-pinned lockfiles, split by mode | **Shipped** |
+| Exact version pins + hash-pinned lockfiles, split by mode | **Shipped** — four layers, cross-checked for agreement |
+| CycloneDX SBOM per dependency layer | **Shipped** — generated from the lockfiles, drift-gated |
+| Public CI: tests, gates, `pip-audit` / Bandit / Semgrep / Trivy | **Shipped** — actions pinned by commit SHA |
+| Signed releases: GPG tag, SLSA provenance, cosign | **Shipped** — `scripts/verify_release.sh` is the reader's half |
 | Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
 | 17 evaluators against a configured endpoint | **Shipped** — single pass, all rewritten to the §8.2 recipes |
 | Licensed-content reproduction check (#18) | Specified — v0.4.0 |
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
 | JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
 | Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
-| Non-root container, dependency layer installed under `--require-hashes` | **Shipped** — single image; two-image split pending |
+| Non-root container, base image pinned by digest, deps under `--require-hashes` | **Shipped** — single image; the split, publication and image signing are pending |
 | `generate` / `score` mode split; scoring offline and enforced | **Shipped** — `validate` pending |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
 | Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 15 Tier 1, 2 Tier 2 |
@@ -276,8 +279,9 @@ target responses to anyone. `scripts/check_no_remote_scoring.sh` and
 exactly one class of outbound connection: `generate` talks to the target endpoints named
 in your `config.yaml`, and nothing else. No telemetry, no phone-home, no update check, no
 analytics. Model weights download once from the Hugging Face hub on first use and can be
-pre-baked into the image for a fully offline run. Once the mode split lands, `score`
-opens no sockets at all and asserts that at start-up.
+pre-baked into the image for a fully offline run. `score` opens no sockets at all and
+asserts that at start-up — CI runs the whole `plant → hash → score` route inside an empty
+network namespace, where a socket call fails rather than resolving.
 
 > v1 shipped an optional Gemini path for three of the evaluators. It has been removed.
 > That path made a third party a sub-processor and made each run a data-transfer event,
@@ -289,8 +293,13 @@ opens no sockets at all and asserts that at start-up.
 ### When you do run it
 
 Deny egress rather than disabling it. A delayed payload still has to make a call
-eventually, and it fails whenever it fires — timing is irrelevant under denial. The
-recommended invocation, once the two images ship:
+eventually, and it fails whenever it fires — timing is irrelevant under denial.
+
+The shipped `Dockerfile` runs as UID 65532 and installs from the hash-pinned lockfile on
+a base image pinned by digest. What it is **not** yet: split into a small `generate`
+image and a `score` image, published, or signed. So the invocation below is the target,
+not something you can run today — building it yourself from this repository is the
+current path, and the artefact route below is the better one.
 
 ```bash
 docker run --rm --network=host-allowlist-only \
@@ -342,6 +351,13 @@ or tampered artefact fails the install instead of reaching the run.
 | `requirements/generate.txt` | 14 packages — the `generate`/`validate` runtime |
 | `requirements/score.txt` | 66 packages — adds the local scoring models |
 | `requirements/dev.txt` | 92 packages — adds test and release tooling |
+| `requirements/audit.txt` | 100 packages — the security scanners, installed by CI only |
+
+The scanners are a fourth layer rather than four more lines in `dev.txt`, for the same
+reason `generate` and `score` are split: the set a person installs should be the set they
+need. Semgrep alone pulls several dozen transitive packages, and burying them in the file
+a contributor runs `pip install -r` against would undo the property that makes reading the
+dependency list feasible.
 
 The lockfiles are generated, never hand-edited. Change `requirements/*.in`, then run
 `./scripts/lock.sh`. They are resolved universally, so one file installs correctly on
@@ -349,6 +365,42 @@ macOS arm64 and Linux x86_64 rather than silently disagreeing per platform.
 
 Scoring downloads two model weights on first use (~500MB total). Pre-warm them if the run
 host has no outbound access.
+
+---
+
+## Supply chain and provenance
+
+The full position, with the command next to every claim, is in
+[`SECURITY.md`](SECURITY.md). The short version:
+
+| Question | Answer | Check it yourself |
+|---|---|---|
+| What is in it? | CycloneDX 1.6 SBOM per layer, in [`sbom/`](sbom/) | `python3 scripts/gen_sbom.py --check` |
+| Are the bytes fixed? | Every entry `==` and hashed | `python3 scripts/check_pins.py` |
+| Is it scanned? | `pip-audit`, Bandit, Semgrep, Trivy — weekly and on push | [the runs](https://github.com/azterizm/legal-audit-rag/actions/workflows/security.yml) |
+| Who published this release? | GPG-signed tag, verified before the build starts | `./scripts/verify_release.sh <tag>` |
+| Was it built from that commit? | SLSA provenance from a public workflow | same script |
+| Is this the same file? | Cosign signature in the public Rekor log | same script |
+
+Two decisions worth stating rather than leaving to be discovered.
+
+**The SBOMs are generated from the lockfiles, not from an installed environment.** An
+environment SBOM describes whatever happened to be on the machine that ran the scanner;
+the lockfile is what the repository commits to, and its hashes are the same bytes
+`--require-hashes` enforces at install time. They also carry the real resolution graph, so
+you can see that torch arrives through `sentence-transformers` rather than because we
+asked for it. One per layer, because a merged document listing torch would misdescribe
+what a target installs — the only question they are asking.
+
+**Every CI action is pinned to a commit SHA, never a tag.** A tag is a mutable pointer:
+`actions/checkout@v7` runs whatever its owner moves that tag to. Pinning the whole
+dependency tree to its bytes and then trusting six mutable references in CI would leave
+the claim resting on the weakest link in it. Same for the Dockerfile's base image.
+`tests/test_supply_chain.py` fails the build if an unpinned reference appears.
+
+**Link the runs, not a badge.** A badge asserts a state. A link shows the command, the
+version, the output and the date, and lets you re-run the whole thing on a fork — the
+free version of a third-party audit, and unlike a paid one it does not go stale.
 
 ---
 
@@ -856,7 +908,10 @@ Acceptance gates:
 Asserts there is no remote-scoring vendor, credential or endpoint anywhere in
 `src/legal_rag_audit/`, that no scoring code imports an HTTP client, that
 `internal_experiments/` is excluded from both the wheel and the image, and that no claim
-in this README is made without its scope attached.
+in a published document is made without its scope attached. That last check covers
+`README.md`, `SECURITY.md`, `docs/threat-model.md` and `docs/responses-schema.md` — it
+was widened from the README alone in Phase B2, and the first run over the new set found
+the schema document asserting *"nothing is sent anywhere"* with no scope on it.
 
 ```bash
 python3 scripts/check_pins.py
@@ -875,14 +930,36 @@ Asserts the published JSON Schemas still match the pydantic models that enforce 
 The schemas are generated, never hand-edited: a published contract that `score` would
 reject is worse than none, because it sends someone away to build the wrong thing.
 
+```bash
+python3 scripts/gen_sbom.py --check
+```
+
+Asserts the committed SBOMs still describe the lockfiles. Same ratchet: a dependency bump
+that forgets the SBOM leaves a published document describing software nobody installs.
+Regenerating from an unchanged lockfile produces a byte-identical document — no
+generation timestamp, and a serial number derived from the lockfile's own digest — which
+is what makes a drift check possible at all.
+
 Changing a dependency:
 
 ```bash
 ./scripts/lock.sh
 ```
 
-Edit `requirements/*.in`, run that, commit the `.in` and `.txt` together. Never hand-edit
-a lockfile — one that cannot be regenerated is not a lockfile.
+Edit `requirements/*.in`, run that, commit the `.in` and `.txt` together, then regenerate
+the SBOMs with `python3 scripts/gen_sbom.py`. Never hand-edit a lockfile — one that cannot
+be regenerated is not a lockfile.
+
+Cutting a release:
+
+```bash
+git tag -s v0.2.0 -m "v0.2.0" && git push origin v0.2.0
+```
+
+The tag must be signed and annotated. `release.yml` verifies the signature **before** it
+builds anything — a pipeline that builds first has already spent its provenance on an
+unverified commit — then attests, signs and publishes. Anyone can check the result with
+`./scripts/verify_release.sh v0.2.0`.
 
 `internal_experiments/` is not installed, not imported, not collected by pytest and not
 copied into the image. Read `internal_experiments/README.md` before touching anything in
@@ -893,5 +970,8 @@ it.
 ## Reference
 
 `V2_FULL_PLAN.md` is the full specification — evidence model, evaluator contracts,
-interchange schemas, threat model and execution plan. `V2_PROGRESS.md` tracks what has
-landed. This README is the summary; where they disagree, the plan wins.
+interchange schemas and execution plan. `V2_PROGRESS.md` tracks what has landed.
+[`SECURITY.md`](SECURITY.md) is the supply-chain and release-verification position, and
+[`docs/threat-model.md`](docs/threat-model.md) states the threat model split by
+configuration, because a blanket claim would be false against a real corpus. This README
+is the summary; where they disagree, the plan wins.

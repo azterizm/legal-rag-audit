@@ -7,6 +7,11 @@ internal_experiments/
 # VCS and local state
 .git/
 .gitignore
+
+# CI definitions and the release signing key. Both are public and neither is harmful in
+# a layer, but neither does anything inside one either — and the smallest image that
+# still works is the one a reviewer can finish reading.
+.github/
 .venv/
 venv/
 env/

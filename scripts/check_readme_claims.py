@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Phase A acceptance gate: the README makes no unqualified claim.
+"""Phase A acceptance gate: no published document makes an unqualified claim.
 
 Mechanical enforcement of V2_FULL_PLAN.md Appendix D. Four rules, checked per
 paragraph, because scoping has to sit in the same paragraph as the claim — a footnote
 does not count (§4.2).
+
+Widened in Phase B2 from the README to every published document. The first run over the
+new set found `docs/responses-schema.md` asserting *"nothing is sent anywhere"* with no
+scope attached, in a file handed to third parties implementing the interchange format —
+a stronger claim than the README was allowed to make, in a document nobody was checking.
 
     1. Determinism is a property of the scoring. Any paragraph asserting it must say so
        in the same paragraph.
@@ -20,7 +25,20 @@ import re
 import sys
 from pathlib import Path
 
-README = Path(__file__).resolve().parents[1] / "README.md"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: Every published document that makes a claim about the tool, not only the README.
+#:
+#: Phase B2 added SECURITY.md and docs/threat-model.md — two documents whose entire
+#: subject is what the tool does and does not do, written for the reader least willing
+#: to take any of it on trust. Leaving them outside the gate would have put the
+#: strongest claims in the repository under the weakest scrutiny in it.
+DOCUMENTS = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "SECURITY.md",
+    REPO_ROOT / "docs" / "threat-model.md",
+    REPO_ROOT / "docs" / "responses-schema.md",
+)
 
 BANNED_WORDS = ["comprehensive", "robust", "best practice", "naive"]
 
@@ -55,30 +73,28 @@ def paragraphs(text: str):
         line_no += block.count("\n") + 2
 
 
-def main() -> int:
-    if not README.exists():
-        print(f"FAIL: {README} not found")
-        return 1
-
-    text = README.read_text(encoding="utf-8")
+def check(path: Path) -> list[str]:
+    """Every Appendix D rule, against one document."""
+    name = path.relative_to(REPO_ROOT)
+    text = path.read_text(encoding="utf-8")
     failures = []
 
     for line_no, block in paragraphs(text):
         if DETERMINISM_TRIGGER.search(block) and not DETERMINISM_SCOPE.search(block):
             failures.append(
-                f"README.md:{line_no}: determinism asserted without scoping it to "
+                f"{name}:{line_no}: determinism asserted without scoping it to "
                 f"scoring in the same paragraph"
             )
         if EXFIL_TRIGGER.search(block) and not EXFIL_SCOPE.search(block):
             failures.append(
-                f"README.md:{line_no}: exfiltration claim not scoped to the local "
+                f"{name}:{line_no}: exfiltration claim not scoped to the local "
                 f"path in the same paragraph"
             )
 
     for match in RATE_PATTERN.finditer(text):
         line_no = text[: match.start()].count("\n") + 1
         failures.append(
-            f"README.md:{line_no}: 'hallucination rate' is not a check this tool "
+            f"{name}:{line_no}: 'hallucination rate' is not a check this tool "
             f"reports; use the mechanical check names (§10.5)"
         )
 
@@ -86,21 +102,31 @@ def main() -> int:
     for word in BANNED_WORDS:
         for match in re.finditer(rf"\b{re.escape(word)}\b", lowered):
             line_no = text[: match.start()].count("\n") + 1
-            failures.append(f"README.md:{line_no}: banned vocabulary: {word!r}")
+            failures.append(f"{name}:{line_no}: banned vocabulary: {word!r}")
     for pattern in BANNED_PATTERNS:
         for match in re.finditer(pattern, lowered):
             line_no = text[: match.start()].count("\n") + 1
-            failures.append(
-                f"README.md:{line_no}: banned vocabulary: {match.group(0)!r}"
-            )
+            failures.append(f"{name}:{line_no}: banned vocabulary: {match.group(0)!r}")
+
+    return failures
+
+
+def main() -> int:
+    failures: list[str] = []
+
+    for path in DOCUMENTS:
+        if not path.exists():
+            failures.append(f"{path.relative_to(REPO_ROOT)}: not found")
+            continue
+        failures.extend(check(path))
 
     if failures:
-        print("FAIL: README claims are not scoped:")
+        print("FAIL: published claims are not scoped:")
         for f in sorted(set(failures)):
             print(f"  {f}")
         return 1
 
-    print("  clean")
+    print(f"  clean ({len(DOCUMENTS)} documents)")
     return 0
 
 

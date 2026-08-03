@@ -1,0 +1,138 @@
+# Public security scanning, with linkable runs (§12.6).
+#
+# The point is not the badge. A badge asserts a state; a link to a run shows a stranger
+# the command, the version, the output and the date, and lets them re-run it themselves
+# on a fork. That is the free version of a third-party audit, and unlike a paid audit it
+# does not go stale in three months.
+#
+# Scheduled as well as on push, because a dependency set that was clean when it was
+# pinned does not stay clean. The pins are exact by design (NF11) — which means a new
+# advisory against a pinned version is something only a scheduled scan will find, and
+# somebody has to be told rather than the range quietly resolving past it.
+#
+# Every action pinned by commit SHA. See the note in ci.yml.
+
+name: security
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+  schedule:
+    # Mondays, 07:00 UTC. Advisories arrive on their own schedule, not on ours.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    name: dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the audit layer, hash-verified
+        run: python3 -m pip install --require-hashes -r requirements/audit.txt
+
+      # Every layer, separately. A vulnerability in the score layer is a different
+      # statement from one in generate: generate is what a *target* installs on their
+      # own machine, so an advisory there is their exposure, not ours. Merging the two
+      # into one pass/fail would erase the distinction the whole architecture exists to
+      # make.
+      #
+      # --no-deps because the lockfile is already the complete resolved set; without it
+      # pip-audit re-resolves and audits its own opinion of the tree rather than ours.
+      - name: Audit the generate layer — what a target installs
+        run: pip-audit --no-deps -r requirements/generate.txt --progress-spinner off
+
+      - name: Audit the score layer — what runs on our machine
+        run: pip-audit --no-deps -r requirements/score.txt --progress-spinner off
+
+      - name: Audit the dev layer
+        run: pip-audit --no-deps -r requirements/dev.txt --progress-spinner off
+
+      - name: Audit the audit layer
+        run: pip-audit --no-deps -r requirements/audit.txt --progress-spinner off
+
+  static-analysis:
+    name: static analysis (bandit, semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the audit layer, hash-verified
+        run: python3 -m pip install --require-hashes -r requirements/audit.txt
+
+      # src/ only. internal_experiments/ holds the removed remote-scoring path and is in
+      # neither the wheel nor an image (scripts/check_no_remote_scoring.sh asserts that);
+      # scanning it would report findings against code that does not ship, which is the
+      # kind of noise that trains a reader to skip the security tab.
+      - name: Bandit
+        run: bandit --recursive src/legal_rag_audit --format screen
+
+      # The rules are fetched from the public registry at run time, so a Semgrep result
+      # is scoped to the rules published on the day it ran. Recorded in SECURITY.md
+      # rather than left implicit — it is the one part of this pipeline that is not
+      # pinned, and pretending otherwise would undercut everything that is.
+      - name: Semgrep
+        run: |
+          semgrep scan \
+            --config p/python \
+            --config p/security-audit \
+            --error \
+            --metrics=off \
+            src/legal_rag_audit
+
+  filesystem-scan:
+    name: filesystem scan (trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `fs`, not `image`. There is no image yet — the container work is deliberately
+      # last, and scanning an image we have not built would be a workflow that passes by
+      # having nothing to do. The image scan is added in the same change as the
+      # Dockerfile, not before it.
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  sbom:
+    name: SBOM is valid CycloneDX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the audit layer, hash-verified
+        run: python3 -m pip install --require-hashes -r requirements/audit.txt
+
+      # We generate the SBOMs by hand from the lockfiles (scripts/gen_sbom.py says why),
+      # so the claim "these are CycloneDX 1.6" needs a validator we did not write.
+      - name: Validate against the published CycloneDX 1.6 schema
+        run: python3 scripts/validate_sbom.py
+
+      - name: SBOMs still describe the lockfiles
+        run: python3 scripts/gen_sbom.py --check

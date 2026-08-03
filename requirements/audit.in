@@ -1,0 +1,26 @@
+# Security scanners. Installed by CI only — never by a developer, never in an image.
+#
+# A fourth layer rather than a handful of extra lines in dev.in, for the same reason
+# generate and score are split: the set a person installs should be the set they need.
+# Semgrep alone pulls several dozen transitive packages, and burying them in the file a
+# contributor runs `pip install -r` against would undo the property that makes
+# "read the dependency list in an afternoon" true.
+#
+# Pinned and hashed like every other layer. A scanner resolved at CI time is a statement
+# about the scanner that happened to be current that morning, which is exactly the class
+# of claim this project refuses to make about anything else.
+#
+# What this does NOT pin: Semgrep's *rules*. `--config p/python` fetches from the public
+# registry at run time, so a Semgrep result is scoped to the rules published that day.
+# Stated in SECURITY.md rather than left for a reader to discover.
+#
+# Edit this file, then run scripts/lock.sh. Never edit audit.txt by hand.
+bandit>=1.9.4
+pip-audit>=2.10.1
+semgrep>=1.172.0
+
+# Validates sbom/*.cdx.json against the official CycloneDX 1.6 schema. We generate the
+# SBOMs ourselves (scripts/gen_sbom.py explains why), so something other than our own
+# reading of the specification has to say they are well formed — otherwise "CycloneDX"
+# is a claim about a file we also wrote the validator for.
+cyclonedx-python-lib[json-validation]>=11.11.0

@@ -64,7 +64,7 @@ else
     status=1
 fi
 
-echo "==> Checking README carries no unqualified determinism or exfiltration claim"
+echo "==> Checking published documents carry no unqualified claim"
 python3 scripts/check_readme_claims.py || status=1
 
 if [ "${status}" -eq 0 ]; then

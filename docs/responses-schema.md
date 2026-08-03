@@ -191,5 +191,9 @@ the run, so the expectations cannot have been fitted to what came back. The repo
 every denominator, names every check that did not run and why, and separates what was
 measured from what was inferred.
 
-Nothing is sent anywhere. `score` opens no sockets — an attempt raises — and the
-documented invocation runs it in a container with `--network=none`.
+Scoring is local and offline: `score` opens no sockets, and an attempt raises rather than
+being quietly allowed. CI asserts it by running the whole route — `plant`, `hash`,
+`score` — inside an empty network namespace, where a socket call fails instead of
+resolving. The published image that would package this with egress denied does not exist
+yet; until it does, the guarantee rests on that namespace test and on `score` importing
+nothing from `transport/`.

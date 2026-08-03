@@ -12,7 +12,7 @@ exists to measure in other people's systems.
 | **A** | Remove the remote-scoring path; rescope README claims | 0.5 d | ✅ 2026-08-01 |
 | **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
 | **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
-| **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
+| **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | ✅ 2026-08-03 *(cosign signs blobs; image signing ships with the image split)* |
 | **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
 | **E** | N-pass execution + variance reporting | 1 d | ⬜ |
@@ -1117,3 +1117,202 @@ than hedged.
 
 **447 tests.** Four gates clean.
 
+
+---
+
+## Phase B2 — supply chain ✅
+
+The objection this phase answers arrives on the first call and is not answerable with
+*"it's open source"*: **is your tool safe to run?** Anyone can publish code, and stars
+measure popularity rather than safety. §12's governing principle is not to earn trust but
+to make trust unnecessary — every control makes the tool's behaviour constrained and
+observable rather than believed.
+
+So the test applied to each deliverable here was: *does a stranger have a command?* Not a
+badge, not an assurance, a command that works in a clone they made themselves.
+
+### The four layers, and the disagreement nothing was checking
+
+Security scanners became a fourth dependency layer, `audit`, rather than four more lines
+in `dev.in`. Semgrep alone pulls several dozen transitive packages, and burying them in
+the file a contributor runs `pip install -r` against would undo the property that makes
+*"read the dependency list in an afternoon"* true. Pinned and hashed like every other
+layer: a scanner resolved at CI time is a statement about whatever was current that
+morning, which is the class of claim this project refuses to make about anything else.
+
+Adding a fourth chance to disagree surfaced that **nothing was checking the first three
+agreed.** `score` is `generate` plus the ML stack, `dev` is `score` plus tooling — but
+each lockfile is resolved independently, so nothing made `httpx` the same version in
+`generate.txt` and `score.txt`. The dependency-boundary tests would have been exercising
+one version and the shipped scorer another, and both would have passed. `check_pins.py`
+gained a fifth property for it. Same reasoning as everywhere else in this build: the
+failure was silent by construction, and silence is what makes it worth a gate rather than
+a convention.
+
+### The SBOM, and three deviations from the bullet
+
+CycloneDX 1.6, one per layer, at `sbom/`. Three departures from what §17.2 asked for,
+each because the obvious version would have produced a document that could not be
+checked.
+
+**Generated from the lockfiles, not from an installed environment.** The usual approach
+scans a built venv. That describes whatever happened to be on the machine that ran the
+scanner; the lockfile is what the repository *commits to*, and its hashes are the same
+bytes `--require-hashes` enforces at install time. The SBOM and the installer now make
+one claim rather than two.
+
+**Committed, not generated in CI and attached to the release.** A reader gets it without
+running anything — and, more usefully, it becomes drift-gateable. `gen_sbom.py --check` is
+the fifth repository gate, the same ratchet `gen_schemas.py --check` applies to the
+published contracts.
+
+**No timestamp, and a derived serial number.** CycloneDX permits `metadata.timestamp` and
+a random `serialNumber`. Either would change on every generation and make a committed SBOM
+impossible to verify against the lockfile it claims to describe — the drift gate would be
+theatre. The serial is `uuid5` over the lockfile's SHA-256, so regeneration is
+byte-identical. Both absences are recorded *inside* each document, next to the third one
+that matters: **licences are not listed**, because a lockfile carries none and reading
+them off installed distributions would make the document depend on a machine again. That
+is the F40 rule — an omitted field and an unknown value read identically — applied to
+provenance rather than to a check result.
+
+One SBOM per layer, not one per project, because a merged document listing torch would
+misdescribe what a *target* installs, which is the only question they are asking. The
+`dependencies` array carries the real resolution graph, parsed from uv's `# via` comments,
+so a reviewer can see that torch arrives through `sentence-transformers` rather than
+because we asked for it.
+
+Validity is checked by something other than our own reading of the spec:
+`scripts/validate_sbom.py` runs the schema published by the CycloneDX project. All four
+documents validate strict 1.6.
+
+### Signing: what it establishes, and what it does not
+
+`release.yml` verifies the tag signature **before it builds anything**. A pipeline that
+builds first has already spent its provenance on an unverified commit — the attestation
+would be true and worthless. The public key is committed at
+`.github/release-signing-key.asc` with its fingerprint published in `SECURITY.md`, so
+verification needs no keyserver fetch; a keyserver fetch would mean the verification
+trusted whatever the network returned that morning, which is the substitution the
+signature exists to detect.
+
+Four properties, and the point of each is *whose word it rests on*:
+
+| Property | Rests on |
+|---|---|
+| GPG-signed tag and commit | A key committed to the repository, fingerprint published separately |
+| SHA-256 checksums | Arithmetic |
+| Cosign signature, keyless | Sigstore's public Rekor log — a signature made privately is visible as an absence |
+| SLSA build provenance | GitHub's OIDC identity, which we cannot mint |
+
+**`scripts/verify_release.sh` is the half that makes any of it worth doing.** Signing is
+a claim like any other until someone checks it, and almost nobody checks a signature they
+have to work out how to check. One command does all four, imports the key into a scratch
+keyring rather than the reader's own trust store, and **refuses to continue past a failed
+tag signature** rather than collecting three green ticks underneath it. `cosign
+verify-blob` is called with `--certificate-identity`; without it, it accepts a signature
+from any Sigstore identity, which is every identity.
+
+**Cosign signs blobs, not images.** There is nothing published to sign. Image signing and
+`trivy image` ship in the same change as the `generate`/`score` image split, not before
+it — a workflow that scans an image we have not built is one that passes by having
+nothing to do.
+
+### Scanning, and the one thing that is not pinned
+
+`pip-audit`, Bandit, Semgrep, Trivy. Weekly as well as on push, because the pins are
+exact by design: nothing quietly resolves past a new advisory, so a scheduled scan is the
+only thing that will find one. All four lockfiles audit clean as of 2026-08-03.
+
+`pip-audit` runs **per layer** rather than once over everything. An advisory in
+`generate` is a *target's* exposure — that is what they install on their own machine — and
+one in `score` is ours. A single pass/fail would erase the distinction the whole
+architecture exists to make.
+
+Semgrep's **rules** are fetched from the public registry when the job runs, so a Semgrep
+result is scoped to the rules published that day. The scanner version is pinned and
+hashed like everything else; the ruleset is not. Written into `SECURITY.md` rather than
+left implicit — it is the one unpinned thing in the pipeline, and pretending otherwise
+would undercut everything that is pinned.
+
+### Mutable pointers, found in two places
+
+Every `uses:` in every workflow is a 40-character commit SHA with the tag kept as a
+trailing comment. `actions/checkout@v7` runs whatever its owner moves that tag to — the
+same substitution `--require-hashes` prevents one layer down. Pinning the whole dependency
+tree to its bytes and then trusting six mutable references in CI would leave the claim
+resting on the weakest link in it, and on the link nobody looks at.
+
+The Dockerfile had the same defect and had said so: a `TODO(B2)` noting that
+`FROM python:3.11-slim` is *"a pin in name only"*. It is now pinned by digest. That layer
+carries the interpreter, the OS packages and the TLS store, so it was the largest unpinned
+surface in the repository.
+
+`tests/test_supply_chain.py` fails the build on an unpinned `uses:` or `FROM`, on a
+pinned action with no version comment (the comment does not make the pin safer; it makes
+the diff readable, which decides whether a reviewer notices the pin changing), on a
+workflow that does not declare `contents: read`, and on write or `id-token: write`
+permissions anywhere but the one release job — a second job with `id-token: write` can
+mint a Sigstore identity as this repository, which is the entire basis of the provenance
+claim.
+
+### Egress, asserted a second way
+
+`tests/test_dependency_boundary.py` proves the artefact route by *uninstalling httpx*: no
+HTTP client is reachable, so no request can be made. CI now proves it the other way — the
+client is installed and working, and the network itself is gone. The step runs
+`plant → hash → score` under `unshare --map-root-user --net`, in an empty network
+namespace where a socket call fails rather than resolving.
+
+Both are worth having. The first says our code does not import a transport; the second
+says it does not need one. A client asking *"what does this thing talk to while it runs"*
+is asking the second question, and the answer should be a build step rather than a
+paragraph. The script asserts it can *not* reach the network before it does anything, so
+a runner where `unshare` silently did nothing fails loudly instead of reporting a
+guarantee that was never tested.
+
+### Found while building it
+
+- **The claims gate only ever read `README.md`.** Appendix D's discipline applies to
+  anything published, and Phase B2 added two documents whose entire subject is what the
+  tool does and does not do. Widening the gate to `SECURITY.md`,
+  `docs/threat-model.md` and `docs/responses-schema.md` failed on its first run:
+  `responses-schema.md` asserted *"Nothing is sent anywhere"* with no scope attached — a
+  stronger claim than the README was permitted to make, sitting in the file handed to
+  third parties implementing the interchange format. The strongest claim in the
+  repository was in the document under the least scrutiny.
+- **The same paragraph claimed a container invocation that does not exist.** It described
+  `score` running *"in a container with `--network=none`"* as the documented invocation.
+  There is a Dockerfile, but no published image and no split; the honest replacement
+  points at the namespace test and at `score` importing nothing from `transport/`.
+- **The README said the mode split was pending.** It shipped in Phase B. A status table
+  that lags the code is the same defect as a report that lags the run.
+- **My own wording tripped the widened gate.** *"The SBOMs are deterministic"* was flagged
+  for asserting determinism without scoping it to scoring. Rewording to *"regenerating
+  from an unchanged lockfile produces a byte-identical document"* is the more precise
+  claim anyway — which is generally what happens when a blunt rule fires on true text.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| Every artefact of a release is signed and verifiable by a stranger with public tooling | `verify_release.sh` covers all four properties; `tests/test_supply_chain.py` asserts it checks everything `release.yml` produces, and with a certificate identity rather than any identity |
+| SBOM generated and attached | Four CycloneDX 1.6 documents, committed and validated against the published schema; drift-gated; attached to every release |
+| `pip-audit` clean | All four lockfiles, 2026-08-03, no known vulnerabilities |
+| Public CI with linkable runs | `ci.yml`, `security.yml`, `release.yml`; weekly schedule; every action SHA-pinned |
+| Hardened default invocation | **Partially met, and stated as such.** The README's primary invocation is the artefact route, where nothing of ours runs. §12.3's `docker run` is documented as the target, not as something runnable today |
+
+**488 tests.** Five gates clean.
+
+### Deliberately not done
+
+- **Cosign-signed images, `trivy image`, and the `generate`/`score` image split.** Docker
+  is last by instruction. Signing an image requires publishing one, so all three land in
+  that change together.
+- **A paid code audit.** §12.6: thousands of pounds, stale in months, invisible to anyone
+  who has not already replied. Trigger is the first buyer who asks for one.
+- **Pinning Semgrep's ruleset.** Vendoring the rules would pin them and freeze them; the
+  registry version stays current. The trade is recorded in `SECURITY.md` rather than
+  decided silently.
+- **Signing the SBOMs separately from the release artefacts.** They are in `dist/`, so
+  they carry the same cosign signature and the same provenance attestation as the wheel.

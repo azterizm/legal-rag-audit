@@ -1,0 +1,179 @@
+# Release: build, attest, sign, publish — on a GPG-signed tag and nothing else.
+#
+# What a release has to answer, for someone who has never met us (§12.5):
+#
+#   "who published this"     — a GPG-signed tag, verified before anything is built
+#   "was it built from that" — SLSA build provenance from a public workflow
+#   "is this the same file"  — a cosign signature over each artefact, keyless
+#   "what is inside it"      — a CycloneDX SBOM per dependency layer
+#
+# None of the four is our word. The tag signature is checked against a key the reader
+# fetches themselves; the provenance is issued by GitHub's OIDC identity, not by us; the
+# cosign signature is logged in the public Rekor transparency log, so a signature that
+# existed only for one person to see would be visible as an absence. Whoever holds this
+# repository cannot quietly re-sign an artefact after the fact.
+#
+# scripts/verify_release.sh is the reader's half of this file. Whenever a step here
+# changes, that script has to change with it, or the instructions stop describing the
+# artefacts.
+#
+# NOT in this workflow, and deliberately: container images. There is no Dockerfile yet —
+# the container work is last by decision, not oversight — so cosign signs the wheel, the
+# sdist and the SBOMs. Image signing and `trivy image` arrive in the same change as the
+# Dockerfile, and §12.3's hardened `docker run` invocation with it.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing signed tag to release"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  verify-tag:
+    name: the tag is signed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      # First, before anything is built. A release pipeline that builds and then checks
+      # the signature has already spent its provenance on an unverified commit.
+      #
+      # The public key is committed to the repository so this step needs no secret and
+      # no keyserver — a keyserver fetch here would mean the build trusted whatever the
+      # network returned that morning.
+      - name: Verify the tag signature
+        run: |
+          set -euo pipefail
+          gpg --import .github/release-signing-key.asc
+          TAG="${{ inputs.tag || github.ref_name }}"
+          if ! git cat-file -t "$TAG" | grep -q '^tag$'; then
+            echo "::error::$TAG is a lightweight tag. A release tag must be annotated"
+            echo "and signed: git tag -s $TAG -m '...'"
+            exit 1
+          fi
+          git verify-tag --raw "$TAG" 2>&1 | tee /tmp/verify.txt
+          grep -q 'GOODSIG' /tmp/verify.txt
+
+      - name: Verify the tagged commit is signed
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag || github.ref_name }}"
+          git verify-commit --raw "$TAG^{commit}" 2>&1 | tee /tmp/commit.txt
+          grep -q 'GOODSIG' /tmp/commit.txt
+
+  build:
+    name: build, attest and sign
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload assets
+      id-token: write # OIDC, for both the SLSA attestation and keyless cosign
+      attestations: write # store the provenance attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the dev layer, hash-verified
+        run: python3 -m pip install --require-hashes -r requirements/dev.txt
+
+      # The gates run again here rather than being taken on trust from ci.yml. A tag can
+      # point at a commit that never passed CI, and "it was green on main" is not a
+      # property of the artefact being signed.
+      - name: Repository gates
+        run: |
+          ./scripts/check_no_remote_scoring.sh
+          python3 scripts/check_pins.py
+          python3 scripts/check_readme_claims.py
+          python3 -m pip install --no-deps -e .
+          python3 scripts/gen_schemas.py --check
+          python3 scripts/gen_sbom.py --check
+
+      - name: Build the wheel and sdist
+        run: python3 -m build --outdir dist/
+
+      - name: Collect the SBOMs
+        run: cp sbom/*.cdx.json dist/
+
+      # SLSA build provenance: a signed statement that these exact bytes came out of
+      # this workflow, at this commit, in this repository. Issued against GitHub's OIDC
+      # identity — we cannot mint one for an artefact built on a laptop, which is the
+      # entire value of it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: "dist/*"
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless. There is no signing key to store, rotate or lose, and no secret whose
+      # compromise would let someone sign as us after the fact — the identity is the
+      # workflow, and every signature is written to the public Rekor log.
+      - name: Sign every artefact
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          for artefact in dist/*; do
+            cosign sign-blob \
+              --output-signature "${artefact}.sig" \
+              --output-certificate "${artefact}.pem" \
+              "${artefact}"
+          done
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" dist/* \
+            --title "$TAG" \
+            --verify-tag \
+            --notes "$(cat <<'NOTES'
+          Every artefact in this release is signed and independently verifiable.
+
+          ```bash
+          ./scripts/verify_release.sh <tag>
+          ```
+
+          That script checks four things, none of which rest on our word: the tag's GPG
+          signature, the SLSA build provenance issued by GitHub's OIDC identity, the
+          cosign signature recorded in the public Rekor transparency log, and the
+          SHA-256 of each file. See SECURITY.md for what each one does and does not
+          establish.
+
+          The `*.cdx.json` files are CycloneDX 1.6 SBOMs, one per dependency layer.
+          `legal-rag-audit-generate.cdx.json` is the only one that describes what a
+          target installs on their own machine.
+          NOTES
+          )"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artefacts
+          path: dist/

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Assert the dependency set is exactly pinned and internally consistent.
 
-Four properties, all of which have to hold for NF11 (a third party reconstructs the run
+Five properties, all of which have to hold for NF11 (a third party reconstructs the run
 from the manifest and the repository at a signed commit):
 
   1. Nothing is loose. Every requirement in pyproject.toml and every line in the
@@ -14,6 +14,11 @@ from the manifest and the repository at a signed commit):
      the one a *target* installs, so a base install must not reach the ML stack. Checked
      against the generate lockfile rather than against a list of banned names, because a
      list only catches the packages someone thought to ban.
+  5. The layers agree with each other. `score` is `generate` plus the ML stack, `dev` is
+     `score` plus tooling. A package in two lockfiles at two versions means the boundary
+     tests exercise different software from the one that ships, and nothing else in the
+     build would say so. Added in Phase B2 alongside the `audit` layer, which made a
+     fourth chance to disagree.
 
 Run via scripts/lock.sh, or directly.
 """
@@ -25,7 +30,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_DIR = REPO_ROOT / "requirements"
-LAYERS = ("generate", "score", "dev")
+#: Ordered by containment: generate ⊂ score ⊂ dev. `audit` is disjoint — CI-only
+#: scanners, kept out of the set a contributor installs (see requirements/audit.in).
+LAYERS = ("generate", "score", "dev", "audit")
 
 PIN_RE = re.compile(r"^([A-Za-z0-9_.\-]+)\s*==\s*([^\s;\\]+)")
 LOOSE_RE = re.compile(r"(>=|<=|~=|!=|\s>|\s<)")
@@ -156,6 +163,38 @@ def main() -> int:
                     f"or add it to requirements/generate.in if it genuinely belongs "
                     f"in the set a target installs."
                 )
+
+    # 5: the layers agree with one another.
+    #
+    # Every lockfile is resolved from its own .in file, and uv resolves each one
+    # independently. Nothing before this made `httpx` in generate.txt and `httpx` in
+    # score.txt the same version — the boundary tests would install one and the shipped
+    # scorer the other, and both would pass. The failure is silent by construction,
+    # which is the only kind worth a gate.
+    everywhere: dict[str, dict[str, set[str]]] = {}
+    for layer in LAYERS:
+        for name, versions in locks.get(layer, {}).items():
+            everywhere.setdefault(name, {})[layer] = versions
+
+    for name, by_layer in sorted(everywhere.items()):
+        if len(by_layer) < 2:
+            continue
+        # A package may legitimately carry several versions *within* one lockfile, when
+        # environment markers select different ones per platform. The layers must offer
+        # the same set, not collapse to a single version.
+        distinct = {frozenset(versions) for versions in by_layer.values()}
+        if len(distinct) > 1:
+            detail = "; ".join(
+                f"{layer}={'/'.join(sorted(versions))}"
+                for layer, versions in sorted(by_layer.items())
+            )
+            failures.append(
+                f"layer disagreement: {name} is pinned differently across lockfiles "
+                f"({detail}). The layers are nested — score is generate plus the ML "
+                f"stack — so a split version means the dependency-boundary tests and "
+                f"the shipped scorer are running different software. Run "
+                f"scripts/lock.sh to resolve them together."
+            )
 
     if failures:
         print("FAIL: dependency pinning is not airtight:")

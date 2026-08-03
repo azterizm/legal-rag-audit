@@ -35,7 +35,7 @@ else
     exit 1
 fi
 
-for layer in generate score dev; do
+for layer in generate score dev audit; do
     echo "==> requirements/${layer}.txt"
     "${UV}" pip compile \
         --universal \

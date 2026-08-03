@@ -4,9 +4,21 @@
 # Dockerfile.score (adds the ML stack), per V2_FULL_PLAN.md §5.3. Until then this image
 # carries everything and is not what a target should be asked to run.
 #
-# TODO(B2): pin the base image by digest (python:3.11-slim@sha256:...) and sign the built
-# image with cosign. A tag is mutable, so it is a pin in name only.
-FROM python:3.11-slim
+# The base image is pinned by digest, not by tag. `python:3.11-slim` is a mutable
+# pointer — the same defect as `actions/checkout@v7` in a workflow, and the same one
+# `--require-hashes` exists to prevent one layer down. Pinning every Python dependency
+# to its bytes and then building on top of whatever `3.11-slim` resolved to that morning
+# would leave the whole chain resting on its weakest link.
+#
+# The trailing comment records which tag the digest was, so a bump is reviewable. Update
+# both together:
+#
+#     docker buildx imagetools inspect python:3.11-slim
+#
+# Still outstanding, and deliberately last: the Dockerfile.generate / Dockerfile.score
+# split (§5.3), publishing the images, and signing them with cosign. Image signing needs
+# published images, so it ships in the same change as the split rather than before it.
+FROM python:3.11-slim@sha256:db3ff2e1800a8581e2c48a27c3995339d47bdf046da21c7627accd3d51053a93
 
 WORKDIR /app
 

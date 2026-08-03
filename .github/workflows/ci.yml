@@ -1,0 +1,109 @@
+# Tests and the repository gates, on every push and pull request.
+#
+# Every action is pinned to a commit SHA, never a tag. A tag is a mutable pointer: an
+# action referenced as `@v5` runs whatever its owner moves that tag to, which is the
+# exact substitution `--require-hashes` exists to prevent one layer down. Pinning the
+# dependency tree and then trusting six mutable references in CI would leave the
+# supply-chain claim resting on the weakest link in it. tests/test_supply_chain.py
+# fails the build if an unpinned reference appears.
+#
+# Permissions are read-only at the top and never widened here. Releases need more; they
+# live in release.yml where the elevation is visible in isolation.
+
+name: ci
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  gates:
+    name: repository gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # The gates run before the tests, and without installing anything. Each one is a
+      # claim in the README made mechanical; a reader who does not trust the tests can
+      # still run these five commands in a clone.
+      - name: No remote scoring path
+        run: ./scripts/check_no_remote_scoring.sh
+
+      - name: Dependency pins are exact, hashed and consistent across layers
+        run: python3 scripts/check_pins.py
+
+      - name: README claims carry their scope
+        run: python3 scripts/check_readme_claims.py
+
+      - name: Published JSON Schemas match the models
+        run: |
+          python3 -m pip install --quiet --require-hashes \
+            -r requirements/generate.txt
+          python3 -m pip install --quiet --no-deps -e .
+          python3 scripts/gen_schemas.py --check
+
+      - name: SBOMs describe the lockfiles
+        run: python3 scripts/gen_sbom.py --check
+
+  test:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is `requires-python`; 3.13 is the newest the lockfiles resolve for. The
+        # lockfiles are resolved universally at 3.11, so a 3.13 run also checks that the
+        # environment markers select correctly rather than only that the code parses.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the dev layer, hash-verified
+        run: |
+          python3 -m pip install --require-hashes -r requirements/dev.txt
+          python3 -m pip install --no-deps -e .
+
+      # Not `-m "not slow"`. The slow tests are the ones that build a venv without torch
+      # and assert the boundary holds, and the boundary is the security claim — skipping
+      # them in CI would leave it asserted only in a docstring.
+      - name: Tests
+        run: python3 -m pytest -q
+
+  artefact-route:
+    name: artefact route, no network
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the generate layer, hash-verified
+        run: |
+          python3 -m pip install --require-hashes -r requirements/generate.txt
+          python3 -m pip install --no-deps -e .
+
+      # §5.1.1: plant, hash and score never touch a network. Asserted here by removing
+      # the network rather than by removing the HTTP client, which is the other half of
+      # what tests/test_dependency_boundary.py checks. `unshare -rn` drops the process
+      # into an empty network namespace — a socket call fails rather than resolving.
+      - name: plant → hash → score with no network namespace
+        run: unshare --map-root-user --net python3 .github/scripts/artefact_route.py

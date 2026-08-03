@@ -1,8 +1,14 @@
 # Development and release tooling. Never installed in either shipped image.
 #
+# The security scanners moved to audit.in in Phase B2. `pip-audit` stays here as well,
+# because a contributor changing a dependency should be able to audit it without
+# installing Semgrep — and scripts/lock.sh pins both layers in one pass, so the two
+# cannot drift apart. check_pins.py enforces that: any package in more than one lockfile
+# must be at one version.
+#
 # Edit this file, then run scripts/lock.sh. Never edit dev.txt by hand.
 -r score.in
 build>=1.3.0
-pip-audit>=2.9.0
+pip-audit>=2.10.1
 pytest>=9.1.1
 uv>=0.12.1

@@ -21,7 +21,11 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_DIR = REPO_ROOT / "requirements"
-LAYERS = ("generate", "score", "dev")
+#: `audit` joined in Phase B2 — the CI-only security scanners. It is held to the same
+#: standard as the shipped layers: a scanner resolved at CI time is a statement about
+#: whatever was current that morning, which is the class of claim this project refuses
+#: to make about anything else.
+LAYERS = ("generate", "score", "dev", "audit")
 
 PIN_RE = re.compile(r"^([A-Za-z0-9_.\-]+)\s*==\s*([^\s;\\]+)")
 
