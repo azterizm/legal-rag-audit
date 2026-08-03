@@ -122,6 +122,18 @@
           "default": null,
           "title": "Notes"
         },
+        "probes_asked_verbatim": {
+          "default": 0,
+          "title": "Probes Asked Verbatim",
+          "type": "integer"
+        },
+        "probes_asked_wrapped": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Probes Asked Wrapped",
+          "type": "array"
+        },
         "records": {
           "title": "Records",
           "type": "integer"

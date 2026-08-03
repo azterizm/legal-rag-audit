@@ -158,6 +158,18 @@ class CaptureSummary(BaseModel):
     citations_captured: bool
     retrieved_chunks_captured: bool
     document_ids_supplied: bool
+    #: Records whose `query` was exactly the probe text the handover sealed.
+    #:
+    #: The other end of the pre-commitment. Hashing the probe file fixes *which questions
+    #: were to be asked*; this is the count that were. It matters most on the artefact
+    #: route (§5.1.1), where the response file comes from the target's own harness and
+    #: this is the only mechanical link between the sealed battery and the answers.
+    probes_asked_verbatim: int = 0
+    #: Probes whose question arrived wrapped in something longer — a system preamble, a
+    #: formatting instruction. The answer still answers our question, so the finding
+    #: stands; what does not stand is the claim that it was asked verbatim, and naming
+    #: them is what stops a reader assuming otherwise.
+    probes_asked_wrapped: list[str] = Field(default_factory=list)
     #: Checks that did not run, and the reason each one gives.
     checks_not_run: dict[str, str] = Field(default_factory=dict)
     #: Verbatim from the response file's capture_notes, if it carried any.

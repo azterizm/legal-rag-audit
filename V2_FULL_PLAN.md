@@ -268,9 +268,13 @@ Acceptance: `grep -ri "gemini\|openai\|anthropic\|api_key" src/` returns nothing
 
 | Mode | Does | Network | Config needed | Who runs it |
 |---|---|---|---|---|
+| `plant` | Mints the seeded invariants, writes the corpus in two states, the probe file and the answer key | **None** | None | Us, first |
+| `hash` | Digests the corpus, probes and answer key into the handover record | **None** | None | Us, before they see anything |
 | `validate` | 3 **neutral** probes, prints raw response body + what each JSONPath extracted, suggests candidate paths, exits | Target only | `config.yaml` | Them, pre-sale, free |
 | `generate` | **Optional.** Fires the battery at their endpoints, writes `responses.jsonl` | Target only | Full `config.yaml` | Them — or replaced entirely by their own tooling |
 | `score` | Reads `responses.jsonl` + ground-truth manifest, writes report | **None. Enforced.** | None | Us |
+
+Four of the five never touch a network. **`generate` is the only mode that does, and it is the only optional one** — §5.1.1 is the route where nobody runs it.
 
 ```
                          ┌──────────────── OUR SIDE ────────────────┐
@@ -297,6 +301,33 @@ Four things the split buys:
 4. **`score` running offline with no network is a trivial review** even when they do run it.
 
 `score` enforces its own claim: on start it asserts no socket can be opened (monkeypatched socket factory raising in the scoring package, plus a documented container run with `--network=none`). A test proves it (§14.3).
+
+### 5.1.1 The artefact route — no endpoint access at all (F45)
+
+The configuration a target reaches for when they will not point our software at a live system, and it is a **first-class route, not a degraded one**. They keep the endpoint entirely: no config of ours, no credentials shared, nothing of ours executed against their infrastructure. What they return is a file.
+
+| They hold | They return |
+|---|---|
+| The planted corpus (`corpus/base/`, `corpus/revision/`) | `responses.jsonl` — one record per `(probe_id, pass_index)` |
+| The probe file, hashed at handover | `query`, `answer`, `citations`, `retrieved_chunks`, timings, per record |
+| Their own harness, eval script, or thirty lines of curl | A `capture_notes` header saying what they could and could not capture |
+
+**The route must never require an endpoint, and that is a structural property rather than an undertaking.** `plant`, `hash` and `score` import nothing from `transport/`; `score` additionally makes a socket attempt raise. §14.3 tests the whole route end to end with the transport package absent from the environment, so a change that reintroduced the coupling fails the build rather than being noticed by a client.
+
+**What the route costs, stated honestly.** Only two things change, and neither is a weakening of the findings:
+
+1. **Capture completeness is theirs to declare.** A harness that does not surface `retrieved_chunks` disables the two Tier 2 checks and moves the conditional keys to `held`; one that returns no `document_ids` disables citation integrity. All of it is `NOT_CAPTURED` on the page, never a pass, and the capture-notes header is what turns "we did not look" into a recorded fact instead of an ambiguity (F40).
+2. **Two-phase probes need them to apply the revision.** Index freshness needs the revised documents uploaded and the wait recorded. A run that cannot do that leaves the `after_revision` probes unasked — which is the true statement — rather than asking them against an unchanged corpus and reading the unchanged answer as a stale index.
+
+**What does *not* change, and this is the point.** Every Tier 1 recipe scores a token in text the client supplied, so the tier is unaffected. The pre-commitment is unaffected: the corpus, the probes and the answer key were digested before any answer existed, and `score` recomputes them. And the finding gets *harder* to dismiss, not easier — responses produced by their own harness cannot be answered with *"your tool prompted it wrong."*
+
+**Where the pre-commitment previously stopped.** Hashing the probe file fixes which questions were to be asked; it says nothing about whether they were. On this route nobody watched the questions go out, so `score` checks every record's `query` against the sealed probe text and reports one of three outcomes:
+
+- **verbatim** — counted in the manifest and printed in the report;
+- **wrapped** — the probe text sits inside a longer query, which is ordinary for a harness with a system preamble. The finding stands; the claim that the question was put verbatim does not, and the report names those probes;
+- **absent** — the query does not contain the probe text at all. The record answers a different question, so it aborts (NF9) rather than producing a finding about something nobody asked.
+
+**And the limit the route cannot close.** Nothing in this software can establish that what reached the file is what the target returned. That is stated in the report's limits rather than implied away — the guarantee on this route comes from the producer holding custody, and a guarantee that runs in their favour runs in ours too.
 
 ### 5.2 Repository layout
 
@@ -1028,6 +1059,7 @@ instrument at a stated threshold and are contestable on both. Both are labelled 
 | F42 | Pathological reference target shipped in-repo, with a documented pathology→evaluator matrix (§14) | **Should** |
 | F43 | Licensed-content reproduction check: publisher-proprietary markers matched in `retrieved_chunks` and in answers attributed to internal document IDs, with the `in_index` / `external_fetch` / `unattributed` split preserved and never collapsed | **Must** |
 | F44 | `score` writes the ground-truth manifest into the output directory alongside the report and records its hash in the run manifest, so the disclosure half of §3.6 is enforced by the tool rather than promised. Every check carries its `open` / `held` / `conditional` key (§3.6.1) on the page | **Must** |
+| F45 | **The artefact route must never require endpoint access** (§5.1.1). `plant`, `hash` and `score` import nothing from `transport/`, and a target that returns only `responses.jsonl` can be scored in full. `score` verifies every record's `query` against the sealed probe text and aborts on a record answering a different question; queries that arrived wrapped are counted and named on the page rather than passed off as verbatim | **Must** |
 
 ### 11.3 Non-functional
 
@@ -1190,6 +1222,8 @@ This is the strongest available answer to *"your harness is broken"*, it is chea
 |---|---|
 | Golden report | Frozen `responses.jsonl` + ground truth ⇒ byte-identical `report.json` (NF2) |
 | Offline scoring | `score` in a `--network=none` container succeeds; a socket attempt raises (F18) |
+| The artefact route needs no endpoint | `plant` → `hash` → `score` runs end to end in an environment with the transport dependencies absent, from a hand-written `responses.jsonl` (F45, §5.1.1) |
+| Questions are verified against the sealed probe file | A record whose query does not contain its probe's text aborts; one that wraps it is counted and named (F45) |
 | Dependency isolation | `generate` runs in a venv where `torch` is not importable (F31) |
 | Battery non-leakage | `validate` package has no import path to `probes/` or `corpus/`; its output contains no plant token (F28) |
 | Plant collision guard | 10,000 generated plants: no corpus collision, no inter-plant collision, no real-authority hit (§3.2) |
@@ -1240,7 +1274,7 @@ A run is under the line when it is: against staging or a dev instance, using the
 Escalating order of preference:
 
 1. **We generate the evidence ourselves** — where the product has a public demo, trial, sandbox or free tier. Zero labour from them; the opener becomes three concrete reproducible failures, and the £500 buys the systematic run rather than permission to start. **Bounded hard by §16 — read it before running anything against an account we signed up for.**
-2. **They produce `responses.jsonl` with their own tooling.** Most legal-tech teams already have an internal eval or QA script — we are not asking them to build anything, only to run their existing thing with our inputs.
+2. **They produce `responses.jsonl` with their own tooling** — the artefact route, §5.1.1. Most legal-tech teams already have an internal eval or QA script, so we are not asking them to build anything, only to run their existing thing with our inputs. **Nothing of ours executes against their infrastructure and no credential is shared.** Offer this before rung 3, not after it: it removes the security review, the credential request and the config from the critical path in one move, and the finding it produces is harder to argue with because they generated it.
 3. **They run `generate` against one endpoint** with our pre-written config.
 4. Full multi-endpoint integration — rung 3, not rung 1.
 

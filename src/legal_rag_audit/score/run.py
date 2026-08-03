@@ -345,6 +345,8 @@ def _score(
             f"  result into a denominator that was fixed before the run (F39)."
         )
 
+    asked = _verify_questions(probes, response_file.responses, responses_path)
+
     checks = [
         score_check(
             spec,
@@ -426,6 +428,7 @@ def _score(
         # where it came from, and how many invariants it produced (§6.5 run.seed,
         # run.corpus_mode).
         ground_truth=ground_truth,
+        asked=asked,
     )
 
     # Manifest first: a reader meets the provenance before the findings, which is the
@@ -436,6 +439,75 @@ def _score(
         write_bundle(output_dir, report, ground_truth_path, instances, probes)
 
     return report
+
+
+def _normalise(text: str) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def _verify_questions(
+    probes: list[Probe], responses: list[Response], responses_path: str
+) -> dict[str, Any]:
+    """Check every record's `query` against the probe text that was sealed at handover.
+
+    This is what makes the probe-file digest mean something on the **artefact route**
+    (§5.1.1), where we never touch the target and the response file arrives from their
+    harness. The pre-commitment fixes *which questions were to be asked*; without this,
+    *that they were asked* stays an undertaking — the same gap §3.6 closed for the answer
+    key, left open at the other end.
+
+    Three outcomes, and the middle one is why this reports rather than simply aborting:
+
+    * **verbatim** — the query is the probe text. The strongest case, and the one a
+      report can describe without qualification.
+    * **wrapped** — the probe text is present inside a longer query. Ordinary: many eval
+      harnesses add a system preamble or a formatting instruction. The answer is still an
+      answer to our question, so the finding stands; what does not stand is the claim that
+      the question was asked verbatim, and the report says which probes those were rather
+      than letting the reader assume.
+    * **absent** — the probe text is not in the query at all. The record answers a
+      different question, so scoring it against this probe's expectation would produce a
+      finding about something we never asked. That is a setup problem and it aborts (NF9).
+    """
+    by_id = {p.probe_id: p for p in probes}
+    verbatim: list[str] = []
+    wrapped: list[str] = []
+    absent: list[tuple[str, str, str]] = []
+
+    for record in responses:
+        probe = by_id.get(record.probe_id)
+        if probe is None:
+            continue
+        expected, sent = _normalise(probe.text), _normalise(record.query)
+        if sent == expected:
+            verbatim.append(record.probe_id)
+        elif expected and expected in sent:
+            if record.probe_id not in wrapped:
+                wrapped.append(record.probe_id)
+        else:
+            absent.append((record.probe_id, probe.text, record.query))
+
+    if absent:
+        detail = "\n".join(
+            f"    {probe_id}\n"
+            f"      probe file: {asked[:100]}\n"
+            f"      response:   {sent[:100] or '(empty)'}"
+            for probe_id, asked, sent in absent[:5]
+        )
+        raise ScoringError(
+            f"{responses_path}: {len(absent)} "
+            f"{'record' if len(absent) == 1 else 'records'} answer a question that is "
+            f"not the probe's.\n{detail}\n"
+            f"  The probe file was hashed at handover, so what it says was to be asked\n"
+            f"  is fixed. A record whose query does not contain its probe's text is an\n"
+            f"  answer to something else, and scoring it against this probe's\n"
+            f"  expectation would produce a finding about a question nobody asked."
+        )
+
+    return {
+        "asked_verbatim": len(verbatim),
+        "asked_wrapped": sorted(wrapped),
+    }
 
 
 def findings_of(report: dict[str, Any]) -> dict[str, Any]:

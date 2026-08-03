@@ -150,7 +150,9 @@ def _battery(probes: list[Probe]) -> BatteryComposition:
 
 
 def _capture(
-    response_file: ResponseFile, checks: list[dict[str, Any]]
+    response_file: ResponseFile,
+    checks: list[dict[str, Any]],
+    asked: Optional[dict[str, Any]] = None,
 ) -> CaptureSummary:
     notes = response_file.capture_notes
     return CaptureSummary(
@@ -159,6 +161,8 @@ def _capture(
         citations_captured=bool(response_file.citations_captured()),
         retrieved_chunks_captured=bool(response_file.retrieved_chunks_captured()),
         document_ids_supplied=bool(notes and notes.document_ids),
+        probes_asked_verbatim=(asked or {}).get("asked_verbatim", 0),
+        probes_asked_wrapped=list((asked or {}).get("asked_wrapped", [])),
         # Every check that produced no verdict, with the reason it gives. This is the
         # §6.5 line "what the response file did not carry, and which checks that
         # disabled", assembled from the checks themselves rather than restated — so
@@ -191,6 +195,7 @@ def build_run_manifest(
     pre_commitment: PreCommitment,
     handover: Optional[Handover] = None,
     ground_truth: Optional[GroundTruth] = None,
+    asked: Optional[dict[str, Any]] = None,
 ) -> RunManifest:
     """Assemble the §6.5 record for one scoring run."""
     not_recorded: dict[str, str] = {}
@@ -297,7 +302,7 @@ def build_run_manifest(
             findings_hash_recipe=JSON_RECIPE,
         ),
         battery=_battery(probes),
-        capture=_capture(response_file, checks),
+        capture=_capture(response_file, checks, asked),
         authorisation=None,
         not_recorded=dict(sorted(not_recorded.items())),
     )

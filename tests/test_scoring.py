@@ -655,3 +655,74 @@ def test_chunks_present_lets_a_chunk_reading_check_run(tmp_path):
     report = run(tmp_path, responses, probes=probes, notes=notes)
     assert report["capture"]["retrieved_chunks_captured"] is True
     assert report["checks"]["citation_integrity"]["scored"] == 1
+
+
+# --------------------------------------------- the questions were actually asked (F45)
+
+
+def test_a_query_matching_its_probe_is_counted_as_verbatim(tmp_path):
+    """The other end of the pre-commitment (§5.1.1).
+
+    Hashing the probe file fixes *which* questions were to be asked. On the artefact
+    route nobody watched them go out, so the count that were is a fact the report has to
+    carry rather than assume.
+    """
+    probes = build_probes()
+    report = run(tmp_path, answers(probes), probes=probes)
+    capture = report["manifest"]["capture"]
+
+    assert capture["probes_asked_verbatim"] == len(probes)
+    assert capture["probes_asked_wrapped"] == []
+
+
+def test_a_wrapped_question_is_named_rather_than_passed_off_as_verbatim(tmp_path):
+    """Ordinary: a harness with a system preamble. The finding stands — the answer still
+    answers our question — but the claim that it was put verbatim does not."""
+    probes = build_probes()
+    responses = answers(probes)
+    for r in responses:
+        if r.probe_id == "syn-001":
+            r.query = f"You are a helpful assistant.\n\n{r.query}\n\nAnswer concisely."
+
+    report = run(tmp_path, responses, probes=probes)
+    capture = report["manifest"]["capture"]
+
+    assert capture["probes_asked_wrapped"] == ["syn-001"]
+    assert capture["probes_asked_verbatim"] == len(probes) - 1
+    assert report["checks"]["clause_synthesis"]["status"] in (PASS, FAIL), (
+        "a wrapped question still produces a verdict — it is the same question"
+    )
+
+
+def test_a_record_answering_a_different_question_aborts(tmp_path):
+    """NF9. Scoring it against this probe's expectation would produce a finding about
+    something nobody asked, and the probe file was hashed at handover precisely so that
+    what was to be asked is not in dispute."""
+    probes = build_probes()
+    responses = answers(probes)
+    for r in responses:
+        if r.probe_id == "xt-001":
+            r.query = "What is the weather in Paris?"
+
+    with pytest.raises(ScoringError) as excinfo:
+        run(tmp_path, responses, probes=probes)
+
+    message = str(excinfo.value)
+    assert "xt-001" in message
+    assert "probe file:" in message and "response:" in message, (
+        "show both texts — the person fixing this needs the diff, not the verdict"
+    )
+
+
+def test_whitespace_alone_does_not_make_a_question_non_verbatim(tmp_path):
+    """A harness that re-wraps long lines has not changed the question, and recording it
+    as wrapped would put noise in a section that exists to carry signal."""
+    probes = build_probes()
+    responses = answers(probes)
+    for r in responses:
+        if r.probe_id == "conf-001":
+            r.query = r.query.replace(" ", "\n  ")
+
+    report = run(tmp_path, responses, probes=probes)
+    assert report["manifest"]["capture"]["probes_asked_wrapped"] == []
+    assert report["manifest"]["capture"]["probes_asked_verbatim"] == len(probes)

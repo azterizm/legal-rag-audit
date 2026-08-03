@@ -224,6 +224,11 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
         ["Responses", f"`{inputs['responses_hash']}`"],
         ["Findings digest", f"`{manifest['scoring']['findings_hash']}`"],
         ["Passes", manifest["run"]["passes"]],
+        [
+            "Questions put verbatim",
+            f"{manifest['capture'].get('probes_asked_verbatim', 0)} of "
+            f"{manifest['capture']['records']} records",
+        ],
         ["Corpus mode", run.get("corpus_mode") or "—"],
         # Both halves. A seed on its own says the battery was reproducible; only the
         # source says whether it was also unguessable, and those are different claims.
@@ -538,6 +543,25 @@ def _limits(report: dict[str, Any], capture: dict[str, Any]) -> list[str]:
             "No upload manifest was supplied, so citation identifiers could not be "
             "checked for membership against the documents actually indexed."
         )
+    wrapped = manifest["capture"].get("probes_asked_wrapped") or []
+    if wrapped:
+        limits.append(
+            f"{len(wrapped)} {_plural(len(wrapped), 'probe')} reached the target wrapped "
+            f"in text that was not in the sealed probe file — a system preamble, a "
+            f"formatting instruction, or similar: "
+            f"{', '.join(f'`{p}`' for p in wrapped)}. The answers still answer our "
+            f"questions and the findings stand; what does not stand is the claim that "
+            f"those questions were put verbatim."
+        )
+    limits.append(
+        "This report describes a response file. Its inputs — the corpus, the probes and "
+        "the answer key — were digested before any answer existed and were recomputed "
+        "here. The responses themselves carry no such guarantee: they were produced "
+        "outside this software, and nothing in it can establish that what reached the "
+        "file is what the target returned. That is a property of the producer holding "
+        "custody, which is what makes the findings hard to dismiss as our harness "
+        "prompting badly, and it cuts both ways."
+    )
     if manifest["run"]["seed"] is None:
         limits.append(
             "The corpus carries fixed facts rather than seeded plants, so a key "

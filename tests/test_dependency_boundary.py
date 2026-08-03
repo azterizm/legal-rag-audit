@@ -8,6 +8,7 @@ a security reviewer is about what lands on their machine, not about what we wrot
 Slow: it creates a virtualenv and installs fourteen packages. Skipped by `-m 'not slow'`.
 """
 
+import json
 import subprocess
 import sys
 import venv
@@ -188,3 +189,98 @@ def test_pyproject_keeps_the_ml_stack_out_of_the_base_set():
     extras = pyproject["project"].get("optional-dependencies", {})
     assert "score" in extras, "the ML stack needs an extra to live in"
     assert any("sentence-transformers" in r for r in extras["score"])
+
+
+# ------------------------------------------------------- the artefact route (F45)
+
+
+@pytest.mark.slow
+def test_the_whole_artefact_route_runs_with_no_transport_installed(
+    generate_env, tmp_path
+):
+    """§5.1.1, end to end, in an environment that cannot reach a network.
+
+    The route a target takes when they will not point our software at a live system:
+    they hold the endpoint, we hold nothing of theirs, and what comes back is a file.
+    Asserted structurally rather than promised, because a change that reintroduced the
+    coupling would otherwise be discovered by a client rather than by the build.
+
+    `httpx` is uninstalled first, so `plant`, `hash` and `score` are proved not to reach
+    the transport layer even transitively. The response file is written by hand — no
+    `generate`, no `Generator`, no config — and it still scores in full.
+    """
+    subprocess.run(
+        [str(generate_env), "-m", "pip", "uninstall", "--quiet", "-y", "httpx"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    try:
+        assert run_in(generate_env, "import httpx").returncode != 0
+
+        script = tmp_path / "artefact_route.py"
+        script.write_text(
+            "import json, sys\n"
+            "from legal_rag_audit.interchange import (CaptureNotes, Response,\n"
+            "    write_ground_truth, write_probes, write_responses)\n"
+            "from legal_rag_audit.plants import plant, write_corpus\n"
+            "from legal_rag_audit.probes import build_ground_truth, build_probes\n"
+            "from legal_rag_audit.provenance import build_handover\n"
+            "from legal_rag_audit.interchange import write_handover\n"
+            "from legal_rag_audit.score import score\n"
+            "d = sys.argv[1]\n"
+            # 1. plant — no network
+            "corpus = plant('artefact-route-seed')\n"
+            "write_corpus(d + '/corpus', corpus)\n"
+            "probes = build_probes(corpus=corpus)\n"
+            "write_probes(d + '/probes.jsonl', probes)\n"
+            "write_ground_truth(d + '/gt.json', build_ground_truth(corpus))\n"
+            # 2. hash — no network
+            "write_handover(d + '/handover.json', build_handover(\n"
+            "    corpus=d + '/corpus', probes=d + '/probes.jsonl',\n"
+            "    ground_truth=d + '/gt.json'))\n"
+            # 3. their harness, standing in for anything that emits the format
+            "notes = CaptureNotes(record='capture_notes', citations_captured=False,\n"
+            "    retrieved_chunks_captured=False)\n"
+            "write_responses(d + '/r.jsonl', [Response(run_id='theirs',\n"
+            "    probe_id=p.probe_id, query=p.text, tenant=p.tenant,\n"
+            "    answer='Our harness produced this.') for p in probes],\n"
+            "    capture_notes=notes)\n"
+            # 4. score — no network, and the pre-commitment still verifies
+            "report = score(d + '/r.jsonl', d + '/gt.json', d + '/probes.jsonl',\n"
+            "    skip_tier2=True, handover_path=d + '/handover.json',\n"
+            "    output_dir=d + '/out')\n"
+            "print(json.dumps({\n"
+            "    'checks': report['summary']['checks_registered'],\n"
+            "    'pre_commitment': report['manifest']['pre_commitment']['status'],\n"
+            "    'verbatim': report['manifest']['capture']['probes_asked_verbatim'],\n"
+            "}))\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [str(generate_env), str(script), str(tmp_path)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+        out = json.loads(result.stdout)
+        assert out["checks"] == 17, "every check is reported, none omitted"
+        assert out["pre_commitment"] == "verified", (
+            "the pre-commitment holds on the artefact route — the corpus, probes and "
+            "answer key were sealed before any answer existed"
+        )
+        assert out["verbatim"] == len(
+            [line for line in (tmp_path / "r.jsonl").read_text().splitlines()][1:]
+        )
+        assert (tmp_path / "out" / "report.md").exists()
+    finally:
+        subprocess.run(
+            [
+                str(generate_env), "-m", "pip", "install", "--quiet",
+                "--require-hashes", "-r",
+                str(REPO_ROOT / "requirements" / "generate.txt"),
+            ],
+            capture_output=True,
+            text=True,
+        )

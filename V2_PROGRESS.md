@@ -1051,3 +1051,69 @@ the page rather than inferred from a document count.
   longer the battery's corpus. §9.4 gives Phase H the job of deciding what it becomes; this
   phase did not pre-empt it by deleting it.
 - **Docker**, still deferred at your instruction.
+
+---
+
+## Plan amendment — the artefact route, named and made structural (F45)
+
+**2026-08-03.** The route where the target keeps their endpoint entirely and returns a
+file was a *property* of the mode split (§5.1) and a *preference* in the access ladder
+(§15.3 item 2). It was never a named configuration, so nothing could reference it, nothing
+stated what it costs, and nothing tested that it stays available.
+
+It is now §5.1.1 with a requirement id, and the plan's modes table shows what was always
+true and never written down: **four of the five modes never touch a network, and the one
+that does is the only optional one.**
+
+### What the amendment added
+
+- **§5.1.1** — the route, what the client holds, what they return, what it costs and what
+  it does not. The costs are two, and neither weakens a finding: capture completeness is
+  theirs to declare (already `NOT_CAPTURED` on the page, never a pass), and the two-phase
+  probes need them to apply the revision. What it *strengthens* is the part worth selling
+  — responses their harness produced cannot be answered with *"your tool prompted it
+  wrong."*
+- **F45** — the route must never require endpoint access. `plant`, `hash` and `score`
+  import nothing from `transport/`.
+- **§14.3** — two acceptance rows, and both are tested rather than asserted.
+- **§15.3 item 2** — say it before rung 3, not after. It removes the security review, the
+  credential request and the config from the critical path in one move.
+
+### The gap it surfaced, and the fix
+
+The pre-commitment had an open end. Hashing the probe file fixes **which questions were to
+be asked**; nothing checked whether they were. On this route nobody watched them go out,
+so *"the battery was fired as written"* was an undertaking — the same shape §3.6 closed at
+the other end for the answer key, left open at this one.
+
+`score` now compares every record's `query` against the sealed probe text:
+
+| Outcome | What happens |
+|---|---|
+| **verbatim** | Counted in the manifest, printed in §1 as *"Questions put verbatim — n of m records"* |
+| **wrapped** — the probe text sits inside a longer query | The finding stands, because it is the same question. The claim that it was put verbatim does not, and §8 names the probes |
+| **absent** — the query does not contain the probe text | Aborts (NF9). The record answers a different question, and scoring it would produce a finding about something nobody asked |
+
+Whitespace is normalised first, so a harness that re-wraps long lines is not recorded as
+wrapping the question. Noise in a section that exists to carry signal is the same defect
+as no section at all.
+
+### And the limit the route cannot close
+
+Nothing in this software can establish that what reached the file is what the target
+returned. That is now a line in every report's §8 rather than something the reader has to
+work out. The guarantee on this route comes from the producer holding custody — and a
+guarantee that runs in their favour runs in ours too, which is why it is printed rather
+than hedged.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| The whole route runs with no transport installed | `plant` → `hash` → hand-written `responses.jsonl` → `score`, in the generate-layer venv with `httpx` uninstalled. 17 checks reported, pre-commitment verified, report written |
+| A wrapped question is named, not passed off | A system preamble around one probe; asserted named in the manifest and still producing a verdict |
+| A different question aborts | Asserted, and the message carries both texts so the diff is in the error rather than in a support conversation |
+| Re-wrapped whitespace is still verbatim | Asserted |
+
+**447 tests.** Four gates clean.
+

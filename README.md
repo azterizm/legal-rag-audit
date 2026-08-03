@@ -545,6 +545,48 @@ one does.
 
 Still to come: `validate` (v0.2.1).
 
+### If you would rather we never touched your endpoint
+
+Skip step three. Keep the endpoint entirely — no config of ours, no credentials shared,
+nothing of ours executed against your infrastructure. Ingest the planted corpus with
+whatever you already use, put the questions in `run/probes.jsonl` through your own eval
+harness or QA script, and return a `responses.jsonl`. `score` cannot tell the difference,
+and neither can the report.
+
+```bash
+legal-rag-audit score --responses your-harness-output.jsonl \
+                      --ground-truth run/ground_truth.json \
+                      --probes run/probes.jsonl \
+                      --handover run/handover.json \
+                      -o out/
+```
+
+`plant`, `hash` and `score` import nothing from the transport layer, and a test runs this
+whole route in an environment with `httpx` uninstalled — so *"no endpoint access"* is a
+property of the build rather than a promise on a page.
+
+**Two things it costs, and neither weakens a finding.** What you can capture is yours to
+declare: a harness that does not surface `retrieved_chunks` disables the two Tier 2 checks,
+one that returns no `document_ids` disables citation integrity, and all of it shows on the
+page as `NOT_CAPTURED` rather than as a pass. And index freshness needs you to apply the
+revision and record the wait; if you cannot, leave the `after_revision` probes unasked —
+asking them against an unchanged corpus and reading the unchanged answer as a stale index
+would be a finding manufactured out of your constraints.
+
+**One thing it strengthens.** Responses your harness produced cannot later be dismissed
+with *"your tool prompted it wrong."* Custody of the evidence is yours, and that runs in
+your favour and ours at the same time.
+
+`score` checks every record's `query` against the probe text that was hashed at handover,
+because on this route nobody watched the questions go out. Identical is counted and
+printed. Wrapped in a system preamble is ordinary — the finding stands, and the report
+names those probes rather than claiming they were put verbatim. A query that does not
+contain its probe's text at all aborts the run: that record answers a different question,
+and scoring it would produce a finding about something nobody asked.
+
+What no software can establish is that what reached the file is what your system returned.
+The report says so in its limits rather than implying otherwise.
+
 ---
 
 ## The corpus
