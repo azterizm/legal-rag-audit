@@ -29,9 +29,10 @@ target:
     stream: false  # true if SSE
 
 corpus:
-  path: "./test_documents/"  # directory of known-good test documents
-  # OR use bundled legal corpus
-  use_bundled: true
+  mode: planted                # plant a seeded corpus (default) | existing
+  seed: null                   # null uses the published demo seed, and the report says so
+  path: "./planted-corpus"     # where the planted corpus is written
+  revision_wait_seconds: 60    # wait between replacing a document and re-asking it
 
 tests:
   hallucination_rate: true
