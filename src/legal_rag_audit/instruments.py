@@ -75,21 +75,6 @@ INSTRUMENTS: Final[tuple[Instrument, ...]] = (
         better="higher",
         unit="mean cosine similarity between the query and the retrieved chunks",
     ),
-    Instrument(
-        check="abstention",
-        role="entailment against canonical refusals",
-        model=ENTAILMENT_MODEL,
-        # Not configurable in this build: score/registry.py calls
-        # ConfidenceEvaluator.evaluate() without a threshold, so the evaluator's own
-        # default applies. Recorded rather than quietly inherited — an undisclosed
-        # number in the scoring path is exactly what §4.1 exists to prevent.
-        setting=None,
-        default=0.5,
-        kind="entailment line against canonical refusal phrasings",
-        score_key="max_similarity",
-        better="higher",
-        unit="strongest entailment against any canonical refusal",
-    ),
 )
 
 BY_CHECK: Final[dict[str, Instrument]] = {i.check: i for i in INSTRUMENTS}

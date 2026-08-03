@@ -13,11 +13,12 @@ from here is the same as everywhere else: a breaking change makes `report.v3`, a
 `report.v2` means one thing forever.
 
 *Checks are keyed by name, not nested under `tier1` / `tier2`.* The sketch nests them.
-Nesting makes a check's address depend on its tier — and the tier is explicitly
-expected to change: `abstention` is registered Tier 2 today and §8.1 puts it in Tier 1
-once Phase D rewrites it as an inverted check. A consumer's path to a check should not
-move because we improved how it is scored. So `checks` is flat and addressable, and
-`tier1` / `tier2` are ordered *lists of names* carrying §10.1's reading order.
+Nesting makes a check's address depend on its tier — and the tier does change. Phase D
+moved `abstention` from Tier 2 to Tier 1 by rewriting it as an inverted check, which is
+exactly the event that would have broken every consumer's path to it under the nested
+shape. A consumer's address for a check must not move because we improved how it is
+scored. So `checks` is flat and addressable, and `tier1` / `tier2` are ordered *lists of
+names* carrying §10.1's reading order.
 """
 
 from typing import Any, Literal, Optional
@@ -42,6 +43,14 @@ class CheckResult(BaseModel):
     #: One line: how the check decides. Printed beside the result so the reader is not
     #: taking the verdict on trust.
     recipe: str
+    #: What this check does **not** establish, in the same artefact as the finding
+    #: rather than in a later post (§3.3). Mandatory where §8.2 names one — injection
+    #: measures instruction-boundary override, not exfiltration capability — and the
+    #: field exists so a report cannot print that finding without the sentence.
+    limit: Optional[str] = None
+    #: A measurement rather than a finding (§8.2 #15). It has no pass condition, so it
+    #: never appears in the findings table and its verdict is not a verdict.
+    measurement: bool = False
     #: Probes declared eligible before the run. The denominator (F39).
     eligible: int
     scored: int
@@ -55,9 +64,11 @@ class CheckResult(BaseModel):
     #: Named when *part* of the check could not run, so a partial result never reads
     #: as a complete one.
     partial: Optional[str] = None
-    #: The evaluator's own output. Open by design: seventeen evaluators return
-    #: seventeen shapes, and a schema that pretended otherwise would be wrong about
-    #: the one field carrying the evidence. Phase D's rewrite is where this narrows.
+    #: The evaluator's own output. Still open, because each check reports different
+    #: facts about its own recipe and a schema that flattened them would be wrong about
+    #: the one field carrying the evidence. Phase D narrowed the part that matters: every
+    #: Tier 1 evaluator now names what it saw under `appeared` and `absent`, so the
+    #: evidence bundle reads two keys rather than guessing at nine.
     detail: dict[str, Any] = Field(default_factory=dict)
     #: Tier 2 only (F24). The numbers behind the verdict, bucketed, with the
     #: configured line marked — because a bare PASS/FAIL hides how close to the line
@@ -79,6 +90,9 @@ class Summary(BaseModel):
     #: is a countable fact rather than an atmosphere.
     published_keys: int
     withheld_keys: int
+    #: Checks with no pass condition. Named rather than folded into `passed`, where
+    #: they would inflate the count of things that could have failed and did not.
+    measurements: list[str] = Field(default_factory=list)
     tier1_findings: list[str] = Field(default_factory=list)
     tier2_findings: list[str] = Field(default_factory=list)
     verdict: Literal["PASS", "FAIL"]

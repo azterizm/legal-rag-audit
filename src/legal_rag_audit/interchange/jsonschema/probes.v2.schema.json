@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/legal-rag-audit/schemas/probes.v1.schema.json",
+  "$id": "https://github.com/legal-rag-audit/schemas/probes.v2.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "One question, addressed to the target.",
@@ -42,13 +42,22 @@
       "title": "Passes",
       "type": "integer"
     },
+    "phase": {
+      "default": "initial",
+      "enum": [
+        "initial",
+        "after_revision"
+      ],
+      "title": "Phase",
+      "type": "string"
+    },
     "probe_id": {
       "title": "Probe Id",
       "type": "string"
     },
     "schema": {
-      "const": "probes.v1",
-      "default": "probes.v1",
+      "const": "probes.v2",
+      "default": "probes.v2",
       "title": "Schema",
       "type": "string"
     },

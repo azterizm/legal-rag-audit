@@ -64,7 +64,7 @@ def config_for(url: str, *, object_form: bool) -> AuditConfig:
                     "citations_field": "response.sources",
                 },
             },
-            "corpus": {"use_bundled": True},
+            "corpus": {"mode": "existing", "path": "/tmp"},
         }
     )
 

@@ -78,10 +78,22 @@ class RunFacts(BaseModel):
     started: str
     finished: str
     passes: int
-    #: Phase D seeds the planting. Null until then, because the demo corpus carries
-    #: fixed facts and calling a fixed fact seeded would misdescribe it.
+    #: The seed every plant was minted from. Null for a battery whose expectations were
+    #: authored directly rather than planted — a report from one of those cannot claim
+    #: its invariants were unguessable, and the null is what stops it claiming so by
+    #: omission.
     seed: Optional[str] = None
+    #: Where the seed came from, in words. The published demo seed and an engagement seed
+    #: are both seeds; only one of them makes the battery unguessable, and a reader is
+    #: entitled to know which they are holding.
+    seed_source: Optional[str] = None
+    #: `planted` — we authored the corpus and inserted the invariants. `existing` — the
+    #: target's own documents, with external ground truth (§9.1). Each configuration
+    #: covers the other's weakness, so which one produced a report changes what it can
+    #: establish.
     corpus_mode: Optional[str] = None
+    #: How many invariants were planted. Zero on an existing-corpus run.
+    plants: int = 0
     #: False, and enforced: `score` runs inside `offline()` and
     #: scripts/check_no_remote_scoring.sh keeps the removed path out of the tree.
     remote_scoring: bool = False

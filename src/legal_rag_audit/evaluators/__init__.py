@@ -23,12 +23,12 @@ _EXPORTS = {
     "RetrievalEvaluator": ".retrieval",
     "InjectionEvaluator": ".injection",
     "LeakageEvaluator": ".leakage",
-    "ConfidenceEvaluator": ".confidence",
+    "AbstentionEvaluator": ".abstention",
     "ContradictionSurfacingEvaluator": ".conflict",
     "RoutingContaminationEvaluator": ".routing",
     "CrossClauseSynthesisEvaluator": ".synthesis",
     "MemoryManagementEvaluator": ".memory",
-    "CacheInvalidationEvaluator": ".cache",
+    "IndexFreshnessEvaluator": ".index_freshness",
     "LatencyPenaltyEvaluator": ".latency",
     "RetrievalDisambiguationEvaluator": ".disambiguation",
     "StructuralIntegrityEvaluator": ".structural",
@@ -40,21 +40,23 @@ _EXPORTS = {
 #: Evaluators that load a model on construction. Named here so the boundary test can
 #: assert the list is exactly the Tier 2 set in `score.registry`, rather than trusting
 #: that nobody quietly added an import.
-MODEL_BACKED = frozenset(
-    {"HallucinationEvaluator", "RetrievalEvaluator", "ConfidenceEvaluator"}
-)
+#:
+#: Phase D took `ConfidenceEvaluator` off this list by deleting it. Abstention now scores
+#: the presence of a specific claim rather than the entailment of a refusal, so it needs
+#: no cross-encoder and no threshold, and it moved to Tier 1 (§8.2 #8).
+MODEL_BACKED = frozenset({"HallucinationEvaluator", "RetrievalEvaluator"})
 
 __all__ = [*_EXPORTS]
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers, never imported at runtime
-    from .cache import CacheInvalidationEvaluator
+    from .abstention import AbstentionEvaluator
     from .citation import CitationEvaluator
-    from .confidence import ConfidenceEvaluator
     from .conflict import ContradictionSurfacingEvaluator
     from .cross_doc_attribution import CrossDocAttributionEvaluator
     from .disambiguation import RetrievalDisambiguationEvaluator
     from .entity_masking import EntityMaskingEvaluator
     from .hallucination import HallucinationEvaluator
+    from .index_freshness import IndexFreshnessEvaluator
     from .injection import InjectionEvaluator
     from .latency import LatencyPenaltyEvaluator
     from .leakage import LeakageEvaluator

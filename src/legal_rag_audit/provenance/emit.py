@@ -18,6 +18,7 @@ from ..instruments import describe
 from ..interchange import (
     BatteryComposition,
     CaptureSummary,
+    GroundTruth,
     Handover,
     HashedArtefact,
     InputDigests,
@@ -189,6 +190,7 @@ def build_run_manifest(
     skip_tier2: bool,
     pre_commitment: PreCommitment,
     handover: Optional[Handover] = None,
+    ground_truth: Optional[GroundTruth] = None,
 ) -> RunManifest:
     """Assemble the §6.5 record for one scoring run."""
     not_recorded: dict[str, str] = {}
@@ -227,22 +229,31 @@ def build_run_manifest(
     if tool["commit_sha"] is None:
         not_recorded["tool.commit_sha"] = tool["commit_unavailable"]
 
-    not_recorded["run.seed"] = (
-        "nothing in this run is seeded. Seeded corpus planting arrives in Phase D; "
-        "until then the demo corpus carries fixed facts, and recording a seed would "
-        "describe a generation step that did not happen."
-    )
-    not_recorded["run.corpus_mode"] = (
-        "not established by `score`, which reads no corpus. Phase D records it when "
-        "`plant` produces the corpus."
-    )
+    # Both come off the ground-truth manifest, which is the one artefact `score` reads
+    # that knows how the corpus was made. A run whose plants were minted from the
+    # published demo seed has to say so on the page: those invariants are regenerable by
+    # anyone, so nothing about the run turns on their being unguessable.
+    seed = ground_truth.seed if ground_truth else None
+    if seed is None:
+        not_recorded["run.seed"] = (
+            "the ground-truth manifest carries no seed, so this battery was not planted "
+            "from one. Its expectations were authored directly, and a report from it "
+            "cannot claim its invariants were unguessable."
+        )
+        corpus_mode = None
+        not_recorded["run.corpus_mode"] = (
+            "no seed and no plants in the ground-truth manifest, so `score` cannot tell "
+            "whether the target was probed against a corpus we authored or its own."
+        )
+    else:
+        corpus_mode = "planted"
+
+    instruments = [InstrumentRecord(**row) for row in describe(thresholds)]
     not_recorded["authorisation"] = (
         "the §13 authorisation block is not yet part of the config (Phase I). A "
         "battery containing an authorised-testing family will abort without it once "
         "the gate lands (F37); until then this run asserts nothing about consent."
     )
-
-    instruments = [InstrumentRecord(**row) for row in describe(thresholds)]
 
     return RunManifest(
         tool=ToolProvenance(
@@ -271,8 +282,10 @@ def build_run_manifest(
             started=started,
             finished=finished,
             passes=passes,
-            seed=None,
-            corpus_mode=None,
+            seed=seed,
+            seed_source=ground_truth.seed_source if ground_truth else None,
+            corpus_mode=corpus_mode,
+            plants=len(ground_truth.plants) if ground_truth else 0,
             remote_scoring=False,
             eligibility_source=eligibility_source,
         ),

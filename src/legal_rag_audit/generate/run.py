@@ -20,18 +20,20 @@ Two rules it follows because the report depends on them:
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ..config import AuditConfig
-from ..corpus_loader import load_corpus
+from ..corpus_loader import load_corpus, load_planted
 from ..interchange import (
     CaptureNotes,
     Probe,
     Response,
     RetrievedChunk,
+    load_probes,
     write_probes,
     write_responses,
 )
@@ -54,10 +56,19 @@ def _now() -> str:
 class Generator:
     """Runs the battery once per pass and collects the raw results."""
 
-    def __init__(self, config: AuditConfig, passes: int = 1, skip_upload: bool = False):
+    def __init__(
+        self,
+        config: AuditConfig,
+        documents: list[dict[str, Any]],
+        revisions: Optional[list[dict[str, Any]]] = None,
+        passes: int = 1,
+        skip_upload: bool = False,
+    ):
         if passes < 1:
             raise GenerationError(f"passes must be at least 1, got {passes}")
         self.config = config
+        self.documents = documents
+        self.revisions = revisions or []
         self.passes = passes
         self.skip_upload = skip_upload
         self.run_id = uuid.uuid4().hex[:16]
@@ -67,16 +78,21 @@ class Generator:
         #: per record.
         self.saw_citations = False
         self.saw_chunks = False
+        #: How long we actually waited between replacing the documents and asking again.
+        #: Null when there was no revision phase — an absent wait and a zero wait are
+        #: different facts and index freshness reads them differently (§8.2 #4).
+        self.revision_wait: Optional[int] = None
+        self.skipped_revision: Optional[str] = None
 
     async def run(self, probes: list[Probe]) -> tuple[list[Response], CaptureNotes]:
+        initial = [p for p in probes if p.phase == "initial"]
+        revised = [p for p in probes if p.phase == "after_revision"]
+
         try:
-            await self._upload_corpus()
-            responses: list[Response] = []
-            for pass_index in range(1, self.passes + 1):
-                if self.passes > 1:
-                    logger.info(f"Pass {pass_index} of {self.passes}")
-                for probe in probes:
-                    responses.append(await self._ask(probe, pass_index))
+            await self._upload(self.documents, "corpus")
+            responses = await self._ask_all(initial)
+            if revised:
+                responses += await self._revision_phase(revised)
         finally:
             await self.client.close()
 
@@ -85,21 +101,66 @@ class Generator:
             citations_captured=self.saw_citations,
             retrieved_chunks_captured=self.saw_chunks,
             document_ids=self.document_ids or None,
-            notes=(
-                f"Produced by legal-rag-audit generate against "
-                f"{self.config.target.name!r}."
+            revision_wait_seconds=self.revision_wait,
+            notes=" ".join(
+                part
+                for part in (
+                    f"Produced by legal-rag-audit generate against "
+                    f"{self.config.target.name!r}.",
+                    self.skipped_revision,
+                )
+                if part
             ),
         )
         return responses, notes
 
-    async def _upload_corpus(self) -> None:
-        # Resolved and checked before a single request goes out. A corpus problem is a
-        # setup problem: it aborts here rather than surfacing later as a finding (NF9).
-        documents = load_corpus(
-            use_bundled=self.config.corpus.use_bundled,
-            path=self.config.corpus.path,
+    async def _ask_all(self, probes: list[Probe]) -> list[Response]:
+        responses: list[Response] = []
+        for pass_index in range(1, self.passes + 1):
+            if self.passes > 1:
+                logger.info(f"Pass {pass_index} of {self.passes}")
+            for probe in probes:
+                responses.append(await self._ask(probe, pass_index))
+        return responses
+
+    async def _revision_phase(self, probes: list[Probe]) -> list[Response]:
+        """Replace the revised documents, wait, then ask the second-phase questions.
+
+        Skipped loudly rather than quietly. A run that could not revise has not tested
+        index freshness, and the probes are left unasked so scoring reports them as
+        NOT_CAPTURED — which is true — instead of asking them against an unchanged corpus
+        and reporting the unchanged answer as a stale index (NF9).
+        """
+        if not self.revisions:
+            self.skipped_revision = (
+                "No revision phase: the corpus carries no revised documents, so the "
+                "second-phase probes were not asked."
+            )
+        elif self.skip_upload:
+            self.skipped_revision = (
+                "No revision phase: uploads were skipped, so the revised documents "
+                "could not replace the originals and the second-phase probes were not "
+                "asked."
+            )
+        if self.skipped_revision:
+            logger.warning(self.skipped_revision)
+            return []
+
+        await self._upload(self.revisions, "revision")
+
+        wait = self.config.corpus.revision_wait_seconds
+        logger.info(
+            f"Revision uploaded. Waiting {wait}s before re-asking, so a stale answer "
+            f"means an index that did not invalidate rather than one still working."
         )
-        logger.info(f"Corpus resolved: {len(documents)} documents.")
+        if wait:
+            await asyncio.sleep(wait)
+        self.revision_wait = wait
+
+        return await self._ask_all(probes)
+
+    async def _upload(self, documents: list[dict[str, Any]], label: str) -> None:
+        logger.info(f"{label.capitalize()}: {len(documents)} documents.")
 
         if self.skip_upload:
             logger.info("Skipping upload; the target is assumed to hold the corpus.")
@@ -134,9 +195,14 @@ class Generator:
                 )
 
             issued = resp.get("id") if isinstance(resp, dict) else None
-            self.document_ids.append(str(issued) if issued else doc["id"])
+            identifier = str(issued) if issued else doc["id"]
+            # A revised document replaces its original, so its identifier is already in
+            # the manifest. Appending it again would put the same document into the set
+            # citation integrity tests membership against twice.
+            if identifier not in self.document_ids:
+                self.document_ids.append(identifier)
 
-        logger.info(f"Uploaded {len(documents)} documents.")
+        logger.info(f"Uploaded {len(documents)} documents ({label}).")
 
     async def _ask(self, probe: Probe, pass_index: int) -> Response:
         started = _now()
@@ -277,22 +343,85 @@ def _chunks_in_body(raw: Any) -> Optional[list[RetrievedChunk]]:
     return chunks or None
 
 
+DEFAULT_PLANTED_PATH = "./planted-corpus"
+
+
+def resolve_corpus(
+    config: AuditConfig, corpus_dir: Optional[str] = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    """The documents to upload, the ones that replace them, and where they came from.
+
+    A planted corpus is written to disk and read back rather than passed in memory, so
+    the tree `hash` sealed and the tree that goes to the target are the same bytes. Two
+    objects nobody compared is how a pre-commitment quietly stops meaning anything.
+    """
+    if corpus_dir:
+        documents, revisions = load_planted(corpus_dir)
+        return documents, revisions, corpus_dir
+
+    if config.corpus.mode == "existing":
+        return load_corpus(config.corpus.path), [], (config.corpus.path or "")
+
+    from ..plants import plant, write_corpus
+
+    root = os.path.join(config.corpus.path or DEFAULT_PLANTED_PATH, "corpus")
+    corpus = plant(config.corpus.seed)
+    written = write_corpus(root, corpus)
+    logger.info(
+        f"Planted {written['base']} documents and {written['revision']} revisions into "
+        f"{root} from {corpus.seed_source}."
+    )
+    documents, revisions = load_planted(root)
+    return documents, revisions, root
+
+
 def generate(
     config: AuditConfig,
     responses_path: str,
     probes_path: Optional[str] = None,
     passes: int = 1,
     skip_upload: bool = False,
+    corpus_dir: Optional[str] = None,
+    probes_in: Optional[str] = None,
 ) -> int:
-    """Run the battery and write the response file. Returns the record count."""
-    validate_battery()
-    probes = build_probes(passes=passes)
+    """Run the battery and write the response file. Returns the record count.
+
+    `corpus_dir` and `probes_in` are the engagement path: the target is given a sealed
+    corpus and a sealed probe file and runs against exactly those. They travel together
+    because a probe file scores against the invariants of the corpus it was built with —
+    replanting from a seed the target does not hold would produce different values and
+    every Tier 1 check would fail for a reason that has nothing to do with their system.
+    """
+    if corpus_dir and not probes_in:
+        raise GenerationError(
+            "--corpus was given without --probes-in.\n"
+            "  A planted corpus and its probe file are one artefact: the probes score\n"
+            "  against invariants minted from the seed that produced those documents.\n"
+            "  Building fresh probes here would mint different values, and every Tier 1\n"
+            "  check would fail for a reason that has nothing to do with the target.\n"
+            "  Pass the probes.jsonl written alongside the corpus by `plant`."
+        )
+
+    documents, revisions, resolved = resolve_corpus(config, corpus_dir)
+
+    if probes_in:
+        probes = load_probes(probes_in)
+        logger.info(f"Probe file read from {probes_in} ({len(probes)} probes).")
+    else:
+        validate_battery()
+        probes = build_probes(passes=passes)
 
     if probes_path:
         write_probes(probes_path, probes)
         logger.info(f"Probe file written to {probes_path} ({len(probes)} probes).")
 
-    generator = Generator(config, passes=passes, skip_upload=skip_upload)
+    generator = Generator(
+        config,
+        documents=documents,
+        revisions=revisions,
+        passes=passes,
+        skip_upload=skip_upload,
+    )
     responses, notes = asyncio.run(generator.run(probes))
     write_responses(responses_path, responses, capture_notes=notes)
 

@@ -28,7 +28,7 @@
       "type": "object"
     }
   },
-  "$id": "https://github.com/legal-rag-audit/schemas/responses.v1.schema.json",
+  "$id": "https://github.com/legal-rag-audit/schemas/responses.v2.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "oneOf": [
     {
@@ -122,8 +122,8 @@
           "type": "string"
         },
         "schema": {
-          "const": "responses.v1",
-          "default": "responses.v1",
+          "const": "responses.v2",
+          "default": "responses.v2",
           "title": "Schema",
           "type": "string"
         },
@@ -230,9 +230,21 @@
           "title": "Retrieved Chunks Captured",
           "type": "boolean"
         },
+        "revision_wait_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision Wait Seconds"
+        },
         "schema": {
-          "const": "responses.v1",
-          "default": "responses.v1",
+          "const": "responses.v2",
+          "default": "responses.v2",
           "title": "Schema",
           "type": "string"
         }

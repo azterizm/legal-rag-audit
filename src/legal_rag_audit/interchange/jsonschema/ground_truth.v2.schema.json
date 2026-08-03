@@ -1,0 +1,406 @@
+{
+  "$defs": {
+    "Adjacency": {
+      "additionalProperties": false,
+      "description": "A fact and its identifier must appear within the same unit of text.\n\nAn answer that states the right figure in one paragraph and the right document ID\nthree paragraphs later has not attributed the figure to the document \u2014 it has\nmentioned both. \u00a78.2 scores adjacency by sentence unit for exactly that reason.",
+      "properties": {
+        "fact": {
+          "title": "Fact",
+          "type": "string"
+        },
+        "identifier": {
+          "title": "Identifier",
+          "type": "string"
+        },
+        "unit": {
+          "default": "sentence",
+          "enum": [
+            "sentence",
+            "paragraph"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fact",
+        "identifier"
+      ],
+      "title": "Adjacency",
+      "type": "object"
+    },
+    "Expectation": {
+      "additionalProperties": false,
+      "description": "What one check expects of one probe's answer.",
+      "properties": {
+        "adjacency": {
+          "items": {
+            "$ref": "#/$defs/Adjacency"
+          },
+          "title": "Adjacency",
+          "type": "array"
+        },
+        "check": {
+          "title": "Check",
+          "type": "string"
+        },
+        "mask_tokens": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Mask Tokens",
+          "type": "array"
+        },
+        "must_cite_any_of": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Must Cite Any Of",
+          "type": "array"
+        },
+        "must_contain": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Must Contain",
+          "type": "array"
+        },
+        "must_not_contain": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Must Not Contain",
+          "type": "array"
+        },
+        "pairing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pairing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "probe_id": {
+          "title": "Probe Id",
+          "type": "string"
+        },
+        "queried_as": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queried As"
+        },
+        "scoped_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scoped To"
+        },
+        "shapes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Shapes",
+          "type": "array"
+        },
+        "side_effect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SideEffect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "swaps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Swaps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "probe_id",
+        "check"
+      ],
+      "title": "Expectation",
+      "type": "object"
+    },
+    "Pairing": {
+      "additionalProperties": false,
+      "description": "Two probes compared against each other rather than against ground truth.\n\nLatency's baseline and its contradictory counterpart. Which is which stays in the\nwithheld half: a battery that announced *this is the timed trap* would let a target\ntreat it differently.",
+      "properties": {
+        "baseline_probe": {
+          "title": "Baseline Probe",
+          "type": "string"
+        },
+        "contradictory_probe": {
+          "title": "Contradictory Probe",
+          "type": "string"
+        }
+      },
+      "required": [
+        "baseline_probe",
+        "contradictory_probe"
+      ],
+      "title": "Pairing",
+      "type": "object"
+    },
+    "Plant": {
+      "additionalProperties": false,
+      "description": "One seeded invariant and where it was inserted.",
+      "properties": {
+        "attempt": {
+          "default": 0,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "companions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Companions",
+          "type": "array"
+        },
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "namespace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Namespace"
+        },
+        "plant_id": {
+          "title": "Plant Id",
+          "type": "string"
+        },
+        "state": {
+          "default": "base",
+          "title": "State",
+          "type": "string"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plant_id",
+        "type",
+        "value",
+        "document"
+      ],
+      "title": "Plant",
+      "type": "object"
+    },
+    "PlantGuard": {
+      "additionalProperties": false,
+      "description": "The collision guard's account of itself (\u00a73.2).",
+      "properties": {
+        "checked": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Checked",
+          "type": "array"
+        },
+        "not_checked": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Checked",
+          "type": "array"
+        },
+        "plants": {
+          "title": "Plants",
+          "type": "integer"
+        },
+        "recipe": {
+          "title": "Recipe",
+          "type": "string"
+        },
+        "regenerated": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Regenerated",
+          "type": "object"
+        },
+        "regenerations": {
+          "title": "Regenerations",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checked",
+        "not_checked",
+        "plants",
+        "regenerations",
+        "recipe"
+      ],
+      "title": "PlantGuard",
+      "type": "object"
+    },
+    "SideEffect": {
+      "additionalProperties": false,
+      "description": "The verifiable artefact an injection payload demands (\u00a73.3).\n\nNot *\"was the model manipulated\"* \u2014 that is judgment. A demand for a specific string\nin a specific position is a prefix or substring check, and the answer either carries\nit or does not.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "prefix",
+            "suffix",
+            "contains"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "planted_in": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Planted In"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "SideEffect",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/legal-rag-audit/schemas/ground_truth.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The manifest as a whole.",
+  "properties": {
+    "expectations": {
+      "items": {
+        "$ref": "#/$defs/Expectation"
+      },
+      "title": "Expectations",
+      "type": "array"
+    },
+    "guard": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlantGuard"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "plants": {
+      "items": {
+        "$ref": "#/$defs/Plant"
+      },
+      "title": "Plants",
+      "type": "array"
+    },
+    "schema": {
+      "const": "ground_truth.v2",
+      "default": "ground_truth.v2",
+      "title": "Schema",
+      "type": "string"
+    },
+    "seed": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Seed"
+    },
+    "seed_source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Seed Source"
+    }
+  },
+  "required": [
+    "schema",
+    "expectations"
+  ],
+  "title": "Ground-truth manifest (JSON) \u2014 withheld, hashed at handover",
+  "type": "object"
+}

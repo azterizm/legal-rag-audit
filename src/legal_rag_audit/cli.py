@@ -1,18 +1,28 @@
 """Command line surface (V2_FULL_PLAN.md §7).
 
-Four modes, and which side of the engagement runs each one is the whole design:
+Five modes, and which side of the engagement runs each one is the whole design:
 
-    legal-rag-audit hash   --corpus ./planted/ --probes probes.jsonl \
-                           --ground-truth ground_truth.json -o handover.json
-    legal-rag-audit generate -c config.yaml -o responses.jsonl
-    legal-rag-audit score --responses responses.jsonl --ground-truth ground_truth.json \
-                          --handover handover.json -o out/
-    legal-rag-audit schema --print responses.v1
+    legal-rag-audit plant  --seed <seed> -o run/
+    legal-rag-audit hash   --corpus run/corpus --probes run/probes.jsonl \
+                           --ground-truth run/ground_truth.json -o run/handover.json
+    legal-rag-audit generate -c config.yaml --corpus run/corpus \
+                             --probes-in run/probes.jsonl -o responses.jsonl
+    legal-rag-audit score --responses responses.jsonl \
+                          --ground-truth run/ground_truth.json \
+                          --handover run/handover.json -o out/
+    legal-rag-audit schema --print responses.v2
 
-`hash` runs first and is ours: it seals the answer key before any response exists.
-`generate` is theirs and optional — they may replace it with their own harness and hand
-back a conforming file. `score` is ours and runs offline. `schema` prints the published
-contract so nobody has to clone anything to implement against it (F35).
+`plant` and `hash` run first and are ours: one mints the invariants and writes the corpus,
+the other seals it before any response exists. `generate` is theirs and optional — they
+may replace it with their own harness and hand back a conforming file. `score` is ours and
+runs offline. `schema` prints the published contract so nobody has to clone anything to
+implement against it (F35).
+
+`plant` is a fifth mode §7 does not list. The plan's three-mode split is about *who runs
+what*, and planting sits on our side alongside `hash` rather than adding a fourth party to
+the engagement. It exists as a command for the same reason `hash` does: a pipeline step
+that only ever ran inside another command could not be inspected, repeated, or checked by
+the client.
 
 `validate` is Phase F and is not here yet.
 
@@ -71,6 +81,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
             probes_path=args.probes,
             passes=args.passes,
             skip_upload=args.skip_upload,
+            corpus_dir=args.corpus,
+            probes_in=args.probes_in,
         )
     except CorpusError as e:
         return _abort(f"Corpus setup failed, aborting before any request was sent:\n{e}")
@@ -156,6 +168,55 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
     else:
         print("  pre-commitment      none supplied — this run claims none")
     print()
+
+
+def cmd_plant(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .interchange import write_ground_truth, write_probes
+    from .plants import PlantError, PlantingError, plant, write_corpus
+    from .probes import build_ground_truth, build_probes, validate_battery
+
+    out = Path(args.output)
+    try:
+        validate_battery()
+        corpus = plant(args.seed)
+        written = write_corpus(out / "corpus", corpus)
+        probes = build_probes(passes=args.passes, corpus=corpus)
+        ground_truth = build_ground_truth(corpus)
+    except (PlantError, PlantingError) as e:
+        return _abort(f"The corpus could not be planted:\n{e}")
+
+    write_probes(out / "probes.jsonl", probes)
+    write_ground_truth(out / "ground_truth.json", ground_truth)
+
+    guard = ground_truth.guard
+    print()
+    print(f"  seed                {corpus.seed}  ({corpus.seed_source})")
+    print(f"  plants              {len(corpus.plants)}")
+    print(f"  regenerations       {guard.regenerations if guard else 0}")
+    print(f"  corpus              {out / 'corpus'}  "
+          f"({written['base']} base, {written['revision']} revision)")
+    print(f"  probes              {out / 'probes.jsonl'}  ({len(probes)})")
+    print(f"  ground truth        {out / 'ground_truth.json'}  "
+          f"({len(ground_truth.expectations)} expectations)")
+    print()
+    if corpus.is_demo():
+        print(
+            "  This is the published demo seed. Anyone can regenerate this corpus and "
+            "this\n  answer key, so a report from it demonstrates the method and "
+            "establishes nothing\n  about a target. Pass --seed for an engagement."
+        )
+        print()
+    print(
+        f"  Next: seal it before the target sees anything.\n"
+        f"    legal-rag-audit hash --corpus {out / 'corpus'} "
+        f"--probes {out / 'probes.jsonl'} \\\n"
+        f"                         --ground-truth {out / 'ground_truth.json'} "
+        f"-o {out / 'handover.json'}"
+    )
+    print()
+    return EXIT_OK
 
 
 def cmd_hash(args: argparse.Namespace) -> int:
@@ -244,7 +305,51 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not upload the corpus; assume the target already holds it",
     )
+    gen.add_argument(
+        "--corpus",
+        default=None,
+        help=(
+            "use an already-planted corpus directory (holding base/ and revision/) "
+            "rather than planting one. Requires --probes-in"
+        ),
+    )
+    gen.add_argument(
+        "--probes-in",
+        default=None,
+        help="ask the questions in this probe file rather than building the battery",
+    )
     gen.set_defaults(func=cmd_generate)
+
+    pl = sub.add_parser(
+        "plant",
+        help="mint the seeded invariants, write the corpus, probes and answer key",
+        description=(
+            "Runs before everything else and is ours. Mints one invariant per declared "
+            "slot from the run seed, guards it against collision with the corpus and "
+            "with every other plant, and writes the two corpus states, the probe file "
+            "and the ground-truth manifest. Hash the result with `hash` before the "
+            "target sees any of it (§3.6)."
+        ),
+    )
+    pl.add_argument(
+        "--seed",
+        default=None,
+        help=(
+            "the run seed. Omitted uses the published demo seed, and the manifest "
+            "records that it did — a battery anyone can regenerate is right for a "
+            "demonstration and wrong for an engagement"
+        ),
+    )
+    pl.add_argument(
+        "-o", "--output", default="./run", help="directory to write the run into"
+    )
+    pl.add_argument(
+        "--passes",
+        type=int,
+        default=1,
+        help="how many times each probe should be asked",
+    )
+    pl.set_defaults(func=cmd_plant)
 
     sc = sub.add_parser(
         "score",

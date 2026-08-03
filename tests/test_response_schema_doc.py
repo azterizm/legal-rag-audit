@@ -186,7 +186,7 @@ def test_score_reads_the_response_file_before_the_ground_truth(tmp_path):
     from legal_rag_audit.score import score
 
     bad = tmp_path / "responses.jsonl"
-    bad.write_text('{"schema":"responses.v1","run_id":"r"}\n', encoding="utf-8")
+    bad.write_text('{"schema":"responses.v2","run_id":"r"}\n', encoding="utf-8")
 
     with pytest.raises(InterchangeError) as excinfo:
         score(str(bad), os.devnull, skip_tier2=True)

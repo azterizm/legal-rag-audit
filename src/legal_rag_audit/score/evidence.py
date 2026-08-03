@@ -15,6 +15,15 @@ Two shapes of evidence, and conflating them would misdescribe half the findings:
   Calling that an "excerpt" would imply we chose a fragment, and the reader would be
   right to ask what was in the rest.
 
+**Two keys, not nine.** Before Phase D this module carried an enumerated list of result
+keys — `leaked_content`, `trigger_phrases_found`, `missing_facts`, six more — because
+each evaluator named its evidence differently and half of them nested it under `details`.
+A bundle built on a guessed key list quietly omits whatever it does not recognise, and a
+finding with no excerpt behind it is the exact thing the bundle exists to prevent. The
+rewrite gave every Tier 1 evaluator one result shape (`evaluators._common.result`), so
+this reads `appeared` and `absent` and nothing else, and a new evaluator cannot ship with
+silently empty evidence.
+
 Tier 1 only. Tier 2 findings are scored by an instrument against a line and their
 evidence is the distribution (F24), not a quotation — quoting a sentence a model gave
 0.83 to would dress a threshold decision as an observation.
@@ -22,7 +31,7 @@ evidence is the distribution (F24), not a quotation — quoting a sentence a mod
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..interchange import Probe, Response
 
@@ -33,84 +42,39 @@ WINDOW = 160
 APPEARED = "token_present"
 ABSENT = "token_absent"
 
-#: Result keys holding "these are the strings that appeared and should not have".
-#: An enumerated list, taken from the evaluators as they are actually written, rather
-#: than a heuristic scan for anything list-shaped — a heuristic would start quoting a
-#: field the moment an evaluator gained one that happens to hold strings.
-#:
-#: `tests/test_report.py` asserts every evaluator that can fail contributes a key here
-#: or in MISSING_KEYS, so a new evaluator cannot ship with silently empty evidence.
-FOUND_KEYS = (
-    "leaked_content",  # leakage
-    "leaked_keywords",  # routing
-    "leaked_forbidden",  # disambiguation
-    "trigger_phrases_found",  # injection
-    "found_canaries",  # parametric bleed
-    "invalid_citations",  # citation integrity — ids, not answer text
-    "swaps",  # entity masking
-    "metadata_leaks",  # entity masking
-    "conflations",  # structural
-)
+#: The two keys every Tier 1 evaluator populates. Read from the record itself and, for
+#: safety, from a nested `details` block: a check that one day returns its evidence a
+#: level down should produce a thin bundle, not a wrong one.
+FOUND_KEY = "appeared"
+MISSING_KEY = "absent"
 
-#: The mirror: strings that should have been there and were not.
-MISSING_KEYS = (
-    "missing",  # synthesis, entity masking
-    "missing_facts",  # structural
-    "missing_expected",  # disambiguation
-    "expected",  # memory (a string); conflict returns an int here and is ignored
-)
 
-#: Several evaluators nest the evidence under `details` and several do not. Both are
-#: searched rather than one normalised, because normalising would mean editing
-#: seventeen evaluators that Phase D rewrites anyway.
 def _fields(record: dict[str, Any]) -> list[dict[str, Any]]:
     nested = record.get("details")
     return [record, nested] if isinstance(nested, dict) else [record]
 
 
-def _per_fact_absences(record: dict[str, Any]) -> list[str]:
-    """Attribution's own shape: a fact/source pair per row.
-
-    Its failure is a third thing, and folding it into either of the two above would
-    misdescribe it. An *orphaned claim* is a fact that appeared without its source —
-    so the absent string is the source marker, not the fact. Taking every string in
-    the row would name the facts that were correctly attributed as well.
-    """
-    absent = []
-    for field in _fields(record):
-        for row in field.get("per_fact") or []:
-            if not isinstance(row, dict):
-                continue
-            fact, source = row.get("fact"), row.get("expected_source")
-            if not row.get("fact_found") and isinstance(fact, str):
-                absent.append(fact)
-            elif not row.get("source_attributed") and isinstance(source, str):
-                absent.append(source)
-    return absent
-
-
 def _strings(value: Any) -> list[str]:
-    """Flatten a result field into the strings it names, or nothing.
+    """Flatten one evidence field into the strings it names, or nothing.
 
-    Type-checked rather than assumed, because the same key means different things in
-    different evaluators — `expected` is a string in memory.py and a *count* in
-    conflict.py. A collector that assumed would put the number 2 in an evidence file
-    as though the system had been asked to say "2".
+    Type-checked rather than assumed. An evaluator that put a count where a token
+    belonged would otherwise land the number 2 in an evidence file as though the system
+    had been asked to say "2".
     """
     if isinstance(value, str):
         return [value]
     if isinstance(value, (list, tuple)):
-        out = []
-        for item in value:
-            if isinstance(item, str):
-                out.append(item)
-            elif isinstance(item, dict):
-                # entity masking's `swaps` are dicts. Take the values that are strings.
-                out.extend(v for v in item.values() if isinstance(v, str))
-            elif isinstance(item, (list, tuple)) and item:
-                out.append(str(item[0]))
-        return out
+        return [item for item in value if isinstance(item, str)]
     return []
+
+
+def _collect_key(record: dict[str, Any], key: str) -> list[str]:
+    out: list[str] = []
+    for field in _fields(record):
+        for token in _strings(field.get(key)):
+            if token not in out:
+                out.append(token)
+    return out
 
 
 def _excerpt(answer: str, token: str) -> dict[str, Any]:
@@ -121,9 +85,9 @@ def _excerpt(answer: str, token: str) -> dict[str, Any]:
 
     A token that is not in the answer is reported as such rather than dropped. Some
     checks read fields other than the answer — citation integrity matches document
-    ids against the upload manifest, entity masking looks in response metadata — and
-    an evidence file that silently omitted those instances would undercount the very
-    findings it exists to substantiate.
+    ids against the upload manifest, leakage reads retrieved chunks, entity masking
+    looks in response metadata — and an evidence file that silently omitted those
+    instances would undercount the very findings it exists to substantiate.
     """
     match = re.search(rf"(?<!\w){re.escape(token)}(?!\w)", answer, re.IGNORECASE)
     if match is None:
@@ -158,16 +122,8 @@ def _instance(
     record: dict[str, Any],
 ) -> dict[str, Any]:
     """One failing record, with the verbatim material behind it."""
-    appeared: list[dict[str, Any]] = []
-    missing: list[str] = []
-    for field in _fields(record):
-        for key in FOUND_KEYS:
-            appeared.extend(
-                _excerpt(response.answer, token) for token in _strings(field.get(key))
-            )
-        for key in MISSING_KEYS:
-            missing.extend(_strings(field.get(key)))
-    missing.extend(_per_fact_absences(record))
+    appeared = [_excerpt(response.answer, t) for t in _collect_key(record, FOUND_KEY)]
+    missing = _collect_key(record, MISSING_KEY)
 
     instance: dict[str, Any] = {
         "check": check,
@@ -175,11 +131,24 @@ def _instance(
         "pass_index": response.pass_index,
         "asked": probe.text,
         "tenant": probe.tenant,
+        # Which of the check's own outcomes this was — `counterparty_swap`,
+        # `silently_picked`, `vector_collision`. The excerpt shows what was said; this
+        # says what the evaluator concluded from it, and the two should be checkable
+        # against each other. Entity masking can conclude several at once, and all of
+        # them are printed: an answer that both swapped a counterparty and omitted an
+        # entity did two things, and naming one would understate it.
+        "outcome": record.get("outcome")
+        or ", ".join(record.get("outcomes") or []) or None,
     }
 
     if appeared:
         instance["kind"] = APPEARED
         instance["matches"] = appeared
+        if missing:
+            # Both, which happens on a swap: the wrong entity turned up *and* the right
+            # one did not. Recorded rather than dropped — the omission is half the
+            # finding.
+            instance["expected_and_absent"] = missing
     elif missing:
         # Nothing to quote a window around. The whole answer is the evidence, because
         # the claim is about everything the system did say instead.
@@ -267,6 +236,9 @@ def _render(check: str, instances: list[dict[str, Any]]) -> str:
             f"## {number}. `{instance['probe_id']}` — pass {instance['pass_index']}"
         )
         lines.append("")
+        if instance.get("outcome"):
+            lines.append(f"**Outcome:** `{instance['outcome']}`")
+            lines.append("")
         if instance.get("tenant"):
             lines.append(f"**Asked as:** `{instance['tenant']}`")
             lines.append("")
@@ -291,6 +263,12 @@ def _render(check: str, instances: list[dict[str, Any]]) -> str:
                 suffix = "…" if match["truncated_after"] else ""
                 lines.append(
                     "> " + prefix + match["excerpt"].replace("\n", "\n> ") + suffix
+                )
+                lines.append("")
+            if instance.get("expected_and_absent"):
+                lines.append(
+                    "**And expected but absent:** "
+                    + ", ".join(f"`{t}`" for t in instance["expected_and_absent"])
                 )
                 lines.append("")
         else:

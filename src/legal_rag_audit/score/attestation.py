@@ -121,6 +121,14 @@ def render(
         for check in tier1:
             lines.extend(_check_section(check, by_probe, report))
 
+    # Measurements sit inside §2 and outside the findings table. A number with no
+    # threshold cannot fail, and any threshold we invented for one would be ours rather
+    # than a standard (§8.2 #15). Their interpretation belongs in §6, written by a person.
+    for name in report["summary"].get("measurements", []):
+        measurement = checks.get(name)
+        if measurement and measurement["status"] not in (NOT_ELIGIBLE, NOT_CAPTURED):
+            lines.extend(_measurement_section(measurement))
+
     # --------------------------------------------------------------- 3. Tier 2
     add("## 3. Tier 2 metrics — Measured, instrument disclosed")
     add("")
@@ -196,6 +204,7 @@ def render(
 def _manifest_table(manifest: dict[str, Any]) -> list[str]:
     tool = manifest["tool"]
     inputs = manifest["inputs"]
+    run = manifest["run"]
     rows = [
         ["Tool version", f"`{tool['version']}`"],
         ["Commit", f"`{tool['commit_sha']}`" if tool["commit_sha"] else "—"],
@@ -215,6 +224,18 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
         ["Responses", f"`{inputs['responses_hash']}`"],
         ["Findings digest", f"`{manifest['scoring']['findings_hash']}`"],
         ["Passes", manifest["run"]["passes"]],
+        ["Corpus mode", run.get("corpus_mode") or "—"],
+        # Both halves. A seed on its own says the battery was reproducible; only the
+        # source says whether it was also unguessable, and those are different claims.
+        [
+            "Seed",
+            (
+                f"`{run['seed']}` — {run.get('seed_source') or 'source not recorded'}"
+                if run.get("seed")
+                else "—"
+            ),
+        ],
+        ["Plants", run.get("plants", 0)],
         ["Remote scoring", "false — enforced, not asserted"],
     ]
     out = _table(["Field", "Value"], rows)
@@ -285,6 +306,13 @@ def _check_section(
         f"{_plural(check['eligible'], 'probe')} declared eligible before the run."
     )
     out.append("")
+    if check.get("limit"):
+        # In the same artefact as the finding, never in a later post (§3.3, Source Map
+        # §7.5). §8.2 makes this mandatory for injection; the field carries it for every
+        # check that has one, so the report cannot print the finding without the sentence.
+        out.append(f"> [!IMPORTANT]")
+        out.append(f"> **What this does not establish.** {check['limit']}.")
+        out.append("")
     if check.get("partial"):
         out.append(f"**Partial:** {check['partial']}")
         out.append("")
@@ -313,6 +341,72 @@ def _check_section(
         )
     out.extend(_table(["Probe", "Pass", "Asked"], rows))
     return out
+
+
+def _measurement_section(check: dict[str, Any]) -> list[str]:
+    """A measurement, printed as a distribution and never as a verdict (§8.2 #15).
+
+    Median and p95, never a single figure: one number for a latency is a claim about a
+    system, and the spread is the only part of it a reader can use.
+    """
+    detail = check.get("detail", {})
+    out = [
+        f"### `{check['check']}` — measurement, no pass condition",
+        "",
+        f"**Recipe:** {check['recipe']}",
+        "",
+    ]
+    if check.get("limit"):
+        out.append("> [!NOTE]")
+        out.append(f"> {check['limit']}.")
+        out.append("")
+
+    distributions = detail.get("distributions") or {}
+    rows = []
+    for name in ("ttfb", "total"):
+        summary = distributions.get(name) or {}
+        rows.append(
+            [
+                f"`{name}`",
+                str(summary.get("observations", 0)),
+                _ms(summary.get("median_ms")),
+                _ms(summary.get("p95_ms")),
+                _ms(summary.get("min_ms")),
+                _ms(summary.get("max_ms")),
+            ]
+        )
+    out.extend(
+        _table(["", "observations", "median", "p95", "min", "max"], rows)
+    )
+
+    not_captured = (distributions.get("ttfb") or {}).get("not_captured", 0)
+    if not_captured:
+        out.append(
+            f"Time to first byte was not captured on {not_captured} "
+            f"{_plural(not_captured, 'record')}, so the gap this measurement is usually "
+            f"read for was not observed there."
+        )
+        out.append("")
+
+    inference = detail.get("inference")
+    if inference:
+        out.append(
+            f"**Reading — register `{inference['register']}`.** "
+            f"{inference['reading']}, comparing `{inference['baseline_probe']}` with "
+            f"`{inference['contradictory_probe']}`."
+        )
+        out.append("")
+        out.append("> [!IMPORTANT]")
+        out.append(f"> {inference['limit']}.")
+        out.append("")
+    if check.get("partial"):
+        out.append(f"**Partial:** {check['partial']}")
+        out.append("")
+    return out
+
+
+def _ms(value: Any) -> str:
+    return "—" if value is None else f"{int(value)} ms"
 
 
 def _tier2_section(check: dict[str, Any]) -> list[str]:
@@ -449,6 +543,13 @@ def _limits(report: dict[str, Any], capture: dict[str, Any]) -> list[str]:
             "The corpus carries fixed facts rather than seeded plants, so a key "
             "disclosed after this run remains valid for the next one. Per-engagement "
             "regeneration is what makes a repeat run meaningful."
+        )
+    elif "reproducible by anyone" in (manifest["run"].get("seed_source") or ""):
+        limits.append(
+            "**The plants came from the published demo seed.** Anyone can regenerate "
+            "this corpus and this answer key, so nothing here turns on the invariants "
+            "having been unguessable. This run demonstrates the method; it establishes "
+            "nothing about any product."
         )
     if manifest["scoring"]["tier2_skipped"]:
         limits.append(

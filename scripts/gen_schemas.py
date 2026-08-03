@@ -32,29 +32,29 @@ from legal_rag_audit.interchange.response import (  # noqa: E402
 )
 from legal_rag_audit.interchange.run_manifest import RunManifest  # noqa: E402
 from legal_rag_audit.interchange.versions import (  # noqa: E402
-    GROUND_TRUTH_V1,
+    GROUND_TRUTH_V2,
     HANDOVER_V1,
-    PROBES_V1,
+    PROBES_V2,
     REPORT_V2,
-    RESPONSES_V1,
+    RESPONSES_V2,
     RUN_MANIFEST_V1,
 )
 
 OUT_DIR = REPO_ROOT / "src" / "legal_rag_audit" / "interchange" / "jsonschema"
 
 VERSIONS = (
-    PROBES_V1,
-    RESPONSES_V1,
-    GROUND_TRUTH_V1,
+    PROBES_V2,
+    RESPONSES_V2,
+    GROUND_TRUTH_V2,
     HANDOVER_V1,
     RUN_MANIFEST_V1,
     REPORT_V2,
 )
 
 TITLES = {
-    PROBES_V1: "Probe file (JSONL) — one probe per line",
-    RESPONSES_V1: "Response file (JSONL) — one record per line",
-    GROUND_TRUTH_V1: "Ground-truth manifest (JSON) — withheld, hashed at handover",
+    PROBES_V2: "Probe file (JSONL) — one probe per line",
+    RESPONSES_V2: "Response file (JSONL) — one record per line",
+    GROUND_TRUTH_V2: "Ground-truth manifest (JSON) — withheld, hashed at handover",
     HANDOVER_V1: "Handover record (JSON) — the pre-commitment, published before the run",
     RUN_MANIFEST_V1: "Run manifest (JSON) — the provenance block of a report",
     REPORT_V2: "Report (JSON) — the evidence; report.md is the testimony",
@@ -77,9 +77,9 @@ def require_schema_field(node: dict) -> dict:
 
 
 def build(version: str) -> dict:
-    if version == PROBES_V1:
+    if version == PROBES_V2:
         schema = require_schema_field(Probe.model_json_schema(by_alias=True))
-    elif version == RESPONSES_V1:
+    elif version == RESPONSES_V2:
         # A response file holds two record shapes: an optional capture_notes header and
         # the responses themselves. The schema validates one *line*, so it is the union.
         response = require_schema_field(Response.model_json_schema(by_alias=True))
@@ -91,7 +91,7 @@ def build(version: str) -> dict:
             "oneOf": [response, notes],
             "$defs": defs,
         }
-    elif version == GROUND_TRUTH_V1:
+    elif version == GROUND_TRUTH_V2:
         schema = require_schema_field(GroundTruth.model_json_schema(by_alias=True))
     elif version == HANDOVER_V1:
         schema = require_schema_field(Handover.model_json_schema(by_alias=True))

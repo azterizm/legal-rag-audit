@@ -37,7 +37,7 @@ def write_lines(path: Path, *lines: str) -> Path:
 
 
 RESPONSE = (
-    '{"schema":"responses.v1","run_id":"r","probe_id":"p1","query":"q","answer":"a"}'
+    '{"schema":"responses.v2","run_id":"r","probe_id":"p1","query":"q","answer":"a"}'
 )
 
 
@@ -47,11 +47,25 @@ RESPONSE = (
 def test_unknown_schema_version_is_refused_not_parsed(tmp_path):
     """NF10. A guessed reading of an unknown version is indistinguishable from a
     correct one in the report it produces, which is why there is no best-effort path."""
-    path = write_lines(tmp_path / "r.jsonl", RESPONSE.replace("v1", "v2"))
+    path = write_lines(tmp_path / "r.jsonl", RESPONSE.replace("v2", "v9"))
     with pytest.raises(SchemaVersionError) as e:
         load_responses(path)
-    assert "responses.v2" in str(e.value)
+    assert "responses.v9" in str(e.value)
     assert "Refusing" in str(e.value)
+
+
+def test_a_superseded_version_is_refused_and_told_what_replaced_it(tmp_path):
+    """Still refused — but somebody holding a v1 file learns why it moved.
+
+    The alternative is a correct refusal that reads as a bug: the file was valid when it
+    was written, and *"expected responses.v2"* on its own does not say that.
+    """
+    path = write_lines(tmp_path / "r.jsonl", RESPONSE.replace("v2", "v1"))
+    with pytest.raises(SchemaVersionError) as e:
+        load_responses(path)
+    message = str(e.value)
+    assert "superseded by responses.v2" in message
+    assert "revision_wait_seconds" in message, "say what changed, not just that it did"
 
 
 def test_a_missing_schema_field_is_refused(tmp_path):
@@ -80,7 +94,7 @@ def test_a_parse_error_names_the_line(tmp_path):
 def test_a_multiline_object_is_diagnosed_with_the_fix(tmp_path):
     """The single most common way this file comes back wrong."""
     path = tmp_path / "r.jsonl"
-    path.write_text('{\n  "schema": "responses.v1"\n}\n', encoding="utf-8")
+    path.write_text('{\n  "schema": "responses.v2"\n}\n', encoding="utf-8")
     with pytest.raises(InterchangeError, match="jq -c"):
         load_responses(path)
 
@@ -88,7 +102,7 @@ def test_a_multiline_object_is_diagnosed_with_the_fix(tmp_path):
 def test_an_unknown_field_points_at_raw_response(tmp_path):
     path = write_lines(
         tmp_path / "r.jsonl",
-        '{"schema":"responses.v1","run_id":"r","probe_id":"p","query":"q",'
+        '{"schema":"responses.v2","run_id":"r","probe_id":"p","query":"q",'
         '"answer":"a","latency":5}',
     )
     with pytest.raises(InterchangeError) as e:
@@ -121,7 +135,7 @@ def test_the_same_probe_at_a_different_pass_is_fine(tmp_path):
 
 def test_duplicate_probe_ids_are_refused(tmp_path):
     line = (
-        '{"schema":"probes.v1","probe_id":"p","family":"f","intent":"positive",'
+        '{"schema":"probes.v2","probe_id":"p","family":"f","intent":"positive",'
         '"text":"t","eligible_for":["c"]}'
     )
     path = write_lines(tmp_path / "p.jsonl", line, line)
@@ -134,7 +148,7 @@ def test_two_expectations_for_one_probe_and_check_are_refused(tmp_path):
     path.write_text(
         json.dumps(
             {
-                "schema": "ground_truth.v1",
+                "schema": "ground_truth.v2",
                 "expectations": [
                     {"probe_id": "p", "check": "c"},
                     {"probe_id": "p", "check": "c"},
@@ -152,7 +166,7 @@ def test_two_expectations_for_one_probe_and_check_are_refused(tmp_path):
 
 def test_capture_notes_must_come_first(tmp_path):
     notes = (
-        '{"schema":"responses.v1","record":"capture_notes",'
+        '{"schema":"responses.v2","record":"capture_notes",'
         '"citations_captured":true,"retrieved_chunks_captured":true}'
     )
     path = write_lines(tmp_path / "r.jsonl", RESPONSE, notes)
@@ -167,7 +181,7 @@ def test_declared_capture_beats_inference(tmp_path):
     the system may emit none, or nothing may have looked. The producer knows; we do not.
     """
     notes = (
-        '{"schema":"responses.v1","record":"capture_notes",'
+        '{"schema":"responses.v2","record":"capture_notes",'
         '"citations_captured":false,"retrieved_chunks_captured":false}'
     )
     parsed = load_responses(write_lines(tmp_path / "r.jsonl", notes, RESPONSE))
@@ -211,7 +225,7 @@ def test_an_explicit_record_response_is_accepted_and_not_echoed_back(tmp_path):
 
 def test_an_unknown_record_type_is_refused(tmp_path):
     path = write_lines(
-        tmp_path / "r.jsonl", '{"schema":"responses.v1","record":"summary"}'
+        tmp_path / "r.jsonl", '{"schema":"responses.v2","record":"summary"}'
     )
     with pytest.raises(InterchangeError, match="unknown record type"):
         load_responses(path)
@@ -310,9 +324,9 @@ def test_every_supported_version_has_a_published_schema():
 
 def test_the_schema_requires_the_version_declaration():
     """The loaders refuse a record with no `schema`; the published contract says so too."""
-    for version in ("probes.v1", "ground_truth.v1"):
+    for version in ("probes.v2", "ground_truth.v2"):
         assert "schema" in read_schema_document(version)["required"]
-    for variant in read_schema_document("responses.v1")["oneOf"]:
+    for variant in read_schema_document("responses.v2")["oneOf"]:
         assert "schema" in variant["required"]
 
 

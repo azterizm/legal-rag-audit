@@ -32,11 +32,16 @@ from legal_rag_audit.interchange import (
     write_probes,
     write_responses,
 )
-from legal_rag_audit.probes import build_ground_truth, build_probes
+from legal_rag_audit.probes import build_ground_truth, build_probes, planted_corpus
 from legal_rag_audit.provenance import hash_json
 from legal_rag_audit.score import distributions, evidence, findings_of, score
 
-LEAKED = "buyout is valued at exactly $5,000,000"
+#: The battery is seeded, so the tokens a test needs come from the corpus rather than
+#: being typed here. A string typed into a test is a second copy of the answer key, and
+#: it goes stale the moment the templates or the seed move — silently, because a check
+#: that no longer fires reads as a system that no longer leaks.
+CORPUS = planted_corpus()
+LEAKED = CORPUS.value("xt-figure")
 
 
 def make_run(tmp_path, answers=None, probes=None, ground_truth=None):
@@ -203,7 +208,7 @@ def test_a_token_the_check_read_somewhere_other_than_the_answer_is_not_dropped()
                     "status": "FAIL",
                     "probe_id": "cap-001",
                     "pass_index": 1,
-                    "details": {"invalid_citations": ["doc_9999"]},
+                    "details": {"appeared": ["doc_9999"]},
                 }
             ]
         },
@@ -218,52 +223,62 @@ def test_a_token_the_check_read_somewhere_other_than_the_answer_is_not_dropped()
     assert match["found_in"] == "not the answer text"
 
 
-def test_every_evaluator_that_can_fail_contributes_a_named_evidence_key():
-    """The key lists are enumerated, not heuristic. Enumeration rots silently — an
-    evaluator gains a field, nobody adds it, and the bundle quietly falls back to
-    reproducing whole answers for a check that had a token all along."""
+def test_every_tier1_evaluator_reports_through_the_shared_result_shape():
+    """The bundle reads two keys. This asserts every evaluator writes them.
+
+    The previous version of this test enumerated nine result-key names and checked each
+    evaluator mentioned one. Enumeration rots silently — an evaluator gains a field,
+    nobody adds it, and the bundle quietly falls back to reproducing whole answers for a
+    check that had a token all along. That is what happened to `cache.py`, which named
+    its evidence `has_stale_data` and had to be exempted by hand.
+
+    Phase D removed the class of bug rather than another instance of it: `_common.result`
+    is the only way a Tier 1 evaluator returns, and it always emits `appeared` and
+    `absent`. So the check is structural — does this module return through it — and there
+    is nothing left to keep in step.
+    """
     import ast
     from pathlib import Path
 
     import legal_rag_audit
 
-    known = set(evidence.FOUND_KEYS) | set(evidence.MISSING_KEYS) | {"per_fact"}
     directory = Path(legal_rag_audit.__file__).parent / "evaluators"
 
     uncovered = []
     for path in sorted(directory.glob("*.py")):
-        if path.name == "__init__.py":
+        if path.stem in {"__init__", "_common"} or path.stem in _SCORES_NUMBERS_NOT_TOKENS:
             continue
-        keys = {
-            node.value
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.Constant) and isinstance(node.value, str)
-        }
-        # An evaluator with no evidence-bearing key at all is fine — latency and the
-        # Tier 2 pair score numbers, not tokens. One that has keys we do not read is
-        # the failure this test exists for.
-        if not keys & known and path.stem not in _SCORES_NUMBERS_NOT_TOKENS:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imports_result = any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "_common"
+            and any(alias.name == "result" for alias in node.names)
+            for node in ast.walk(tree)
+        )
+        if not imports_result:
             uncovered.append(path.name)
 
     assert not uncovered, (
-        f"these evaluators name no key the evidence bundle reads: {uncovered}. "
-        f"Add the key to evidence.FOUND_KEYS or MISSING_KEYS, or add the module to "
-        f"the numbers-not-tokens list with a reason."
+        f"these evaluators do not return through `_common.result`, so the evidence "
+        f"bundle has no key to read on their findings: {uncovered}"
     )
+
+
+def test_the_shared_result_shape_always_carries_both_evidence_keys():
+    """Negative control. An absent key and an empty list read the same way to a person
+    skimming JSON, and only one of them means *this evaluator looked and found nothing*."""
+    from legal_rag_audit.evaluators._common import PASS, result
+
+    empty = result(PASS)
+    assert empty["appeared"] == []
+    assert empty["absent"] == []
+    assert evidence.FOUND_KEY in empty and evidence.MISSING_KEY in empty
 
 
 #: Evaluators the bundle cannot quote from, each for a stated reason.
 _SCORES_NUMBERS_NOT_TOKENS = {
-    "latency",  # seconds — there is no token
     "hallucination",  # Tier 2: the evidence is the distribution, not a quotation
     "retrieval",  # Tier 2, as above
-    "confidence",  # Tier 2, as above
-    # A known gap, not a numeric check. CacheInvalidationEvaluator returns
-    # `has_stale_data` / `has_fresh_data` as booleans; the stale and fresh tokens are
-    # arguments it never echoes, so there is nothing in the result to quote. Its
-    # instances fall back to reproducing the whole answer. Phase D rewrites this
-    # evaluator to the §8.2 recipe, which is where the tokens come back.
-    "cache",
 }
 
 
@@ -351,7 +366,6 @@ def test_the_score_key_for_every_instrument_is_the_one_the_evaluator_emits():
     modules = {
         "unsupported_assertions": "hallucination",
         "retrieval_relevance": "retrieval",
-        "abstention": "confidence",
     }
     directory = Path(legal_rag_audit.__file__).parent / "evaluators"
 

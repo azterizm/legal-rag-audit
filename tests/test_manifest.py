@@ -423,17 +423,15 @@ def test_the_instrument_table_still_matches_the_evaluators():
     assert argument_default("hallucination", "__init__", "model_name") == (
         ENTAILMENT_MODEL
     )
-    assert argument_default("confidence", "__init__", "model_name") == ENTAILMENT_MODEL
     assert argument_default("retrieval", "__init__", "model_name") == EMBEDDING_MODEL
 
-    # The abstention line is the evaluator's own default, because registry.py calls
-    # evaluate() without one. If that ever becomes configurable, the manifest must
-    # stop claiming it is fixed.
-    abstention = BY_CHECK["abstention"]
-    assert abstention.setting is None
-    assert (
-        argument_default("confidence", "evaluate", "threshold") == abstention.default
-    )
+    # Every instrument in the table is a check the registry actually registers as Tier 2.
+    # A row left behind after a check moved tiers would put a model and a threshold on
+    # the page for scoring that no longer runs one — which is the disclosure failure the
+    # table exists to prevent, inverted.
+    from legal_rag_audit.score.registry import tier2_checks
+
+    assert sorted(BY_CHECK) == sorted(tier2_checks())
 
 
 def test_the_drift_check_would_notice_a_renamed_model():
@@ -623,7 +621,7 @@ def test_the_handover_schema_is_published_like_every_other_contract():
 
 def test_the_instruments_table_is_not_empty():
     """Guards the assertions above from passing vacuously."""
-    assert len(INSTRUMENTS) == 3
+    assert len(INSTRUMENTS) == 2
 
 
 def test_a_handover_record_needs_no_artefacts_to_be_valid():

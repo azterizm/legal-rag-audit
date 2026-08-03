@@ -106,7 +106,7 @@ def test_the_cli_runs_there(generate_env):
     )
     # main() calls sys.exit(0) on success.
     assert result.returncode == 0, result.stderr
-    assert "responses.v1" in result.stdout
+    assert "responses.v2" in result.stdout
 
 
 @pytest.mark.slow
@@ -125,7 +125,10 @@ def test_the_scoring_registry_imports_without_the_ml_stack(generate_env):
     assert result.returncode == 0, result.stderr
     registered, tier1 = (int(x) for x in result.stdout.split())
     assert registered == 17
-    assert tier1 == 14
+    # 15 of the 18 evaluators in §8.1 are Tier 1 and shipped; #18 arrives in Phase G to
+    # make 16. The count moved from 14 when Phase D rewrote abstention as an inverted
+    # presence check and took the cross-encoder out of its path (§8.2 #8).
+    assert tier1 == 15
 
 
 @pytest.mark.slow

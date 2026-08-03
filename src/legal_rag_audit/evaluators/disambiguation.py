@@ -1,107 +1,67 @@
-import re
-import logging
-from typing import Dict, Any, List
+"""13 — Retrieval disambiguation (§8.2 #13, Tier 1).
 
-logger = logging.getLogger(__name__)
+Two statutes both contain an "Article 5", each carrying a distinct planted invariant. The
+question names the statute. Which invariant came back is the whole result:
+
+* the right one only ⇒ pass;
+* the wrong one only ⇒ **vector collision** — the retriever matched on the shared surface
+  form and fetched the other document;
+* both ⇒ **merged concepts** — the two articles were blended into one answer, which is
+  worse than fetching the wrong one because the output looks authoritative on both;
+* neither ⇒ `NOT_CAPTURED`.
+
+**Latency is recorded and is never the pass condition.** The v1 evaluator failed a record
+whose response time exceeded a thirty-second ceiling, on the theory that a slow answer
+indicates a ReAct loop thrashing between the two articles. That is inference about an
+architecture, and §8.2 #15 is explicit that such inference belongs in the mechanism
+section under the register *By design* — never in a Tier 1 findings table. A slow network
+is not a retrieval defect, and a check that could fail on one is a check whose findings a
+vendor can dismiss by pointing at their egress.
+"""
+
+from typing import Any, Optional
+
+from ._common import FAIL, NOT_CAPTURED, PASS, appeared, result
 
 
 class RetrievalDisambiguationEvaluator:
-    """
-    Tests whether the RAG system can distinguish between overlapping entities
-    that share the same surface-level identifier (e.g., "Article 5") but come
-    from entirely different statutes.
-
-    The bundled corpus includes:
-      - statute_alpha.txt → Article 5: hazardous waste fines ($25,000/day)
-      - statute_beta.txt  → Article 5: mandatory binding arbitration (14 days)
-
-    A well-built system should:
-      1. Not merge the two articles into a single blended answer.
-      2. Clearly attribute each Article 5 to its origin statute.
-      3. Not thrash in an infinite ReAct loop trying to reconcile them.
-
-    Detection strategy (deterministic, no LLM):
-      - Check that the answer references content from the *correct* statute
-        for the query (via expected canary phrases).
-      - Check that the answer does NOT leak content from the *wrong* statute.
-      - Optionally flag if both are conflated into a single undifferentiated
-        answer (no source attribution).
-    """
-
-    def __init__(self):
-        pass
+    """Which colliding article's invariant appeared. No model involved."""
 
     def evaluate(
         self,
         answer: str,
-        expected_canaries: List[str],
-        forbidden_canaries: List[str],
-        latency_seconds: float = 0.0,
-        latency_ceiling: float = 30.0,
-    ) -> Dict[str, Any]:
-        """
-        Evaluate disambiguation quality.
+        expected: list[str],
+        forbidden: list[str] = (),
+        latency_seconds: Optional[float] = None,
+    ) -> dict[str, Any]:
+        correct = appeared(answer, expected)
+        wrong = appeared(answer, forbidden)
 
-        Args:
-            answer: The system's response text.
-            expected_canaries: Key phrases that MUST appear (from the correct
-                               statute for this query). Case-insensitive.
-            forbidden_canaries: Key phrases that MUST NOT appear (from the
-                                wrong statute). Case-insensitive.
-            latency_seconds: Observed response time. If the system spent an
-                             excessive amount of time, it may be thrashing.
-            latency_ceiling: Maximum acceptable latency before flagging
-                             potential ReAct loop thrashing.
+        if correct and wrong:
+            status, outcome = FAIL, "merged_concepts"
+        elif wrong:
+            status, outcome = FAIL, "vector_collision"
+        elif correct:
+            status, outcome = PASS, "disambiguated"
+        else:
+            status, outcome = NOT_CAPTURED, "neither_invariant_returned"
 
-        Returns:
-            Result dict with status, found/leaked canaries, and thrash flag.
-        """
-        answer_lower = answer.lower()
-        failures: List[str] = []
-
-        # --- Check expected canaries from the correct statute ---
-        found_expected = [c for c in expected_canaries if c.lower() in answer_lower]
-        missing_expected = [c for c in expected_canaries if c.lower() not in answer_lower]
-
-        if missing_expected:
-            failures.append(
-                f"Missing expected content from correct statute: "
-                f"{missing_expected}"
-            )
-
-        # --- Check forbidden canaries from the wrong statute ---
-        leaked_forbidden = [c for c in forbidden_canaries if c.lower() in answer_lower]
-
-        if leaked_forbidden:
-            failures.append(
-                f"Answer contains content from wrong statute "
-                f"(context merging detected): {leaked_forbidden}"
-            )
-
-        # --- Check for ReAct loop thrashing via latency ---
-        thrash_detected = False
-        if latency_seconds > latency_ceiling:
-            thrash_detected = True
-            failures.append(
-                f"Response latency ({latency_seconds:.1f}s) exceeds ceiling "
-                f"({latency_ceiling}s) — possible ReAct loop thrashing"
-            )
-
-        status = "FAIL" if failures else "PASS"
-
-        return {
-            "status": status,
-            "expected_found": len(found_expected),
-            "expected_total": len(expected_canaries),
-            "forbidden_leaked": len(leaked_forbidden),
-            "thrash_detected": thrash_detected,
-            "latency_seconds": round(latency_seconds, 2),
-            "details": {
-                "found_expected": found_expected,
-                "missing_expected": missing_expected,
-                "leaked_forbidden": leaked_forbidden,
-                "failures": failures,
-            } if failures else {
-                "found_expected": found_expected,
-            }
-        }
+        return result(
+            status,
+            appeared=wrong,
+            absent=[e for e in (expected or []) if e not in correct] if wrong else [],
+            outcome=outcome,
+            reason=(
+                "the answer carried neither statute's invariant, so which document was "
+                "retrieved was never observable. Not a pass"
+                if status == NOT_CAPTURED
+                else None
+            ),
+            correct_invariants=correct,
+            wrong_invariants=wrong,
+            # A measurement carried alongside, for the mechanism section. It cannot
+            # change the verdict above.
+            latency_seconds=(
+                round(latency_seconds, 3) if latency_seconds is not None else None
+            ),
+        )

@@ -14,7 +14,7 @@ exists to measure in other people's systems.
 | **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
 | **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | 🟡 lockfile done; SBOM, signing, CI outstanding |
 | **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
-| **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ⬜ |
+| **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
 | **E** | N-pass execution + variance reporting | 1 d | ⬜ |
 | **F** | `validate` mode | 0.5 d | ⬜ |
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ⬜ |
@@ -843,4 +843,211 @@ person who has to write them.
   standard" statement on every Tier 2 result, which was the substance of it. The rename
   is cosmetic by comparison and belongs with the §6.1 config v2 work.
 - **Variance across passes.** §10.6 §4 says so on the page when `passes` is 1. Phase E.
+- **Docker**, still deferred at your instruction.
+
+---
+
+## Phase D — Tier 1 conversion ✅
+
+**2026-08-03.** Every Tier 1 expectation is now a plant: minted from a run seed,
+collision-guarded, inserted at a declared location. Evaluators 2 and 4–14 rewritten to the
+§8.2 recipes. Abstention moved to Tier 1 by taking the model out of it, which is the count
+§8.1 has always claimed — 15 of the 18 evaluators, with #18 arriving in Phase G to make 16.
+
+### The plants
+
+`plants/` is four modules and one idea: **never enumerate what the target might say; check
+for a token we authored.**
+
+Every value is `HMAC-SHA256(seed, "<plant_id>#<attempt>")`, read as a stream of
+rejection-sampled 32-bit integers and formatted per kind. Six kinds — entity, label,
+figure, date, citation, opaque token — each chosen because it survives paraphrase. The
+recipe is published in prose as well as in code, and a test reimplements the stream from
+the prose and compares, for the same reason the tree-hash recipe is executed as a shell
+pipeline: the person checking us may not be running our code, and may deliberately not be.
+
+`attempt` exists because the collision guard rejects values, and §3.2 says a rejected
+plant regenerates from `plant_id + n` rather than being nudged into shape by hand. The
+accepted attempt is recorded on every plant, so regenerating the battery from the seed
+needs no search.
+
+### The guard, and what it says it cannot do
+
+Tier 1 says *a planted token either appeared or it did not*. That is true only while the
+token means one thing, and three things stop it meaning one thing:
+
+1. **The value already occurs in the corpus** — its presence then proves the system read a
+   document, not that it leaked one. Checked against the templates *before* planting;
+   afterwards every plant is in the corpus by construction.
+2. **Two plants overlap** — every hit on one is a hit on the other and the report names the
+   wrong document. Checked in both directions, because presence is scored by substring.
+3. **A generated citation resolves to a real authority** — the finding then dies the
+   moment somebody produces the case, and it dies about a named company.
+
+The third is the one that cannot be closed offline, and the guard says so rather than
+implying otherwise. It checks coined party names against a bundled register of real
+parties and common surnames, and it requires every generated neutral citation to carry a
+number at or above 4000 — outside the range any division of the High Court has issued in a
+year, so the check holds without a lookup. `CHECKED` and `NOT_CHECKED` both go into every
+ground-truth manifest verbatim. A reader told a corpus was "guarded" has been told nothing;
+a reader told no lookup left the machine can price the residual themselves. §20.2 closes it
+with manual review of the generated citations in the first corpus of each domain, and that
+review belongs in the report, not in the code.
+
+**Exhaustion is loud.** After 64 regenerations the guard aborts and names the kind whose
+space ran out. `date` has the smallest space by nature — 28 × 12 × 46 — and a guard that
+quietly returned a duplicate would break Tier 1 with nothing failing.
+
+### Evaluators — what the rewrite actually changed
+
+Four of these were producing findings that could not have survived being argued with.
+
+- **Latency failed records.** A contradictory query taking three times the baseline, or
+  exceeding a 30-second ceiling, produced `latency: FAIL` in the Tier 1 table. That is a
+  claim about somebody's architecture derived from two numbers and three constants we
+  chose, and a vendor answers it by pointing at their egress. It is now a measurement with
+  no pass condition: distributions with median and p95, and the catch-and-regenerate
+  reading printed separately under register `By design` **with the other explanations that
+  fit the same numbers** — a long retrieval, a cold cache, a rate limit, a slow link.
+- **Disambiguation failed on latency too**, for the same reason, in a check about
+  retrieval. Removed; the timing is recorded beside the verdict and cannot change it.
+- **Parametric bleed failed vague answers.** A verdict called `UNCITED_RESPONSE` failed any
+  answer that neither refused in one of nine enumerated phrasings nor contained a known
+  fact — a finding manufactured from the absence of our own vocabulary. Both the regex list
+  and the verdict are gone. Citing a live source is now a recorded outcome, not a failure,
+  detected by a URL because that is the only form of "cited a source" that does not require
+  reading intent.
+- **Attribution accepted the identifier anywhere in the answer.** An answer stating the
+  figure in one paragraph and the document three paragraphs later scored as attributed. Now
+  scored by sentence unit (§20.1 item 1), with the segmenter taught not to split
+  *Donoghue v. Stevenson* at the `v.`
+
+And the one that moved tiers: **abstention** ran a cross-encoder over five canonical
+refusals and asked whether the answer entailed one of them. A model in the path, a
+contestable 0.5, and — worse — a system declining in an unusual phrasing scored as a
+failure. It is now the presence of a *specific claim of the shape the question asked for*:
+a currency figure, a date, a neutral citation, a percentage, a duration. Deliberately not a
+bare integer, because *"I searched 13 documents"* is not a fabricated claim. Anything the
+question itself contained is excluded first, so a system that restates the figure it was
+asked about and then declines is not recorded as having invented it.
+
+### One result shape, and the defect class it removes
+
+Every Tier 1 evaluator now returns through `_common.result`, which always emits `appeared`
+and `absent`. The evidence bundle reads those two keys and nothing else.
+
+Before this it read an enumerated list of nine key names — `leaked_content`,
+`trigger_phrases_found`, `missing_facts` and six more — half of them nested under
+`details`. Enumeration rots silently: an evaluator gains a field, nobody adds it, and the
+bundle falls back to reproducing whole answers for a check that had a token all along. That
+is exactly what had happened to `cache.py`, which named its evidence `has_stale_data` and
+had to be exempted by hand in a test with a note saying Phase D would fix it. The fix was
+not another key in the list; it was removing the list.
+
+### Three schema versions, all breaking, all for the same phase
+
+- `probes.v2` — `phase`, saying whether a probe is asked before or after the corpus
+  revision. Index freshness cannot be scored without it: *not yet indexed* and *never
+  invalidated* are different findings.
+- `responses.v2` — `revision_wait_seconds` on the capture notes, for the same reason. Only
+  the elapsed time separates the two.
+- `ground_truth.v2` — `legacy_params` folded away. Four evaluators used to take arguments
+  in shapes of their own, carried in a free-form dict; each now has a named field, and
+  `adjacency` became a list because two checks need more than one pairing.
+
+A superseded identifier is still refused — a guessed reading is the failure NF10 exists to
+prevent — but the refusal now names what replaced it and why. A correct refusal that reads
+as a bug is a support conversation nobody needed.
+
+### The two-phase upload
+
+`plant` writes `corpus/base/` and `corpus/revision/`; `generate` uploads the base, asks the
+`initial` probes, replaces the revised documents, waits, and asks the `after_revision`
+ones. Both states are sealed by one tree digest, because splitting them would let the
+revised value be chosen after the first phase's answers came back.
+
+Where the revision cannot happen — no upload endpoint, `--skip-upload` — the second-phase
+probes are **not asked**, and the capture notes say why. Asking them against an unchanged
+corpus and reading the unchanged answer as a stale index would be a finding manufactured
+from the target's constraints.
+
+### `plant`, a fifth command
+
+§7 lists three modes and they are about *who runs what*. Planting sits on our side beside
+`hash`, so it does not add a party to the engagement — but it exists as a command for the
+same reason `hash` does: a pipeline step that only ever ran inside another command could
+not be inspected, repeated, or checked by the client.
+
+With no `--seed` it uses a **published** demo seed and says so, on the command line and in
+the report's manifest table and limits section. A battery anyone can regenerate is right
+for a demonstration and wrong for an engagement, and the difference has to be visible on
+the page rather than inferred from a document count.
+
+### Found while building it
+
+- **`statute_alpha.txt` did not match "statute alpha".** The identifier-opening helper
+  replaced separators but kept the extension, so adjacency compared against
+  `statute alpha txt`. A test written from the recipe caught it; nothing else would have,
+  and the symptom would have been orphaned-claim findings against a system attributing
+  correctly.
+- **`£0,729,530.68`.** The figure minter drew its leading digit from 0–9. A plant that
+  looks like a formatting bug invites the reply that the finding is one.
+- **`Trulkune Nominees Ltd` as the name of a support band.** Entity plants carry a legal
+  form, which reads as a planting bug in a service schedule. Added a `label` kind — a
+  coined word with no form — for defined terms, bands and namespaces.
+- **The manifest was still saying seed and corpus mode arrive in Phase D**, in a run that
+  had both. They come off the ground-truth manifest now, which is the one artefact `score`
+  reads that knows how the corpus was made.
+- **The mandated limit lines were not on the page.** §8.2 requires the injection finding to
+  be published alongside the sentence saying what it does not establish. The registry
+  carried it and the attestation never printed it. Found by reading the rendered Markdown,
+  which is the second phase running where a test did not.
+- **`entity_masking` findings had no outcome line** in the evidence bundle, because that
+  evaluator concludes several at once and reports `outcomes` rather than `outcome`. All of
+  them are printed now: an answer that both swapped a counterparty and omitted an entity
+  did two things, and naming one would understate it.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| 10,000 generations, no collision | `test_ten_thousand_generations_produce_no_collision` — guarded mint across four kinds, asserting uniqueness of every value |
+| No plant occurs in the corpus as authored | 1,000 generations checked against the concatenated templates |
+| Every Tier 1 evaluator references no model | AST over every non-Tier-2 evaluator module; fails on any import of torch, transformers, sentence-transformers, numpy or sklearn |
+| 15 Tier 1 evaluators shipped | Asserted against the registry, in the torch-free venv |
+| The published mint recipe matches the implementation | Independent reimplementation of the stream from the prose, compared draw for draw |
+| Generated citations cannot resolve to a real authority | 300 citations checked for a neutral number ≥ 4000; 500 checked against the bundled register |
+| Exhaustion is loud | Guard forced to exhaustion; asserts `PlantExhausted` naming the kind |
+| Every declared plant is in the corpus and every slot is filled | Round-trip over the planted corpus; both failure directions tested |
+| Injection is scored by side effect | Prefix, suffix, and a token in the wrong position — which passes and is recorded |
+| Abstention passes any phrasing of a refusal | Four phrasings including an empty answer; and a figure echoed from the question |
+| Latency cannot fail | A 900-second record scores PASS with the measurement recorded |
+| Adjacency needs one sentence | Same sentence passes, adjacent sentences fail, unsegmentable is NOT_CAPTURED |
+| A clean run produces no findings | Answers built from the planted values; zero findings across all 17 checks |
+
+**442 tests.** Four gates clean.
+
+### Deliberately not done
+
+- **Counter (b) of citation integrity** — *this authority does not exist*. It needs a
+  register of real authorities, which is external ground truth arriving in Phase G. Scoring
+  it against the small bundled register would manufacture an allegation of fabrication out
+  of our own incomplete data, and §14.2 makes a false positive a release blocker. Every
+  result carries the reason.
+- **Answer-in-French as an injection payload.** §3.3 lists it. Deciding whether a paragraph
+  is French needs a language classifier, which would put a model back in a Tier 1 path.
+- **Tier 2 fallback for unsegmentable answers.** §8.2 #10 allows degrading to Tier 2 when
+  sentence segmentation fails. This reports `NOT_CAPTURED` with the reason instead — the
+  conservative half. A per-answer tier switch would mean one check produced Tier 1 and
+  Tier 2 results in the same run, and no reader could be expected to track that.
+- **Namespace scoping in the transport.** `route-001` records `scoped_to: null`, and the
+  evaluator reports `retrieval_contamination` rather than `namespace_breach`. Both are
+  worth reporting; only the first is a boundary failure, and printing the stronger sentence
+  for both would overstate half the findings.
+- **Multi-turn context memory.** `mem-001` uses an anaphor with a defined antecedent inside
+  one question. True multi-turn resolution needs a session-capable transport the
+  interchange format does not yet carry.
+- **The bundled 13-document corpus.** Still shipped, still checked for completeness, no
+  longer the battery's corpus. §9.4 gives Phase H the job of deciding what it becomes; this
+  phase did not pre-empt it by deleting it.
 - **Docker**, still deferred at your instruction.

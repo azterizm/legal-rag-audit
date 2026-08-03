@@ -27,6 +27,7 @@ from legal_rag_audit.corpus_loader import (
     BUNDLED_DOCUMENTS,
     CorpusError,
     bundled_corpus_path,
+    check_bundled_complete,
     load_corpus,
 )
 
@@ -113,7 +114,7 @@ def test_bundled_corpus_is_inside_the_built_wheel(tmp_path):
 
 
 def test_bundled_corpus_loads():
-    documents = load_corpus(use_bundled=True)
+    documents = load_corpus(bundled_corpus_path())
     assert len(documents) == len(BUNDLED_DOCUMENTS)
     assert all(d["content"].strip() for d in documents)
     assert {d["filename"] for d in documents} == set(BUNDLED_DOCUMENTS)
@@ -131,7 +132,7 @@ def test_incomplete_bundled_corpus_aborts_and_names_what_is_missing(tmp_path, mo
     )
 
     with pytest.raises(CorpusError) as excinfo:
-        load_corpus(use_bundled=True)
+        check_bundled_complete()
 
     message = str(excinfo.value)
     assert "incomplete" in message
@@ -145,24 +146,24 @@ def test_missing_bundled_corpus_directory_aborts(tmp_path, monkeypatch):
         lambda: str(tmp_path / "does-not-exist"),
     )
     with pytest.raises(CorpusError, match="not installed"):
-        load_corpus(use_bundled=True)
+        check_bundled_complete()
 
 
 def test_no_corpus_configured_aborts():
     with pytest.raises(CorpusError, match="No corpus configured"):
-        load_corpus(use_bundled=False, path=None)
+        load_corpus(None)
 
 
 def test_custom_corpus_path_must_exist(tmp_path):
     with pytest.raises(CorpusError, match="does not exist"):
-        load_corpus(use_bundled=False, path=str(tmp_path / "nope"))
+        load_corpus(str(tmp_path / "nope"))
 
 
 def test_empty_custom_corpus_directory_aborts(tmp_path):
     empty = tmp_path / "corpus"
     empty.mkdir()
     with pytest.raises(CorpusError, match="no readable documents"):
-        load_corpus(use_bundled=False, path=str(empty))
+        load_corpus(str(empty))
 
 
 def test_custom_corpus_loads(tmp_path):
@@ -171,7 +172,7 @@ def test_custom_corpus_loads(tmp_path):
     (d / "one.txt").write_text("The liability cap is $2,000,000.", encoding="utf-8")
     (d / "two.md").write_text("# Notes\n\nArbitration seat is London.", encoding="utf-8")
 
-    documents = load_corpus(use_bundled=False, path=str(d))
+    documents = load_corpus(str(d))
     assert [x["filename"] for x in documents] == ["one.txt", "two.md"]
     assert documents[0]["id"] == "one"
 
@@ -182,7 +183,7 @@ def test_empty_document_aborts(tmp_path):
     (d / "real.txt").write_text("content", encoding="utf-8")
     (d / "blank.txt").write_text("   \n\n", encoding="utf-8")
     with pytest.raises(CorpusError, match="empty"):
-        load_corpus(use_bundled=False, path=str(d))
+        load_corpus(str(d))
 
 
 def test_non_utf8_document_aborts(tmp_path):
@@ -190,7 +191,7 @@ def test_non_utf8_document_aborts(tmp_path):
     d.mkdir()
     (d / "binary.txt").write_bytes(b"\xff\xfe\x00\x01 not text")
     with pytest.raises(CorpusError, match="not UTF-8"):
-        load_corpus(use_bundled=False, path=str(d))
+        load_corpus(str(d))
 
 
 def test_hidden_files_are_skipped(tmp_path):
@@ -199,7 +200,7 @@ def test_hidden_files_are_skipped(tmp_path):
     d.mkdir()
     (d / "real.txt").write_text("content", encoding="utf-8")
     (d / ".DS_Store").write_bytes(b"\x00\x01\x02")
-    documents = load_corpus(use_bundled=False, path=str(d))
+    documents = load_corpus(str(d))
     assert [x["filename"] for x in documents] == ["real.txt"]
 
 
@@ -209,7 +210,7 @@ def test_document_order_is_stable(tmp_path):
     d.mkdir()
     for name in ("c.txt", "a.txt", "b.txt"):
         (d / name).write_text(f"content of {name}", encoding="utf-8")
-    assert [x["filename"] for x in load_corpus(use_bundled=False, path=str(d))] == [
+    assert [x["filename"] for x in load_corpus(str(d))] == [
         "a.txt",
         "b.txt",
         "c.txt",
@@ -246,8 +247,8 @@ def test_cli_exits_2_on_a_corpus_problem(tmp_path):
         "    chat: http://127.0.0.1:1/chat\n"
         "    upload: http://127.0.0.1:1/upload\n"
         "corpus:\n"
-        f"  path: {tmp_path / 'does-not-exist'}\n"
-        "  use_bundled: false\n",
+        f"  mode: existing\n"
+        f"  path: {tmp_path / 'does-not-exist'}\n",
         encoding="utf-8",
     )
     result = subprocess.run(

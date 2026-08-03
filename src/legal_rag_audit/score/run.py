@@ -131,6 +131,10 @@ def score_check(
         # answer for two checks depends on what the response file carried.
         "key": spec.key_for(bool(response_file.retrieved_chunks_captured())),
         "recipe": spec.recipe,
+        # What this check does not establish, carried from the registry so the report
+        # cannot print the finding without it (§3.3, §8.2).
+        "limit": spec.limit,
+        "measurement": spec.measurement,
         "eligible": len(eligible),
         "scored": 0,
         "not_captured": 0,
@@ -185,12 +189,20 @@ def score_check(
                 else None
             ),
             thresholds=thresholds,
+            revision_wait_seconds=(
+                response_file.capture_notes.revision_wait_seconds
+                if response_file.capture_notes
+                else None
+            ),
         )
     )
 
     result["status"] = outcome.status
     result["scored"] = outcome.scored
     result["failed"] = outcome.failed
+    # Records the evaluator itself could not score, on top of the ones that never
+    # arrived. Both are not-captured; neither is a pass.
+    result["not_captured"] += outcome.not_captured
     result["detail"] = outcome.detail
     if outcome.partial:
         result["partial"] = outcome.partial
@@ -410,6 +422,10 @@ def _score(
         skip_tier2=skip_tier2,
         pre_commitment=pre_commitment,
         handover=handover,
+        # The one artefact `score` reads that knows how the corpus was made: the seed,
+        # where it came from, and how many invariants it produced (§6.5 run.seed,
+        # run.corpus_mode).
+        ground_truth=ground_truth,
     )
 
     # Manifest first: a reader meets the provenance before the findings, which is the
@@ -488,6 +504,10 @@ def _summarise(checks: list[dict[str, Any]]) -> dict[str, Any]:
         "failed": by_status[FAIL],
         "not_eligible": by_status[NOT_ELIGIBLE],
         "not_captured": by_status[NOT_CAPTURED],
+        # Checks with no pass condition (§8.2 #15). Named rather than folded into
+        # `passed`, where they would inflate the count of things that could have failed
+        # and did not.
+        "measurements": [c["check"] for c in checks if c.get("measurement")],
         # How much of the battery was published in advance (§3.6.1). Stated so the
         # withholding is a bounded, countable fact rather than an atmosphere.
         "published_keys": sum(1 for c in checks if c["key"] == "open"),

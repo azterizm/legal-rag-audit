@@ -7,14 +7,19 @@ file we did not understand, and there is no way to tell that from a report about
 file we did (NF10).
 
 Versions are added here, never edited in place. `responses.v1` means one thing
-forever; a changed field is `responses.v2`.
+forever; a changed field is `responses.v2`. A superseded identifier stays in `SUPERSEDED`
+with the reason it moved, so somebody holding an old file is told what happened to it
+rather than only that it was refused.
 """
 
 from typing import Final
 
 PROBES_V1: Final = "probes.v1"
+PROBES_V2: Final = "probes.v2"
 RESPONSES_V1: Final = "responses.v1"
+RESPONSES_V2: Final = "responses.v2"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
+GROUND_TRUTH_V2: Final = "ground_truth.v2"
 HANDOVER_V1: Final = "handover.v1"
 RUN_MANIFEST_V1: Final = "run_manifest.v1"
 #: The one identifier whose number tracks the *tool* generation rather than the
@@ -26,12 +31,36 @@ REPORT_V2: Final = "report.v2"
 #: Every schema identifier this build can read. Keys are the identifier as it appears
 #: in the file; values are what the identifier is for, used in error messages.
 SUPPORTED: Final[dict[str, str]] = {
-    PROBES_V1: "probe file",
-    RESPONSES_V1: "response file",
-    GROUND_TRUTH_V1: "ground-truth manifest",
+    PROBES_V2: "probe file",
+    RESPONSES_V2: "response file",
+    GROUND_TRUTH_V2: "ground-truth manifest",
     HANDOVER_V1: "pre-commitment record",
     RUN_MANIFEST_V1: "run manifest",
     REPORT_V2: "report",
+}
+
+#: Identifiers this build no longer reads, and what replaced them. A file written against
+#: one of these is still refused — a guessed reading is the failure NF10 exists to
+#: prevent — but the refusal can say what changed, which is the difference between an
+#: error somebody can act on and one they have to come and ask about.
+SUPERSEDED: Final[dict[str, str]] = {
+    PROBES_V1: (
+        f"{PROBES_V2} — added `phase`, which says whether a probe is asked before or "
+        f"after the corpus revision. Index freshness cannot be scored without it: "
+        f"'not yet indexed' and 'never invalidated' are different findings (§8.2 #4)"
+    ),
+    RESPONSES_V1: (
+        f"{RESPONSES_V2} — added `revision_wait_seconds` to the capture notes. A "
+        f"superseded value returned two seconds after a document was replaced means "
+        f"something different from the same value ten minutes later, and index "
+        f"freshness cannot separate the two without the elapsed time (§8.2 #4)"
+    ),
+    GROUND_TRUTH_V1: (
+        f"{GROUND_TRUTH_V2} — Phase D folded `legacy_params` away. The evaluators now "
+        f"take the §8.2 recipes directly, so expectations carry named fields "
+        f"(`swaps`, `mask_tokens`, `shapes`, `side_effect`, `pairing`) instead of a "
+        f"free-form bag, `adjacency` is a list, and `plants` and `guard` are populated"
+    ),
 }
 
 
@@ -57,9 +86,12 @@ def assert_schema(declared: object, expected: str, *, where: str) -> None:
         )
     if declared != expected:
         known = ", ".join(sorted(SUPPORTED)) or "(none)"
+        note = ""
+        if isinstance(declared, str) and declared in SUPERSEDED:
+            note = f"\n  {declared} was superseded by {SUPERSEDED[declared]}."
         raise SchemaVersionError(
             f"{where}: schema is {declared!r}, expected {expected!r}.\n"
-            f"  This build reads: {known}.\n"
+            f"  This build reads: {known}.{note}\n"
             f"  Refusing to parse it as {expected!r} — a guessed reading of an unknown\n"
             f"  version produces a report we cannot distinguish from a correct one."
         )

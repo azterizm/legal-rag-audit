@@ -350,6 +350,11 @@
           "title": "Passes",
           "type": "integer"
         },
+        "plants": {
+          "default": 0,
+          "title": "Plants",
+          "type": "integer"
+        },
         "remote_scoring": {
           "default": false,
           "title": "Remote Scoring",
@@ -366,6 +371,18 @@
           ],
           "default": null,
           "title": "Seed"
+        },
+        "seed_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed Source"
         },
         "started": {
           "title": "Started",
