@@ -112,6 +112,41 @@ def _missing_capabilities(
     return missing
 
 
+def _pass_split(per_probe: list[dict[str, Any]]) -> dict[str, int]:
+    """Failures that held on every pass, against failures that came and went (§3.5 #4).
+
+    *"60 eligible probes × 3 passes = 180 observations. Never collapse them."* A defect
+    that reproduces on all three passes and one that appears on one are different
+    findings about different problems, and a single `failed: 14` says neither. The
+    some-passes count is the target's non-determinism, and it is usually the more
+    valuable half — a vendor can argue with a defect, but an intermittent one they
+    cannot reproduce is the reason the report exists.
+
+    At one pass the split cannot be drawn: every failure trivially failed "all" its
+    passes. The report does not print it there, because a `failed_some_passes: 0`
+    alongside a single pass reads as *no non-determinism was found* when the truth is
+    that none could be.
+    """
+    by_probe: dict[str, list[str]] = defaultdict(list)
+    for record in per_probe:
+        probe_id = record.get("probe_id")
+        if probe_id is not None:
+            by_probe[probe_id].append(record.get("status"))
+
+    all_passes = 0
+    some_passes = 0
+    for statuses in by_probe.values():
+        failures = [s for s in statuses if s == FAIL]
+        if not failures:
+            continue
+        if len(failures) == len(statuses):
+            all_passes += 1
+        else:
+            some_passes += 1
+
+    return {"failed_all_passes": all_passes, "failed_some_passes": some_passes}
+
+
 def score_check(
     spec: CheckSpec,
     probes: list[Probe],
@@ -119,6 +154,7 @@ def score_check(
     ground_truth: GroundTruth,
     thresholds: ThresholdsConfig,
     skipped: bool = False,
+    scored_checks: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Score one check, or say why it did not run."""
     eligible = [p for p in probes if spec.name in p.eligible_for]
@@ -135,10 +171,18 @@ def score_check(
         # cannot print the finding without it (§3.3, §8.2).
         "limit": spec.limit,
         "measurement": spec.measurement,
+        # Scored from the other checks rather than from a record (§8.3). On the page
+        # because it changes how the number is read: `response_divergence` counts
+        # probes, every other check counts observations.
+        "cross_cutting": spec.cross_cutting,
         "eligible": len(eligible),
         "scored": 0,
         "not_captured": 0,
         "failed": 0,
+        # §3.5 rule 4. Present on every check, zero where nothing failed, so a consumer
+        # never has to work out whether the field is absent or the count is nil.
+        "failed_all_passes": 0,
+        "failed_some_passes": 0,
     }
 
     if not eligible:
@@ -194,12 +238,14 @@ def score_check(
                 if response_file.capture_notes
                 else None
             ),
+            scored_checks=scored_checks or [],
         )
     )
 
     result["status"] = outcome.status
     result["scored"] = outcome.scored
     result["failed"] = outcome.failed
+    result.update(_pass_split(outcome.detail.get("per_probe", [])))
     # Records the evaluator itself could not score, on top of the ones that never
     # arrived. Both are not-captured; neither is a pass.
     result["not_captured"] += outcome.not_captured
@@ -347,6 +393,11 @@ def _score(
 
     asked = _verify_questions(probes, response_file.responses, responses_path)
 
+    # Two phases, because §8.3's variance pass is a pass over the other checks and not
+    # an evaluator. Ordinary checks first; the cross-cutting ones see their results.
+    # Nothing else does — an evaluator able to read another's verdict is one that can be
+    # written to agree with it, and the independence of the seventeen is what makes a
+    # divergence between them mean anything.
     checks = [
         score_check(
             spec,
@@ -357,7 +408,25 @@ def _score(
             skipped=skip_tier2 and spec.tier == 2,
         )
         for spec in REGISTRY
+        if not spec.cross_cutting
     ]
+    checks += [
+        score_check(
+            spec,
+            probes,
+            response_file,
+            ground_truth,
+            thresholds,
+            skipped=skip_tier2 and spec.tier == 2,
+            scored_checks=checks,
+        )
+        for spec in REGISTRY
+        if spec.cross_cutting
+    ]
+    # Back into registry order, so the report's check order is the register's rather
+    # than an artefact of how scoring was scheduled.
+    order = {spec.name: i for i, spec in enumerate(REGISTRY)}
+    checks.sort(key=lambda c: order[c["check"]])
 
     passes = max((r.pass_index for r in response_file.responses), default=1)
 
@@ -386,7 +455,7 @@ def _score(
         tier1=[c["check"] for c in checks if c["tier"] == 1],
         tier2=[c["check"] for c in checks if c["tier"] == 2],
         checks={c["check"]: c for c in checks},
-        summary=_summarise(checks),
+        summary=_summarise(checks, passes),
         capture={
             "eligibility_source": eligibility_source,
             "citations_captured": response_file.citations_captured(),
@@ -552,7 +621,47 @@ def _probes_from(response_file: ResponseFile, ground_truth: GroundTruth) -> list
     return probes
 
 
-def _summarise(checks: list[dict[str, Any]]) -> dict[str, Any]:
+def _variance_summary(
+    checks: list[dict[str, Any]], passes: int
+) -> dict[str, Any]:
+    """§8.3's three classifications, lifted to the summary.
+
+    A reader deciding whether to trust any number in the report needs this before the
+    findings: a battery whose answers change between identical questions produces
+    findings that will not reproduce, and saying so first is the difference between a
+    caveat and an excuse offered later.
+    """
+    divergence = next(
+        (c for c in checks if c.get("cross_cutting") and c["check"].endswith("divergence")),
+        None,
+    )
+    if divergence is None:
+        return {}
+
+    detail = divergence.get("detail", {})
+    return {
+        "passes": passes,
+        "identical": detail.get("identical", 0),
+        "invariant_stable": detail.get("invariant_stable", 0),
+        "divergent": detail.get("divergent", 0),
+        "not_comparable": detail.get("not_comparable", 0),
+        "status": divergence["status"],
+        # Named so a consumer does not have to infer the scope of the comparison from
+        # the tier table. Divergence is decided on these and nothing else.
+        "invariant_checks": detail.get("invariant_checks", []),
+        "note": (
+            "One pass. Nothing was compared, and this is not a finding of stability"
+            if passes < 2
+            else (
+                "Same probe, different answer across passes. A reproducibility finding "
+                "about the target, not about the scorer — scoring is deterministic and "
+                "NF2 asserts it"
+            )
+        ),
+    }
+
+
+def _summarise(checks: list[dict[str, Any]], passes: int = 1) -> dict[str, Any]:
     """Counts, never a rate (§3.5).
 
     A single headline percentage is what the register in Appendix D exists to prevent:
@@ -586,5 +695,7 @@ def _summarise(checks: list[dict[str, Any]]) -> dict[str, Any]:
         "withheld_keys": sum(1 for c in checks if c["key"] == "held"),
         "tier1_findings": tier1_failed,
         "tier2_findings": tier2_failed,
+        # §8.3, before the verdict, because it scopes every number above it.
+        "variance": _variance_summary(checks, passes),
         "verdict": FAIL if (tier1_failed or tier2_failed) else PASS,
     }

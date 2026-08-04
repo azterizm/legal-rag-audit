@@ -51,11 +51,25 @@ class CheckResult(BaseModel):
     #: A measurement rather than a finding (§8.2 #15). It has no pass condition, so it
     #: never appears in the findings table and its verdict is not a verdict.
     measurement: bool = False
+    #: Scored from the other checks' results rather than from a record (§8.3). True only
+    #: for `response_divergence`. It changes how the counts read: a cross-cutting check
+    #: counts probes across their passes, where every other check counts observations.
+    cross_cutting: bool = False
     #: Probes declared eligible before the run. The denominator (F39).
     eligible: int
     scored: int
     not_captured: int
     failed: int
+    #: §3.5 rule 4 — the split that makes N passes worth running. `failed_all_passes` is
+    #: a defect that reproduces; `failed_some_passes` is the target's non-determinism,
+    #: and it is usually the more valuable of the two because it is the one a vendor
+    #: cannot reproduce on their own. Both count **probes**, not observations.
+    #:
+    #: At `passes: 1` the split cannot be drawn — every failure trivially failed all of
+    #: its one pass — and the attestation does not print it there. A zero beside a single
+    #: pass would read as *no non-determinism found* when none could have been.
+    failed_all_passes: int = 0
+    failed_some_passes: int = 0
     #: `PASS` · `FAIL` · `NOT_ELIGIBLE` · `NOT_CAPTURED`. The last two exist so an
     #: absent check never reads as a passing one (F40).
     status: Literal["PASS", "FAIL", "NOT_ELIGIBLE", "NOT_CAPTURED"]
@@ -95,6 +109,10 @@ class Summary(BaseModel):
     measurements: list[str] = Field(default_factory=list)
     tier1_findings: list[str] = Field(default_factory=list)
     tier2_findings: list[str] = Field(default_factory=list)
+    #: §8.3. `identical` / `invariant_stable` / `divergent` / `not_comparable`, counted
+    #: over probes. Present on every report, because a single-pass run needs to say that
+    #: nothing was compared just as loudly as a three-pass run says nothing diverged.
+    variance: dict[str, Any] = Field(default_factory=dict)
     verdict: Literal["PASS", "FAIL"]
 
 

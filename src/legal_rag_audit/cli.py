@@ -74,12 +74,17 @@ def cmd_generate(args: argparse.Namespace) -> int:
     except Exception as e:
         return _abort(f"Could not load {args.config}: {e}")
 
+    # The flag wins when it is given; the config is the default. `--passes` defaults to
+    # None rather than 1 so `--passes 1` against a config asking for 3 is an instruction
+    # and not indistinguishable from silence.
+    passes = args.passes if args.passes is not None else config.battery.passes
+
     try:
         generate(
             config=config,
             responses_path=args.output,
             probes_path=args.probes,
-            passes=args.passes,
+            passes=passes,
             skip_upload=args.skip_upload,
             corpus_dir=args.corpus,
             probes_in=args.probes_in,
@@ -155,6 +160,24 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
             f"{capture['records']} records carried no answer — not captured, "
             f"not findings"
         )
+
+    # §8.3. On the console as well as the page, because an operator who ran one pass
+    # should learn here that reproducibility was not measured — not three screens into
+    # a report they may hand on before reading.
+    variance = summary.get("variance") or {}
+    if variance:
+        if variance.get("passes", 1) < 2:
+            print(
+                "  variance            one pass — nothing compared. Reproducibility "
+                "was not measured, and this is not a pass"
+            )
+        else:
+            print(
+                f"  variance            {variance['passes']} passes: "
+                f"{variance['identical']} identical, "
+                f"{variance['invariant_stable']} stable in prose, "
+                f"{variance['divergent']} divergent"
+            )
     print()
     # The two lines that make the report checkable by someone who does not trust it.
     print(f"  findings digest     {manifest['scoring']['findings_hash']}")
@@ -297,8 +320,11 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument(
         "--passes",
         type=int,
-        default=1,
-        help="repeat the battery N times; variance reporting arrives in Phase E",
+        default=None,
+        help=(
+            "ask each probe N times and report inter-pass divergence (§8.3). "
+            "Overrides battery.passes in the config; defaults to that, or to 1"
+        ),
     )
     gen.add_argument(
         "--skip-upload",

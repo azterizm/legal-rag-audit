@@ -6,7 +6,7 @@ says which probe and which pass produced it is something they can check against 
 own logs. The bundle exists so a Tier 1 finding can be disputed on the facts rather
 than on our arithmetic — which is the only kind of dispute this method can survive.
 
-Two shapes of evidence, and conflating them would misdescribe half the findings:
+Three shapes of evidence, and conflating them would misdescribe the findings:
 
 * **A token appeared that should not have.** The evidence is the excerpt: a window of
   the answer around the match, with the match located. Short, exact, damning.
@@ -14,6 +14,10 @@ Two shapes of evidence, and conflating them would misdescribe half the findings:
   evidence is the *whole answer*, because the claim is about everything it did say.
   Calling that an "excerpt" would imply we chose a fragment, and the reader would be
   right to ask what was in the rest.
+* **The same question produced different outcomes.** Added in Phase E for inter-pass
+  divergence (§8.3). Neither of the above: no token appeared and none was missing. The
+  evidence is *both answers and the diff between them*, so what is disputable is the
+  pair rather than any one string in it.
 
 **Two keys, not nine.** Before Phase D this module carried an enumerated list of result
 keys — `leaked_content`, `trigger_phrases_found`, `missing_facts`, six more — because
@@ -41,6 +45,15 @@ WINDOW = 160
 
 APPEARED = "token_present"
 ABSENT = "token_absent"
+#: A third shape, added in Phase E. Inter-pass divergence is neither of the two above:
+#: no token appeared and none was missing — the *same* question produced a different
+#: outcome, and the evidence is both answers and the diff between them (§8.3).
+#:
+#: Worth a branch rather than being forced into `appeared`. The first version put the
+#: names of the checks that moved into that key, and the bundle rendered them under
+#: "a token appeared that should not have" — a sentence that is false about a finding
+#: whose whole content is that nothing in particular appeared anywhere.
+DIVERGED = "outcome_diverged"
 
 #: The two keys every Tier 1 evaluator populates. Read from the record itself and, for
 #: safety, from a nested `details` block: a check that one day returns its evidence a
@@ -141,7 +154,15 @@ def _instance(
         or ", ".join(record.get("outcomes") or []) or None,
     }
 
-    if appeared:
+    if record.get("classification") == "divergent":
+        instance["kind"] = DIVERGED
+        instance["changed"] = record.get("changed") or {}
+        instance["passes_compared"] = record.get("passes_compared")
+        instance["diff_passes"] = record.get("diff_passes") or []
+        instance["texts"] = record.get("texts") or []
+        instance["diff"] = record.get("diff")
+        instance["answers_identical"] = bool(record.get("answers_identical"))
+    elif appeared:
         instance["kind"] = APPEARED
         instance["matches"] = appeared
         if missing:
@@ -244,6 +265,36 @@ def _render(check: str, instances: list[dict[str, Any]]) -> str:
             lines.append("")
         lines.append(f"**Asked:** {instance['asked']}")
         lines.append("")
+
+        if instance["kind"] == DIVERGED:
+            lines.append(
+                f"**The same question produced different outcomes across "
+                f"{instance['passes_compared']} passes.**"
+            )
+            lines.append("")
+            for name, series in sorted(instance["changed"].items()):
+                lines.append(f"- `{name}`: {' → '.join(series)}")
+            lines.append("")
+            if instance["answers_identical"]:
+                lines.append(
+                    "The answer text was byte-identical across these passes and the "
+                    "outcome still moved, so the change is below the answer — in what "
+                    "was retrieved or cited."
+                )
+                lines.append("")
+            if instance["texts"]:
+                first, last = (instance["diff_passes"] + [1, 2])[:2]
+                for label, text in zip((first, last), instance["texts"]):
+                    lines.append(f"**Pass {label}:**")
+                    lines.append("")
+                    lines.append("> " + text.replace("\n", "\n> "))
+                    lines.append("")
+            if instance["diff"]:
+                lines.append("```diff")
+                lines.extend(instance["diff"].splitlines())
+                lines.append("```")
+                lines.append("")
+            continue
 
         if instance["kind"] == APPEARED:
             lines.append("**A token appeared that should not have.**")

@@ -125,11 +125,16 @@ def test_the_scoring_registry_imports_without_the_ml_stack(generate_env):
     )
     assert result.returncode == 0, result.stderr
     registered, tier1 = (int(x) for x in result.stdout.split())
-    assert registered == 17
     # 15 of the 18 evaluators in §8.1 are Tier 1 and shipped; #18 arrives in Phase G to
     # make 16. The count moved from 14 when Phase D rewrote abstention as an inverted
     # presence check and took the cross-encoder out of its path (§8.2 #8).
-    assert tier1 == 15
+    #
+    # 16 Tier 1 *checks*, not 16 evaluators: Phase E registered `response_divergence`,
+    # which §8.3 is explicit is "not an evaluator, a pass over all of them". It is
+    # registered anyway, because the registry is what puts a check's tier, recipe, key
+    # and limit on the page.
+    assert registered == 18
+    assert tier1 == 16
 
 
 @pytest.mark.slow
@@ -159,7 +164,7 @@ def test_a_tier1_check_scores_without_the_ml_stack(generate_env, tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "17"
+    assert result.stdout.strip() == "18"
 
 
 @pytest.mark.slow
@@ -265,7 +270,7 @@ def test_the_whole_artefact_route_runs_with_no_transport_installed(
         assert result.returncode == 0, result.stderr
 
         out = json.loads(result.stdout)
-        assert out["checks"] == 17, "every check is reported, none omitted"
+        assert out["checks"] == 18, "every check is reported, none omitted"
         assert out["pre_commitment"] == "verified", (
             "the pre-commitment holds on the artefact route — the corpus, probes and "
             "answer key were sealed before any answer existed"

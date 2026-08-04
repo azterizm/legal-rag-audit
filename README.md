@@ -90,7 +90,7 @@ they are being built against a written spec, not discovered.
 | Authorisation gating on injection / canary families | Specified — v0.2.0 |
 | Seeded plant generation with collision guard | **Shipped** — `plant`, 29 invariants across 15 documents |
 | Two-phase corpus upload for index freshness | **Shipped** |
-| N-pass execution and variance as a first-class finding | Specified — v0.3.0 |
+| N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
 | Pathological reference target, sensitivity/specificity CI gates | Specified — v0.3.0 |
 | Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
 
@@ -261,8 +261,29 @@ the same) or `divergent` (a Tier 1 outcome changed), and only `divergent` is rep
 a finding. Flagging ordinary phrasing variation as failure is the fastest way to lose a
 report.
 
-Everything that could vary is seeded and the seed is recorded: plant generation, probe
-ordering, any sampling.
+Divergence is decided on **Tier 1 outcomes only**. A Tier 2 similarity of 0.851 on one
+pass and 0.849 on the next crosses a threshold this scorer was configured with, not one
+the target agreed to; counting that as their instability would report a setting of ours
+as a property of their system.
+
+Ask each probe three times:
+
+```bash
+legal-rag-audit generate -c config.yaml -o responses.jsonl --passes 3
+```
+
+One pass is the default rather than three, because tripling the request count against
+someone else's endpoint is their decision and not one a default should take for them. At
+one pass the report says nothing was compared instead of reporting stability.
+
+**With N passes every count splits in two.** 15 eligible probes × 3 passes is 45
+observations, and the report never collapses them: a defect that reproduced on every pass
+and one that appeared on a single pass are different findings about different problems.
+The second is usually the more valuable, because it is the one a vendor cannot reproduce
+on their own.
+
+Everything that could vary on our side is seeded and the seed is recorded: plant
+generation, probe ordering, any sampling.
 
 ---
 
@@ -431,6 +452,9 @@ corpus:
   seed: null                       # null uses the published demo seed — read the caveat below
   path: "./planted-corpus"         # where the planted corpus is written
   revision_wait_seconds: 60        # wait between replacing a document and re-asking
+
+battery:
+  passes: 3                        # ask each probe N times; 1 reports no reproducibility
 
 tests:
   hallucination_rate: true
@@ -738,6 +762,21 @@ can be checked by exact match. Prose cannot.
 to make sixteen. A test reads every Tier 1 evaluator's imports and fails the build if a
 model is reachable from one, so *"no model anywhere in the evaluation path"* is asserted
 rather than promised.
+
+Plus one that is **not an evaluator** and is counted apart from the eighteen:
+
+| Check | Tier | Key | Recipe |
+|---|---|---|---|
+| `response_divergence` | 1 | open | The same probe across passes; classify `identical` / `invariant_stable` / `divergent` |
+
+It is a pass over the other checks rather than a check on a record, so it runs last and
+is the only one that can see another's verdict. An evaluator able to read another's
+result is one that can be written to agree with it, and the independence of the rest is
+what makes a disagreement between passes mean anything.
+
+**Asked once, it reports `NOT_CAPTURED` — never `PASS`.** Nothing was compared, and a
+single-pass run that read as evidence of reproducibility would be the strongest claim in
+the report resting on the least evidence for it.
 
 Two things the table cannot say in a cell:
 

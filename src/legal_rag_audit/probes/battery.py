@@ -516,6 +516,14 @@ def planted_corpus(seed: Optional[str] = None) -> PlantedCorpus:
     return plant(seed)
 
 
+#: Declared on every probe rather than per entry. `response_divergence` asks whether the
+#: system agreed with itself, and any question asked twice can answer that — so its
+#: denominator is the whole battery (§8.3, F39). Added here rather than to nineteen
+#: `eligible_for` lists so a probe added later cannot forget it: the one thing a
+#: cross-cutting check must not do is silently shrink its own denominator.
+CROSS_CUTTING: tuple[str, ...] = ("response_divergence",)
+
+
 def build_probes(
     passes: int = 1,
     corpus: Optional[PlantedCorpus] = None,
@@ -530,7 +538,7 @@ def build_probes(
             text=_text(e, corpus),
             tenant=e.tenant,
             phase=e.phase,
-            eligible_for=list(e.eligible_for),
+            eligible_for=[*e.eligible_for, *CROSS_CUTTING],
             passes=passes,
         )
         for e in BATTERY

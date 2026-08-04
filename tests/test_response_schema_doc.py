@@ -162,7 +162,7 @@ def test_a_file_from_the_documented_example_scores(stub_target, tmp_path):
     assert result.returncode in (0, 1), f"{result.stdout}\n{result.stderr}"
 
     report = json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))
-    assert report["summary"]["checks_registered"] == 17
+    assert report["summary"]["checks_registered"] == 18
     assert report["capture"]["eligibility_source"] == "probe file"
     # Chunks were never captured by the documented pipeline, so the check that reads
     # them must say so rather than pass.

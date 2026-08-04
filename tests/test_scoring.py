@@ -443,6 +443,10 @@ def test_the_open_half_matches_the_plan():
         "latency",
         "unsupported_assertions",
         "retrieval_relevance",
+        # Nothing to withhold: the expectation is that the system agrees with itself,
+        # and a target who reads that in advance can satisfy it only by being
+        # reproducible — which is the behaviour being measured (§3.6.1's test).
+        "response_divergence",
     }
     assert by_key[HELD] == {
         "index_freshness",
@@ -513,7 +517,7 @@ def test_chunk_capture_opens_the_conditional_checks(tmp_path):
 def test_the_summary_counts_what_was_published(tmp_path):
     """Withholding stated as a bounded number, not an atmosphere."""
     report = run(tmp_path, answers(build_probes()))
-    assert report["summary"]["published_keys"] == 8
+    assert report["summary"]["published_keys"] == 9  # 8, plus response_divergence
     assert report["summary"]["withheld_keys"] == 9  # 8 held + cross-tenant, no chunks
 
 
@@ -533,9 +537,13 @@ def test_the_summary_reports_counts_not_a_rate(tmp_path):
         "measurements",
         "tier1_findings",
         "tier2_findings",
+        # §8.3's classification counts. A dict rather than a scalar, because "nothing
+        # diverged" and "nothing was compared" are different statements and a single
+        # number cannot carry both.
+        "variance",
         "verdict",
     }
-    assert all(isinstance(v, (int, str, list)) for v in summary.values())
+    assert all(isinstance(v, (int, str, list, dict)) for v in summary.values())
     assert not any("rate" in key for key in summary)
 
 

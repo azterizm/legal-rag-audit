@@ -34,6 +34,15 @@ corpus:
   path: "./planted-corpus"     # where the planted corpus is written
   revision_wait_seconds: 60    # wait between replacing a document and re-asking it
 
+battery:
+  # How many times each probe is asked. Three is the recommendation; one is the default,
+  # because tripling the request count against someone else's endpoint is their decision.
+  #
+  # At one pass the report cannot report reproducibility: `response_divergence` comes
+  # back NOT_CAPTURED, never PASS, and §4 of the attestation says nothing was compared.
+  # `--passes` on the command line overrides this.
+  passes: 3
+
 tests:
   hallucination_rate: true
   citation_integrity: true

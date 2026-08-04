@@ -154,12 +154,7 @@ def render(
         f"different findings, and the difference would itself be a result."
     )
     add("")
-    if manifest["run"]["passes"] < 2:
-        add(
-            "This run fired each probe once, so inter-pass divergence was not "
-            "measured. Variance reporting arrives with multi-pass execution."
-        )
-        add("")
+    lines.extend(_variance_section(report, checks, target_name))
 
     # ------------------------------------------------- 5. Delta and 6. Mechanisms
     add("## 5. Representation delta")
@@ -294,6 +289,37 @@ def _pre_commitment(manifest: dict[str, Any]) -> list[str]:
     return out
 
 
+def _pass_split_line(check: dict[str, Any], report: dict[str, Any]) -> list[str]:
+    """§3.5 rule 4 — the split between a stable defect and a flaky one.
+
+    *"60 eligible probes × 3 passes = 180 observations. Never collapse them."* Printed
+    only above one pass. At `passes: 1` every failure trivially failed all of its one
+    pass, and a `0 failed on some passes only` beside a single pass reads as *no
+    non-determinism was found* when in fact none could have been.
+    """
+    passes = (report.get("summary", {}).get("variance") or {}).get("passes", 1)
+    if passes < 2 or check.get("cross_cutting"):
+        return []
+
+    stable = check.get("failed_all_passes", 0)
+    flaky = check.get("failed_some_passes", 0)
+    if not (stable or flaky):
+        return []
+
+    line = (
+        f"Across {passes} passes: **{stable} {_plural(stable, 'probe')} failed on every "
+        f"pass** (a defect that reproduces), **{flaky} on some passes only** "
+        f"(non-deterministic)."
+    )
+    if flaky:
+        line += (
+            " The second group is the one that will not reproduce when this battery is "
+            "re-run, and is reported separately for that reason rather than folded into "
+            "the count above."
+        )
+    return [line, ""]
+
+
 def _check_section(
     check: dict[str, Any], by_probe: dict[str, Probe], report: dict[str, Any]
 ) -> list[str]:
@@ -311,6 +337,7 @@ def _check_section(
         f"{_plural(check['eligible'], 'probe')} declared eligible before the run."
     )
     out.append("")
+    out.extend(_pass_split_line(check, report))
     if check.get("limit"):
         # In the same artefact as the finding, never in a later post (§3.3, Source Map
         # §7.5). §8.2 makes this mandatory for injection; the field carries it for every
@@ -345,6 +372,129 @@ def _check_section(
             ]
         )
     out.extend(_table(["Probe", "Pass", "Asked"], rows))
+    return out
+
+
+def _variance_section(
+    report: dict[str, Any], checks: dict[str, Any], target_name: str
+) -> list[str]:
+    """Inter-pass divergence (§8.3, F22), inside §4 where reproducibility is argued.
+
+    The section a report needs most the second time it is read. A vendor who re-runs the
+    battery and gets different numbers will conclude the tool is unreliable — unless the
+    document said, before they tried, that their system was the thing that varied and by
+    how much.
+    """
+    summary = report["summary"].get("variance") or {}
+    if not summary:
+        return []
+
+    passes = summary.get("passes", 1)
+    check = checks.get("response_divergence", {})
+    out: list[str] = []
+
+    if passes < 2:
+        out.append(
+            "**This run asked each probe once, so nothing was compared.** Inter-pass "
+            "divergence is `NOT_CAPTURED`, not a pass: a single-pass run is not "
+            "evidence that the answers are reproducible, and no count below should be "
+            "read as one. Re-run with `--passes 3`."
+        )
+        out.append("")
+        return out
+
+    out.append(
+        f"Each probe was asked **{passes} times**. Classification is on Tier 1 outcomes "
+        f"only — {len(summary.get('invariant_checks', []))} checks — because a Tier 2 "
+        f"score crossing a threshold between passes crosses a line we set, and that "
+        f"would be our setting reported as {target_name}'s non-determinism."
+    )
+    out.append("")
+    out.extend(
+        _table(
+            ["Classification", "Probes", "What it means"],
+            [
+                [
+                    "`identical`",
+                    str(summary.get("identical", 0)),
+                    "byte-equal answers after whitespace normalisation",
+                ],
+                [
+                    "`invariant_stable`",
+                    str(summary.get("invariant_stable", 0)),
+                    "the wording changed, every Tier 1 outcome held. **Not a finding**",
+                ],
+                [
+                    "`divergent`",
+                    str(summary.get("divergent", 0)),
+                    "a Tier 1 outcome changed between passes. **A finding**",
+                ],
+                [
+                    "`not_comparable`",
+                    str(summary.get("not_comparable", 0)),
+                    "nothing to compare; see the reasons below",
+                ],
+            ],
+        )
+    )
+
+    if check.get("partial"):
+        out.append(f"*{check['partial']}.*")
+        out.append("")
+
+    divergent = [
+        record
+        for record in check.get("detail", {}).get("per_probe", [])
+        if record.get("status") == FAIL
+    ]
+    if not divergent:
+        out.append(
+            f"No Tier 1 outcome changed between passes. Answers that differed in "
+            f"wording are counted above and are **not** findings — a generative system "
+            f"rewording an answer is not a defect, and reporting it as one is the "
+            f"fastest way to lose the rest of this document."
+        )
+        out.append("")
+        return out
+
+    out.append(
+        f"### {len(divergent)} {_plural(len(divergent), 'probe')} answered differently "
+        f"across passes"
+    )
+    out.append("")
+    out.append(
+        "Each is reported with both texts and the diff. The finding is that the same "
+        "question produced different outcomes, so it is unsafe to conclude anything "
+        "from a single observation of these probes — in either direction."
+    )
+    out.append("")
+
+    for record in divergent:
+        out.append(f"**`{record['probe_id']}`** — {record['passes_compared']} passes compared")
+        out.append("")
+        for name, series in sorted((record.get("changed") or {}).items()):
+            out.append(f"- `{name}`: {' → '.join(series)}")
+        out.append("")
+        if record.get("answers_identical"):
+            out.append(
+                "> [!IMPORTANT]"
+            )
+            out.append(
+                "> The answer text was byte-identical across these passes and the "
+                "outcome still moved. The change is below the answer — in what was "
+                "retrieved or cited — so an output-level comparison would have found "
+                "nothing here."
+            )
+            out.append("")
+        if record.get("diff"):
+            a, b = record.get("diff_passes", [1, 2])
+            out.append(f"Pass {a} against pass {b}:")
+            out.append("")
+            out.append("```diff")
+            out.extend(record["diff"].splitlines())
+            out.append("```")
+            out.append("")
+
     return out
 
 

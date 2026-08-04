@@ -165,6 +165,11 @@
           "title": "Check",
           "type": "string"
         },
+        "cross_cutting": {
+          "default": false,
+          "title": "Cross Cutting",
+          "type": "boolean"
+        },
         "detail": {
           "additionalProperties": true,
           "title": "Detail",
@@ -189,6 +194,16 @@
         },
         "failed": {
           "title": "Failed",
+          "type": "integer"
+        },
+        "failed_all_passes": {
+          "default": 0,
+          "title": "Failed All Passes",
+          "type": "integer"
+        },
+        "failed_some_passes": {
+          "default": 0,
+          "title": "Failed Some Passes",
           "type": "integer"
         },
         "key": {
@@ -756,6 +771,11 @@
           },
           "title": "Tier2 Findings",
           "type": "array"
+        },
+        "variance": {
+          "additionalProperties": true,
+          "title": "Variance",
+          "type": "object"
         },
         "verdict": {
           "enum": [

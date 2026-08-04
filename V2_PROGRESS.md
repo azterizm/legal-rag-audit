@@ -15,7 +15,7 @@ exists to measure in other people's systems.
 | **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | ✅ 2026-08-03 *(cosign signs blobs; image signing ships with the image split)* |
 | **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
-| **E** | N-pass execution + variance reporting | 1 d | ⬜ |
+| **E** | N-pass execution + variance reporting | 1 d | ✅ 2026-08-04 *(profiles are response files; the live mock target is F2)* |
 | **F** | `validate` mode | 0.5 d | ⬜ |
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ⬜ |
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ⬜ |
@@ -1316,3 +1316,132 @@ guarantee that was never tested.
   decided silently.
 - **Signing the SBOMs separately from the release artefacts.** They are in `dist/`, so
   they carry the same cosign signature and the same provenance attestation as the wheel.
+
+---
+
+## Phase E — N-pass and variance ✅
+
+Closes defect 3 in §19, which was marked **blocking** and is the only one whose damage
+lands on *us* rather than on the target: without a variance pass, a system whose answers
+vary between identical questions makes the **harness** look flaky. Two runs disagree, and
+the reader's first thought is that the tool is unreliable rather than that the system is.
+
+That is the whole phase. Scoring is deterministic and NF2 asserts it byte-for-byte. Target
+systems typically are not. Naming the difference — before a vendor re-runs the battery and
+discovers it themselves — is the difference between a finding and an excuse offered
+afterwards.
+
+### What was already done, and what was not
+
+N-pass execution had been in place since Phase B: `--passes`, `pass_index` on every
+record, and a refusal to accept two records for the same `(probe_id, pass_index)`. What
+was missing was everything that reads them. So this phase was three things: the
+classification, the check that reports it, and the two denominators.
+
+### The classification, and a fourth §8.3 did not name
+
+`identical` / `invariant_stable` / `divergent`, per §8.3. Only `divergent` is a finding —
+**a generative system rewording an answer is not a defect**, and flagging ordinary
+phrasing variation as failure is the fastest way to lose the rest of the report.
+
+The fourth is `not_comparable`, and it exists because §8.3's three assume there is
+something to compare. A probe asked once is not `identical`. Recording it as such would
+let a single-pass run read as evidence of stability — the strongest claim in the document
+resting on the least evidence for it. Same rule as F40 everywhere else: an absent
+measurement and a clean one must not print the same.
+
+It also covers a case worth stating: a probe eligible only for Tier 2 checks or for a
+measurement has no invariant that *could* move. Where its answers were byte-identical
+that is still `identical` — the fact is decidable from the text alone, so it is decided.
+Where they differed, the honest record is *the wording changed; whether anything else did
+is not established*.
+
+### Two ordering decisions
+
+**Outcomes are compared before text.** §8.3 lists its classifications as though equal
+answers imply equal outcomes. They do not. Several Tier 1 checks read fields other than
+the answer — leakage reads retrieved chunks, citation integrity reads document ids — so a
+system can return a byte-identical answer over a different retrieval and change a verdict.
+That is a divergence, and the one an output-level comparison would miss entirely. It is
+classified as one, and the coincidence is printed rather than smoothed away: the report
+says the answer text did not move and the outcome did.
+
+**Tier 2 outcomes are excluded.** A cosine similarity of 0.851 on one pass and 0.849 on
+the next crosses a line *we* set. Reporting that as the target's non-determinism would
+attribute our own threshold to their system, which is the failure the tier split exists to
+prevent. Measurements are excluded from the other direction — a check with no pass
+condition has no outcome to diverge, and latency varies between passes by construction.
+
+### `response_divergence` is registered, not bolted on
+
+It is a `CheckSpec` like the other seventeen, with `cross_cutting=True`. Scoring runs in
+two phases: the ordinary checks, then the cross-cutting ones with the others' results
+handed to them. **It is the only check that can see another's verdict**, and a test
+asserts the rest are handed an empty list — an evaluator able to read another's result is
+one that can be written to agree with it, and the independence of the seventeen is what
+makes a disagreement between passes mean anything.
+
+Registered rather than appended after the loop because the registry is what puts a check's
+tier, recipe, key and limit on the page. A finding assembled outside it would print
+without them. The report is re-sorted into registry order afterwards, so a reader cannot
+tell that variance ran last.
+
+Its key is `open`. There is nothing to withhold: the expectation is that the system agrees
+with itself, and a target who reads that in advance can satisfy it only by being
+reproducible — which is exactly §3.6.1's test for what may be published.
+
+Its denominator is the whole battery, declared centrally rather than in nineteen
+`eligible_for` lists, so a probe added later cannot silently shrink it.
+
+### The two denominators
+
+§3.5 rule 4: *"60 eligible probes × 3 passes = 180 observations. Never collapse them."*
+Every check now carries `failed_all_passes` and `failed_some_passes`, counting **probes**
+where `failed` counts observations. A defect that reproduces and one that appears once are
+different findings about different problems, and the second is usually the more valuable —
+it is the one a vendor cannot reproduce on their own.
+
+Printed only above one pass. At `passes: 1` every failure trivially failed all of its one
+pass, and `failed_some_passes: 0` beside a single pass reads as *no non-determinism was
+found* when none could have been. The fields stay in the JSON, because a consumer should
+not have to tell an absent key from a nil count; the sentence is withheld from the page.
+
+### Found while building it
+
+- **The diff was taken over the first and last pass.** A probe that failed on pass 2 and
+  recovered on pass 3 has identical first and last answers, so the report printed an
+  **empty diff beside a finding** — the reader shown nothing and told it was evidence.
+  The pair is now the first adjacent passes whose outcomes actually disagree, and the
+  page names which two they were. Found by reading the rendered `report.md`, not by a
+  test; the test came after.
+- **The "not compared" message misdescribed its own cause.** It said *fewer than two
+  scored passes*, when the usual cause is a probe eligible only for Tier 2 checks — three
+  answers, nothing that could diverge. "4 probes were not compared" invites the reader to
+  assume a transport failure. It now carries the reason.
+- **`--passes` defaulted to 1 rather than to None**, so `--passes 1` against a config
+  asking for 3 was indistinguishable from silence. A flag that cannot express its own
+  default cannot override a config.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| The `clean` profile at 3 passes produces zero divergence findings | A compliant battery reworded on every pass: zero findings, **and** a positive `invariant_stable` count — zero findings over answers that never varied would pass for the wrong reason |
+| The `nondeterministic` profile produces a divergence finding | One outcome moved on one pass ⇒ exactly one finding, naming the check, carrying both texts and a diff |
+| A single-pass run does not read as stable | `NOT_CAPTURED`, never `PASS`; §4 of the attestation says nothing was compared |
+| Counts are split, not collapsed | A flaky probe and a stable one in the same run, asserted to land in different columns |
+
+**519 tests.** Five gates clean.
+
+### Deliberately not done
+
+- **The live pathological target.** §14.1's HTTP mock with named profiles is Phase F2. The
+  variance pass consumes a response file, so both profiles are expressed as response files
+  here. The substance of the acceptance is met; the harness it was written against is not
+  built, and F2 will re-run these two assertions against it.
+- **Variance on Tier 2 scores.** Excluded by design, above. If it is ever wanted it is a
+  *distribution* question — how far the score moved — not a pass/fail one, and it belongs
+  beside the Tier 2 distributions rather than in a findings table.
+- **Stability over time.** The check measures reproducibility across passes of one run.
+  A system that answers identically three times this afternoon may answer differently
+  after its next index rebuild, and the limit line on the check says so.

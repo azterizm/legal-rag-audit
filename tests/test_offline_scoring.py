@@ -239,4 +239,4 @@ def test_scoring_a_real_file_runs_with_enforcement_on(tmp_path):
             enforce=False,  # the context manager already did it
             skip_tier2=True,
         )
-    assert report["summary"]["checks_registered"] == 17
+    assert report["summary"]["checks_registered"] == 18

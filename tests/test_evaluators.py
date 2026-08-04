@@ -603,5 +603,15 @@ def test_no_tier1_evaluator_can_reach_a_model():
                 offenders.append(f"{stem}.py imports {names}")
 
     assert not offenders, f"a model is reachable from a Tier 1 evaluator: {offenders}"
-    assert len(tier1_checks()) == 15, "15 of the 18 evaluators in §8.1 are Tier 1 today"
-    assert all(BY_NAME[c].tier == 1 for c in tier1_checks())
+
+    # 15 evaluators, plus one cross-cutting pass that is not an evaluator. §8.3 is
+    # explicit that variance is "not an evaluator, a pass over all of them", and the
+    # two are counted apart here so a future evaluator cannot arrive disguised as a
+    # pass — or a pass be mistaken for progress against §8.1's list of eighteen.
+    tier1 = tier1_checks()
+    evaluators = [c for c in tier1 if not BY_NAME[c].cross_cutting]
+    crossing = [c for c in tier1 if BY_NAME[c].cross_cutting]
+
+    assert len(evaluators) == 15, "15 of the 18 evaluators in §8.1 are Tier 1 today"
+    assert crossing == ["response_divergence"]
+    assert all(BY_NAME[c].tier == 1 for c in tier1)

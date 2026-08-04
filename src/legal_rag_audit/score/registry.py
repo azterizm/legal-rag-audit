@@ -68,6 +68,10 @@ class CheckInput:
     #: Index freshness cannot separate "not yet indexed" from "never invalidated"
     #: without it (§8.2 #4), so it is carried rather than assumed.
     revision_wait_seconds: Optional[int] = None
+    #: The already-scored results of every other check. Populated only for a
+    #: `cross_cutting` spec (§8.3) and empty for all seventeen others, so no ordinary
+    #: evaluator can reach another's verdict.
+    scored_checks: list[dict[str, Any]] = field(default_factory=list)
 
     def pairs(self) -> list[tuple[Probe, Response, Optional[Expectation]]]:
         """Usable (probe, response, expectation) triples, in probe then pass order."""
@@ -140,6 +144,10 @@ class CheckSpec:
     #: excluded from the findings table: a number with no threshold cannot fail, and any
     #: threshold we invented for it would be ours rather than a standard.
     measurement: bool = False
+    #: Scored from the other checks' results rather than from a record (§8.3). Runs after
+    #: them, and is the only kind of check that sees another's verdict — an ordinary
+    #: evaluator that could would be one that can be written to agree.
+    cross_cutting: bool = False
 
     def key_for(self, chunks_captured: bool) -> str:
         """Resolve `conditional` against what the response file actually carried."""
@@ -539,6 +547,110 @@ def _score_retrieval_relevance(probe, response, expectation, data):
 # The registry
 # --------------------------------------------------------------------------------
 
+def _score_response_divergence(data: CheckInput) -> CheckOutcome:
+    """Inter-pass divergence (§8.3, F22). A pass over the other checks, not an evaluator.
+
+    Counted per **probe**, not per record. Every other check counts observations —
+    60 probes × 3 passes is 180 of them — but a divergence is a property of a probe
+    across its passes, and there is no such thing as one record diverging.
+
+    A single-pass run reports `NOT_CAPTURED`, never `PASS`. Nothing was compared, and a
+    report in which a one-pass run reads as evidence of stability would be making the
+    strongest claim in the document out of the least evidence for it (F40).
+    """
+    from . import variance
+
+    answers: dict[str, dict[int, str]] = {}
+    for probe in data.probes:
+        for response in data.responses.get(probe.probe_id, []):
+            if response.usable:
+                answers.setdefault(probe.probe_id, {})[response.pass_index] = (
+                    response.answer
+                )
+
+    analysis = variance.analyse(
+        data.scored_checks, answers, [p.probe_id for p in data.probes]
+    )
+    counts = analysis["counts"]
+    divergent = analysis["divergent"]
+
+    records = [
+        {
+            "probe_id": result.probe_id,
+            # The probe's whole series, so this row addresses the same way as every
+            # other per-probe row even though it spans passes rather than sitting in one.
+            "pass_index": 1,
+            "status": "FAIL" if result.is_finding else (
+                NOT_CAPTURED
+                if result.classification == variance.NOT_COMPARABLE
+                else "PASS"
+            ),
+            "classification": result.classification,
+            "passes_compared": result.passes_compared,
+            "changed": result.changed,
+            "answers_identical": result.answers_identical,
+            "reason": result.reason,
+            # Both empty, and deliberately. `appeared` means *a token was found in the
+            # answer*, and a divergence has none — the finding is that the same question
+            # produced a different outcome, not that any particular string turned up.
+            # The checks that moved are in `changed`, and the evidence bundle has a
+            # third shape for reading it (evidence.DIVERGED). The keys stay present
+            # because every Tier 1 record carries them.
+            "appeared": [],
+            "absent": [],
+            "texts": list(result.texts),
+            "diff_passes": list(result.diff_passes),
+            "diff": (
+                variance.diff(
+                    result.texts[0],
+                    result.texts[1],
+                    f"pass {result.diff_passes[0]}",
+                    f"pass {result.diff_passes[1]}",
+                )
+                if result.is_finding and len(result.texts) == 2
+                else None
+            ),
+        }
+        for result in analysis["results"]
+    ]
+
+    compared = analysis["compared"]
+    partial = None
+    if not compared:
+        partial = (
+            "no probe was asked more than once, so nothing was compared. Re-run with "
+            "`--passes 3` to measure reproducibility"
+        )
+    elif compared < len(analysis["results"]):
+        # Why, not just how many. "4 probes were not compared" invites the reader to
+        # assume a transport failure; the usual cause is a probe eligible only for Tier 2
+        # checks, whose result is not an invariant and so cannot diverge.
+        uncompared = [
+            r for r in analysis["results"] if r.classification == variance.NOT_COMPARABLE
+        ]
+        reasons = sorted({r.reason for r in uncompared if r.reason})
+        partial = (
+            f"{len(uncompared)} of {len(analysis['results'])} eligible probes were not "
+            f"compared — " + "; ".join(reasons)
+        )
+
+    return CheckOutcome(
+        status="FAIL" if divergent else "PASS",
+        scored=compared,
+        failed=len(divergent),
+        not_captured=len(analysis["results"]) - compared,
+        detail={
+            "per_probe": records,
+            "invariant_checks": analysis["invariant_checks"],
+            "identical": counts[variance.IDENTICAL],
+            "invariant_stable": counts[variance.INVARIANT_STABLE],
+            "divergent": counts[variance.DIVERGENT],
+            "not_comparable": counts[variance.NOT_COMPARABLE],
+        },
+        partial=partial,
+    )
+
+
 REGISTRY: tuple[CheckSpec, ...] = (
     CheckSpec(
         name="cross_tenant_leakage",
@@ -712,6 +824,30 @@ REGISTRY: tuple[CheckSpec, ...] = (
         scorer=per_probe(_score_retrieval_relevance),
         recipe="Cosine similarity over retrieved chunks",
         key=OPEN,
+    ),
+    # Last, and cross-cutting: it reads the other checks' results, so it has to run
+    # after all of them. Registered like every other check rather than bolted on after
+    # the loop, because the registry is what makes a check's tier, recipe, key and limit
+    # appear on the page — a finding assembled outside it would print without them.
+    CheckSpec(
+        name="response_divergence",
+        tier=1,
+        needs=frozenset({ANSWER}),
+        scorer=_score_response_divergence,
+        recipe="Same probe across passes; classify identical / invariant_stable / divergent",
+        # Nothing to withhold. The expectation is that the system agrees with itself,
+        # which a target can read in advance and satisfy only by being reproducible.
+        key=OPEN,
+        cross_cutting=True,
+        limit=(
+            "This measures reproducibility across passes of one run, not stability over "
+            "time. A system that answers identically three times this afternoon may "
+            "answer differently after its next index rebuild or model change, and "
+            "nothing here establishes otherwise. Divergence is classified on Tier 1 "
+            "outcomes only: a Tier 2 score crossing a threshold between passes crosses a "
+            "line we set, and reporting that as the target's non-determinism would "
+            "attribute our own setting to their system"
+        ),
     ),
 )
 
