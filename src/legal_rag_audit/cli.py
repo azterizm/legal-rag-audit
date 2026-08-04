@@ -5,6 +5,7 @@ Five modes, and which side of the engagement runs each one is the whole design:
     legal-rag-audit plant  --seed <seed> -o run/
     legal-rag-audit hash   --corpus run/corpus --probes run/probes.jsonl \
                            --ground-truth run/ground_truth.json -o run/handover.json
+    legal-rag-audit validate -c config.yaml
     legal-rag-audit generate -c config.yaml --corpus run/corpus \
                              --probes-in run/probes.jsonl -o responses.jsonl
     legal-rag-audit score --responses responses.jsonl \
@@ -13,18 +14,16 @@ Five modes, and which side of the engagement runs each one is the whole design:
     legal-rag-audit schema --print responses.v2
 
 `plant` and `hash` run first and are ours: one mints the invariants and writes the corpus,
-the other seals it before any response exists. `generate` is theirs and optional — they
-may replace it with their own harness and hand back a conforming file. `score` is ours and
-runs offline. `schema` prints the published contract so nobody has to clone anything to
-implement against it (F35).
+the other seals it before any response exists. `validate` and `generate` are theirs, and
+`generate` is optional — they may replace it with their own harness and hand back a
+conforming file. `score` is ours and runs offline. `schema` prints the published contract
+so nobody has to clone anything to implement against it (F35).
 
-`plant` is a fifth mode §7 does not list. The plan's three-mode split is about *who runs
-what*, and planting sits on our side alongside `hash` rather than adding a fourth party to
-the engagement. It exists as a command for the same reason `hash` does: a pipeline step
-that only ever ran inside another command could not be inspected, repeated, or checked by
-the client.
-
-`validate` is Phase F and is not here yet.
+`plant` is a mode §7 does not list. The plan's three-mode split is about *who runs what*,
+and planting sits on our side alongside `hash` rather than adding a fourth party to the
+engagement. It exists as a command for the same reason `hash` does: a pipeline step that
+only ever ran inside another command could not be inspected, repeated, or checked by the
+client.
 
 Exit codes are a contract, because this runs in CI:
 
@@ -34,6 +33,10 @@ Exit codes are a contract, because this runs in CI:
 
 Separating 2 from the other two is the point. A run that could not start must not exit
 the way a clean run does, and must not exit the way a run with findings does either.
+
+`validate` never returns 1. It makes no judgement about any answer, so it has no
+findings; a setup check and an audit result sharing an exit code would be the same
+conflation the mode exists to prevent.
 """
 
 import argparse
@@ -50,14 +53,21 @@ EXIT_FINDINGS = 1
 EXIT_SETUP = 2
 
 
-def _configure_logging(verbose: bool) -> None:
+def _configure_logging(verbose: bool, to_file: bool = True) -> None:
+    """Log to the file and the terminal — except under `validate`, which writes nothing.
+
+    `to_file` exists for one command. §7.1's claim is *nothing written*, and a mode
+    offered to strangers as a free pre-sale check should not leave a log file in the
+    directory they ran it from. A qualified claim would have been the easier fix and the
+    worse one: the sentence is short because the behaviour is.
+    """
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if to_file:
+        handlers.insert(0, logging.FileHandler(".legal_rag_audit.log", mode="a"))
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(".legal_rag_audit.log", mode="a"),
-            logging.StreamHandler(),
-        ],
+        handlers=handlers,
     )
 
 
@@ -96,6 +106,41 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
     # generate makes no judgement about the answers, so it has no findings to report.
     return EXIT_OK
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """Three neutral probes, the raw body, the extraction, the diagnoses. Exit 0 or 2."""
+    from .validate import render, validate
+
+    try:
+        config = AuditConfig.load_from_yaml(args.config)
+    except Exception as e:
+        return _abort(f"Could not load {args.config}: {e}")
+
+    count, source = args.probe_count, "given on the command line"
+    if count is None and args.probes:
+        try:
+            with open(args.probes, encoding="utf-8") as handle:
+                # The probe file, not the battery module. Counting lines in a file the
+                # operator already holds tells us the size of this run without giving
+                # this package an import path to `probes/` (§7.1).
+                count = sum(1 for line in handle if line.strip())
+            source = f"counted from {args.probes}"
+        except OSError as e:
+            return _abort(f"Could not read {args.probes}: {e}")
+    elif count is None:
+        source = None
+
+    result = validate(
+        config,
+        timeout=args.timeout,
+        passes=args.passes,
+        probe_count=count,
+        probe_count_source=source,
+        skip_upload=args.skip_upload,
+    )
+    print(render(result))
+    return EXIT_SETUP if result.blocked else EXIT_OK
 
 
 def cmd_score(args: argparse.Namespace) -> int:
@@ -300,6 +345,60 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    val = sub.add_parser(
+        "validate",
+        help="check the harness can read the target's API. Scores nothing, writes "
+        "nothing",
+        description=(
+            "Sends three neutral throwaway queries — never a battery probe — and "
+            "prints the raw response body beside what the configured JSONPaths "
+            "extracted from it. Names auth rejection, rate limiting, a stream that "
+            "never terminates, a failed websocket handshake, an upload that issues no "
+            "identifier, and a projected run length, each with what it would have "
+            "looked like in a report if nobody had caught it. Exits 0 or 2; never 1, "
+            "because it judges no answer."
+        ),
+    )
+    val.add_argument("-c", "--config", required=True, help="path to config.yaml")
+    val.add_argument(
+        "--timeout",
+        type=float,
+        default=15.0,
+        help=(
+            "seconds to wait per query before calling it a stall. Short on purpose: "
+            "the value of this mode is that it comes back with a diagnosis"
+        ),
+    )
+    val.add_argument(
+        "--skip-upload",
+        action="store_true",
+        help=(
+            "do not upload the neutral test document. Whether the upload endpoint "
+            "issues document identifiers then goes unchecked, and the run says so"
+        ),
+    )
+    val.add_argument(
+        "--probes",
+        default=None,
+        help=(
+            "a probe file, so the run-length projection uses this run's exact probe "
+            "count rather than the battery size this build ships"
+        ),
+    )
+    val.add_argument(
+        "--probe-count",
+        type=int,
+        default=None,
+        help="project against this many probes per pass",
+    )
+    val.add_argument(
+        "--passes",
+        type=int,
+        default=None,
+        help="project against this many passes. Defaults to battery.passes",
+    )
+    val.set_defaults(func=cmd_validate)
+
     gen = sub.add_parser(
         "generate",
         help="fire the battery at the target and write responses.jsonl",
@@ -471,7 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    _configure_logging(args.verbose)
+    _configure_logging(args.verbose, to_file=args.command != "validate")
     sys.exit(args.func(args))
 
 

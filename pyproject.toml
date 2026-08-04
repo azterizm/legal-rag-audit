@@ -69,6 +69,7 @@ packages = [
     "legal_rag_audit.provenance",
     "legal_rag_audit.score",
     "legal_rag_audit.transport",
+    "legal_rag_audit.validate",
 ]
 
 [tool.setuptools.package-dir]

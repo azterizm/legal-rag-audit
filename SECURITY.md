@@ -196,8 +196,17 @@ Workflow permissions are `contents: read` by default. The elevation a release ne
 
 ## Running it against a live system
 
-If you do choose to run `generate` against your own endpoint, the controls that actually
-answer the fear are enforcement, not requests. *"Turn off the internet"* does not answer
+**Start with `validate`.** Three neutral throwaway queries and one small neutral file,
+named `legal-rag-audit-validate.txt`, uploaded so the harness can tell you whether your
+upload endpoint issues document identifiers — `--skip-upload` suppresses that, and the
+output then says the question went unanswered. No battery probe is fired, no planted
+corpus is uploaded, and nothing is written to your disk. The `validate` package has no
+import path to the battery, the planting code or the corpus loader, and a test walks the
+import graph to keep it that way: raw response bodies print to your terminal, so anything
+from the battery reaching that surface would be our problem, not yours.
+
+If you then choose to run `generate` against your own endpoint, the controls that
+actually answer the fear are enforcement, not requests. *"Turn off the internet"* does not answer
 a delayed payload; **denying** egress does, because a delayed payload still has to make a
 call eventually and it fails whenever it fires.
 

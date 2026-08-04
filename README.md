@@ -81,7 +81,7 @@ they are being built against a written spec, not discovered.
 | JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
 | Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
 | Non-root container, base image pinned by digest, deps under `--require-hashes` | **Shipped** — single image; the split, publication and image signing are pending |
-| `generate` / `score` mode split; scoring offline and enforced | **Shipped** — `validate` pending |
+| `validate` / `generate` / `score` mode split; scoring offline and enforced | **Shipped** |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
 | Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 15 Tier 1, 2 Tier 2 |
 | Run manifest: hashes, commit SHA, model versions, seed, corpus mode, battery composition | **Shipped** |
@@ -120,7 +120,7 @@ convenience.
 
 | Mode | Does | Network | Who runs it |
 |---|---|---|---|
-| `validate` | 3 neutral probes; prints the raw response body and what each JSONPath extracted; exits | Target only | Them, pre-sale, free |
+| `validate` | 3 neutral probes; prints the raw response body and what each JSONPath extracted; names every setup problem that would otherwise reach the report as a finding; exits | Target only | Them, pre-sale, free |
 | `generate` | Fires the battery at the configured endpoints, writes `responses.jsonl` | Target only | Them — or replaced entirely by their own tooling |
 | `score` | Reads `responses.jsonl` plus the ground-truth manifest, writes the report | **None** | Us |
 
@@ -182,6 +182,7 @@ flowchart TD
     end
     subgraph Theirs ["Your side — optional, replaceable"]
         CFG["Config<br/>(config.py)"]
+        VAL["validate<br/>(validate/)<br/>3 neutral probes · no path to the battery"]
         GEN["generate<br/>(generate/)"]
         TRANSPORT["Transport (transport/)<br/>httpx REST & SSE · websockets · jsonpath-ng"]
     end
@@ -211,6 +212,8 @@ flowchart TD
     HANDOVER ==>|pre-commitment| SCORE
     PROBES --> GEN
     CFG --> GEN
+    CFG --> VAL
+    VAL -->|3 neutral queries, before anything else| TRANSPORT
     CORPUS --> GEN
     GEN --> TRANSPORT
     TRANSPORT -->|1. ingest base corpus| UPLOAD_EP
@@ -235,6 +238,13 @@ flowchart TD
 to be wrong about. `score` reads that file plus the withheld ground truth and never
 opens a socket. Replacing `generate` with your own script changes nothing downstream;
 see [the response schema](docs/responses-schema.md).
+
+Note where `validate` does *not* connect. It takes the config and the transport, and it
+has no edge to the battery, the corpus or the answer key — not by convention but by
+construction: no module under `validate/` imports `probes/`, `plants/` or the corpus
+loader, and a test walks the import graph and fails the build if one ever does. It
+prints raw response bodies to your terminal, so a canary reaching it would be the
+product given away.
 
 ---
 
@@ -538,12 +548,18 @@ target:
     stop_payload_match: "MESSAGE_END"
 ```
 
+A config of this shape has four independent ways to be silently wrong — the handshake
+frame, the terminator, and the two JSONPaths — and none of them fails loudly. Run
+`legal-rag-audit validate -c config.yaml` once after writing it. It prints the frames it
+received, so a terminator can be chosen from what the target actually sends rather than
+from what its documentation says it sends.
+
 ---
 
 ## Running it
 
-Four steps, on two machines. The third is yours and optional; the rest are ours, and the
-last runs offline.
+Five steps, on two machines. The middle two are yours — the first of them takes two
+minutes and the second is optional. The rest are ours, and the last runs offline.
 
 ```bash
 legal-rag-audit plant --seed "$RUN_SEED" -o run/
@@ -575,6 +591,36 @@ recomputes it, so verifying one needs `shasum` and nothing of ours.
 
 ```bash
 export TARGET_API_KEY="your-api-token"
+legal-rag-audit validate -c config.yaml
+```
+
+Three neutral throwaway queries — never a battery probe — with the raw response body
+printed beside what your configured JSONPaths pulled out of it. Two minutes, eyeball,
+proceed. It scores nothing and writes nothing, not even a log file.
+
+It is also the whole compatibility check, so it belongs *before* any money changes
+hands: no corpus, no battery, no authorisation, nothing disclosed either way.
+
+What it names, and what each one becomes in a report if nobody catches it:
+
+| Condition | Uncaught, it reads as |
+|---|---|
+| 401/403 rejection | An empty answer — then a page of hallucination and abstention findings about a system that never saw a question |
+| 429 rate limiting | Non-determinism: some probes answering and some not, attributed to your system rather than to ours |
+| A stream that never terminates | A timeout scored as a failure, or a truncated answer scored as a complete one |
+| A websocket handshake that produces nothing | Every probe empty, with no diagnosis |
+| An upload that issues no document identifier | Nothing at all — citation integrity silently becomes one check the report does not contain |
+| A latency implying a multi-hour run | Nothing, until hour three |
+| A JSONPath that extracts nothing | A hallucination. This is the documented leading cause of false positives, and where extraction comes back empty it walks the body and proposes candidate paths |
+
+Exit **0** or **2**. Never 1 — it judges no answer, so it has no findings, and sharing
+an exit code with a real run is the same conflation the mode exists to prevent.
+
+By default it uploads one small neutral file, named `legal-rag-audit-validate.txt`, to
+see whether your upload endpoint hands back an identifier. `--skip-upload` suppresses
+that, and the output then says the question went unanswered rather than passing it.
+
+```bash
 legal-rag-audit generate -c config.yaml \
                          --corpus run/corpus \
                          --probes-in run/probes.jsonl \
@@ -619,7 +665,7 @@ Exit codes are a contract: **0** ran clean, **1** ran with findings, **2** did n
 a setup problem, with a diagnosis. A run that could not start never exits the way a clean
 one does.
 
-Still to come: `validate` (v0.2.1).
+Still to come: authorisation gating on the injection and canary families (v0.2.0).
 
 ### If you would rather we never touched your endpoint
 

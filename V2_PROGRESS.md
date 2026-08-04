@@ -16,7 +16,7 @@ exists to measure in other people's systems.
 | **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
 | **E** | N-pass execution + variance reporting | 1 d | ✅ 2026-08-04 *(profiles are response files; the live mock target is F2)* |
-| **F** | `validate` mode | 0.5 d | ⬜ |
+| **F** | `validate` mode | 0.5 d | ✅ 2026-08-04 |
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ⬜ |
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ⬜ |
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ⬜ |
@@ -1431,7 +1431,7 @@ not have to tell an absent key from a nil count; the sentence is withheld from t
 | A single-pass run does not read as stable | `NOT_CAPTURED`, never `PASS`; §4 of the attestation says nothing was compared |
 | Counts are split, not collapsed | A flaky probe and a stable one in the same run, asserted to land in different columns |
 
-**519 tests.** Five gates clean.
+**520 tests.** Five gates clean.
 
 ### Deliberately not done
 
@@ -1445,3 +1445,155 @@ not have to tell an absent key from a nil count; the sentence is withheld from t
 - **Stability over time.** The check measures reproducibility across passes of one run.
   A system that answers identically three times this afternoon may answer differently
   after its next index rebuild, and the limit line on the check says so.
+
+---
+
+## Phase F — `validate` ✅
+
+Closes defect 5 in §19. Wrong JSONPath is our own documented leading cause of false
+positives, and a false positive in a delivered report is not recoverable in this niche —
+we sell precision, and a finding retracted in front of a buyer takes the other seventeen
+with it. Every condition in §7.1's table has the same shape: a setup problem that, left
+uncaught, arrives at scoring time wearing the costume of a finding about somebody's
+product.
+
+`validate` sends three neutral throwaway queries, prints the raw response body beside
+what the configured paths extracted from it, names what is wrong, and exits. Two minutes.
+
+It is also the free pre-sale compatibility check: no corpus, no battery, no
+authorisation, nothing disclosed in either direction. *Before you pay anything, run this
+and confirm the harness can read your API* removes the "what if it doesn't work with our
+stack" objection at zero cost.
+
+### Non-leakage is structural, not careful
+
+§7.1's warning is the sharpest constraint in the phase: `validate` prints raw response
+bodies **to the target's terminal**, so a canary or an injection payload reaching this
+mode is the product given away. The battery is what we sell; the harness is free.
+
+The obvious implementation — take three probes from the battery and blank their
+expectations — would have put an import edge from this package to `probes/`, leaving
+nothing between a canary and their screen but our own care in maintaining it. There is no
+such edge. The neutral probe set is a constant in `validate/neutral.py`, and the package
+imports `config` and `transport` and nothing else of ours.
+
+Asserted three ways, because each catches what the others miss:
+
+| Assertion | Catches |
+|---|---|
+| The import graph is walked from `legal_rag_audit.validate` (AST, so imports inside functions count) — no edge to `probes`, `plants`, `corpus_loader`, `evaluators` or `score` | The refactor that reaches for a probe "just to reuse the shape" |
+| Every value a real planting mints, checked against the neutral probes, the neutral document and its filename | A value hardcoded here that happens to collide with a minted one |
+| The rendered output of a live run, checked against the same set | A value arriving through some path neither of the above covers |
+
+### The projection needed a number the package is not allowed to look up
+
+The run-length projection needs the battery size. Importing `probes/` to count it is the
+one edge §7.1 forbids, so `BATTERY_PROBE_COUNT` is a plain integer in the `validate`
+package — and a test compares it against `len(build_probes())` and fails the build when
+they part company. Tests are not part of the package import graph, so the constant stays
+honest without the package gaining the edge. `--probes probes.jsonl` counts lines in a
+file the operator already holds, which is the exact count for an engagement and still not
+an import.
+
+### Every diagnosis carries §7.1's second column
+
+That table is a list of conditions beside *what each one looks like in a report if nobody
+caught it*, and the second column is the reason the mode exists. So it is stored on the
+diagnosis rather than paraphrased into a log line. A 401 does not print "auth failed"; it
+prints that it would otherwise read as an empty answer, and that half the battery treats
+an empty answer as the system failing to produce something it should have — a wrong token
+becoming a page of hallucination findings about a system that never saw a question.
+
+Eleven codes: `auth_rejected`, `rate_limited`, `stream_never_terminated`,
+`handshake_failed`, `upload_no_identifier`, `run_too_long`, `answer_not_extracted`,
+`citations_not_extracted`, `answer_never_arrived`, `bad_status`, `unreachable`. The last
+five are not in §7.1's table; they are the same class of problem and were cheap to name
+once the shape existed.
+
+### Blocking and advisory are different, and both are printed
+
+`upload_no_identifier` and `run_too_long` do not stop the run. A target that issues no
+document identifiers costs one Tier 1 check — citation integrity has no set to test
+membership against, and the report will say `NOT_CAPTURED` rather than `PASS` (F40) — and
+is otherwise a perfectly runnable engagement. A four-hour battery is not a defect in
+anything; it is a fact about the engagement that is much cheaper to know now than at hour
+three. Both are named in full, and neither is a reason to refuse to start.
+
+**`validate` never exits 1.** Exit 1 means *ran, findings*. This mode judges no answer, so
+it has no findings, and letting a setup check share an exit code with an audit result in
+whatever CI reads it would be the exact conflation the mode exists to prevent. 0 or 2.
+
+### Two things §7.1 asked for that needed a decision
+
+**Order.** §7.1 says the raw body prints *alongside* the extraction. Which comes first is
+not cosmetic: printed second, the body reads as supporting material for a conclusion
+already stated; printed first, the conclusion is checkable against something the reader
+saw with their own eyes. Same argument the evidence bundle makes for Tier 1 findings, at
+a much smaller scale. Body first.
+
+**Suggestions.** A confident wrong path is worse than no path — the operator sets it,
+extraction starts returning *something*, and the something is a request id scored as the
+system's answer. So candidates appear only where extraction came back empty, under a
+heading saying they are guesses, with the value found at each one printed beside it. The
+heuristics are deliberately dumb and their failure modes are stated in the module: longest
+string wins, which breaks on a target that echoes the prompt; first array of objects in
+document order, because the sources list sits near the answer and a longer array further
+down is more likely to be retrieval debug output.
+
+### Three defects that were all the same mistake
+
+Each one sent the reader somewhere the problem was not.
+
+**A 401 also reported the citations path.** The first version printed the auth diagnosis
+and then, underneath it, `citations_not_extracted` — a note sending the operator to a
+config key that was almost certainly correct, while the real cause sat above it. Three
+empty answers and no citations is what an auth rejection *looks* like; it is not a second
+problem. Both extraction diagnoses are now suppressed when a transport or status failure
+was already named. Same rule the report itself runs on: an absent measurement and a failed
+one must never print the same (F40). Found by running the thing and reading it.
+
+**A refused websocket named the chat URL.** The generic *unreachable* branch reads the
+chat endpoint, and a websocket that never opened is a problem with the *receive* address
+— which had answered nothing and was not printed. The connection state is now observed
+separately, and a connection that never opened is diagnosed before the generic branch and
+against the right URL. It is also not `handshake_failed`: if the socket never opened,
+`init_message` is not the thing to change.
+
+**A `receive` endpoint polled over HTTP was reported as a stream.** An answer that never
+arrived within the deadline got `stream_never_terminated`, whose remedy is to configure
+`stop_payload_match` — a key that shape of config does not use. Polling now has its own
+`answer_never_arrived`, and the rendering does not describe an answer arriving as "the
+target's terminator".
+
+### `nothing written` is now true rather than qualified
+
+The CLI attaches a file handler to the logger for every mode, so a stranger running the
+free pre-sale check would have found a `.legal_rag_audit.log` in the directory they ran it
+from. Small, and exactly the kind of surprise that mode cannot afford. `validate` logs to
+the terminal only. Qualifying the sentence in the README would have been the easier fix
+and the worse one — the claim is short because the behaviour is.
+
+### Acceptance
+
+| Criterion | Result |
+|---|---|
+| The non-leakage test passes | Three ways: the import graph, the neutral material, and the rendered output of a live run |
+| Each failure condition yields a named diagnosis, not a stack trace | One test per §7.1 row against a stub configured to misbehave in exactly that way, asserting on the diagnosis code rather than its prose |
+| A well-behaved target produces nothing | Zero diagnoses, exit 0, and a closing line saying the run establishes that the harness can talk to the target and nothing about the target |
+
+**582 tests.** Five gates clean. The jump is larger than the 44 tests in
+`test_validate.py`: three of the repository-wide scans are parametrised over every file
+in the package, so six new modules bring eighteen more assertions with them.
+
+### Deliberately not done
+
+- **No machine-readable output.** §7.1 is a mode a person reads over their own shoulder.
+  A `--json` flag is easy to add and would need a schema, a version and a compatibility
+  promise, which is three obligations for a use nobody has asked for.
+- **No retry, no backoff.** On a 429 it says so and stops. A mode whose value is that it
+  comes back fast should not be the thing that sits in a loop against someone's endpoint.
+- **The neutral document is uploaded by default.** Checking whether the upload endpoint
+  issues identifiers is not possible without sending something, and the check protects a
+  Tier 1 evaluator. It is one small file, named so it is obvious in a document list, and
+  `--skip-upload` suppresses it — the output then says the question went unanswered rather
+  than quietly passing it.

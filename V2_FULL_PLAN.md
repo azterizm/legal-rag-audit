@@ -1226,6 +1226,13 @@ This is the strongest available answer to *"your harness is broken"*, it is chea
 | Questions are verified against the sealed probe file | A record whose query does not contain its probe's text aborts; one that wraps it is counted and named (F45) |
 | Dependency isolation | `generate` runs in a venv where `torch` is not importable (F31) |
 | Battery non-leakage | `validate` package has no import path to `probes/` or `corpus/`; its output contains no plant token (F28) |
+| Non-leakage, live | The rendered output of a `validate` run against a stub contains none of the values a real planting mints |
+| The projection constant tracks the battery | `validate.BATTERY_PROBE_COUNT == len(build_probes())` — a number rather than the forbidden import, kept honest by the build |
+| A setup problem is never a finding | Each §7.1 condition against a misbehaving stub yields its named diagnosis code; a transport failure suppresses the extraction diagnoses rather than adding two false leads under the real cause |
+| A diagnosis names the endpoint that failed | A refused websocket names the `receive` URL, not the chat one that answered fine; a polled `receive` is not diagnosed with the stream's remedy |
+| `validate` exits 0 or 2, never 1 | A clean stub exits 0, an auth-rejecting stub exits 2; the findings code is unreachable from a mode that judges no answer |
+| `validate` writes nothing | A run in an empty directory leaves it empty, log file included |
+| Suggested paths are usable | Every candidate JSONPath parses and finds the value it was derived from |
 | Plant collision guard | 10,000 generated plants: no corpus collision, no inter-plant collision, no real-authority hit (§3.2) |
 | Seed reproducibility | Same seed ⇒ identical plants, identical probe order (F20) |
 | Denominator integrity | Every reported denominator equals the count declared in the probe file (F39) |
@@ -1491,10 +1498,12 @@ Ordering rationale: the blocking contradiction first, then the thing that makes 
 - **Recorded deviation.** The acceptance names the `nondeterministic` and `clean` **mock profiles**, and the pathological reference target of §14.1 is Phase F2. What the variance pass consumes is a response file, so both profiles are expressed as response files here and the live HTTP target still arrives with F2. The substance of the criterion is met; the harness it was written against is not built yet, and this is the honest statement of that.
 - **Acceptance:** ~~the `nondeterministic` mock profile produces a divergence finding; the `clean` profile at 3 passes produces zero divergence findings.~~ **Met.** A compliant battery reworded on every pass produces zero divergence findings and a positive `invariant_stable` count — the second assertion matters, because zero findings over answers that never varied would pass for the wrong reason. A single outcome moved on a single pass produces exactly one finding, carrying both texts and a diff. The diff is taken over **the passes that disagree, not the first and last**: a probe that failed on pass 2 and recovered on pass 3 has identical ends, and the first implementation printed an empty diff beside a finding.
 
-**Phase F — `validate` (0.5 d)**
-- 3 hardcoded neutral probes; raw body print; per-JSONPath extraction preview; heuristic path suggestion.
-- Detect and name: auth failure, SSE non-termination, WS handshake failure, missing upload ID, 429, latency projection.
-- **Acceptance:** the non-leakage test passes; each failure condition on the mock target yields a named diagnosis rather than a stack trace.
+**Phase F — `validate` (0.5 d)** — **Shipped 2026-08-04.**
+- ~~3 hardcoded neutral probes; raw body print; per-JSONPath extraction preview; heuristic path suggestion.~~ **Shipped.** The raw body prints **before** the extraction, not beside it: printed second it reads as supporting material for a conclusion already stated; printed first the conclusion is checkable against something the reader saw. Suggestions appear only where extraction came back empty — a guess beside a working config is noise — and are labelled as guesses with the value found at each path, because a confident wrong path is worse than no path.
+- ~~Detect and name: auth failure, SSE non-termination, WS handshake failure, missing upload ID, 429, latency projection.~~ **Shipped**, each carrying §7.1's second column: *what this becomes in a report if nobody catches it*. That sentence is the reason the mode exists, so it is stored on the diagnosis rather than paraphrased into a log line.
+- **Blocking and advisory are separated.** A missing upload identifier and a multi-hour projection are printed in full and do not stop the run: the first is a real loss of one Tier 1 check and a perfectly runnable engagement, the second is not a defect in anything. **`validate` never exits 1.** It judges no answer, so it has no findings, and sharing the findings code with a real run would be the same conflation the mode exists to prevent.
+- **Recorded deviations.** Two, both additions. (a) §7.1 says *nothing written*, and the CLI's log handler would have left a `.legal_rag_audit.log` in the directory a stranger ran the free pre-sale check from; `validate` now suppresses it, because qualifying the claim was the easier fix and the worse one. (b) The latency projection needs the battery size, and importing `probes/` to count it is the one edge §7.1 forbids — so the count is a constant in the `validate` package, pinned to `len(build_probes())` by a test. The constant can go stale; it cannot go stale silently.
+- **Acceptance:** ~~the non-leakage test passes; each failure condition on the mock target yields a named diagnosis rather than a stack trace.~~ **Met.** Non-leakage is asserted three ways — the import graph is walked (no edge to `probes`, `plants`, `corpus_loader`, `evaluators` or `score`), the neutral material is checked against every value a real planting mints, and the rendered output of a live run is checked against the same set. Each of the six conditions in §7.1's table has a test against a stub target configured to misbehave in exactly that way, asserting on the diagnosis *code* so the wording stays editable and the contract does not.
 
 **Phase F2 — reference target and self-verification (1.5 d)**
 - Mock target with the 18 profiles in §14.1 that exist at this point — 17 pathologies plus `clean`. `serve_licensed_content` arrives with Phase G, alongside the evaluator it exercises.
@@ -1535,7 +1544,7 @@ The first £500 engagement can run after **A + B + C + F + I + one domain corpus
 - [ ] `responses.jsonl` spec published; a stranger can produce one with curl
 - [ ] Tier-separated report with manifest, hashes, signed commit SHA
 - [ ] Markdown attestation emitted, not just JSON
-- [ ] `validate` ships and cannot leak the battery
+- [x] `validate` ships and cannot leak the battery — 2026-08-04
 - [ ] Hardened invocation is the README's primary example; SBOM and signed release published
 - [ ] Authorisation controls enforced
 
@@ -1568,7 +1577,7 @@ The first £500 engagement can run after **A + B + C + F + I + one domain corpus
 | 2 | No tier separation; contestable and unarguable findings presented identically | **Blocking** | F21 / Phase C |
 | 3 | ~~Single-pass execution; no variance; target non-determinism reads as tool flakiness~~ **Closed 2026-08-04.** `response_divergence` is a registered Tier 1 check; a single-pass run reports `NOT_CAPTURED` rather than passing | **Blocking** | F22 / Phase E |
 | 4 | `upload` effectively required — a larger access ask than a chat probe | High | F25 / Phase G |
-| 5 | No `validate` mode; wrong JSONPath is our own documented leading false-positive cause | High | F28 / Phase F |
+| 5 | ~~No `validate` mode; wrong JSONPath is our own documented leading false-positive cause~~ **Closed 2026-08-04.** Three neutral probes, the raw body, the extraction preview, candidate paths where extraction came back empty, and a named diagnosis for every §7.1 setup condition. Exits 0 or 2, never 1 | High | F28 / Phase F |
 | 6 | No run manifest / hashes / signed SHA — the report is not independently reproducible | High | F23 / Phase C |
 | 7 | `0.85` and `0.02` presented as standards rather than settings | Medium | F24 / Phase C |
 | 8 | Evaluators judgment-shaped where an inverted exact check exists (bleed, abstention, contradiction, routing) | Medium | Phase D / §8.2 |
