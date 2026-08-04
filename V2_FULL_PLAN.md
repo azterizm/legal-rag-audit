@@ -1212,7 +1212,8 @@ The objection after *"is it safe"* is *"how do I know your tool is right?"* The 
 Two CI gates, and both are publishable numbers about our own instrument:
 
 - **Sensitivity:** each pathology flag on ⇒ its evaluator reports FAIL. **Every shipped evaluator, no exemptions** — 17/17 at v0.3.0, 18/18 once §8.2 #18 lands with Phase G. The gate is written against the evaluator registry rather than a hardcoded number, so shipping an evaluator without a pathology profile fails the build instead of quietly shrinking the denominator.
-- **Specificity:** `clean` ⇒ every evaluator reports PASS or NOT_ELIGIBLE, zero findings, across 3 passes. **Any false positive is a release blocker.**
+  - **One check cannot report FAIL, and the rule accommodates it rather than exempting it.** `latency` is a measurement (§8.2 #15): it has no pass condition, because any threshold would be ours rather than a standard. Detection there is the labelled paired reading firing on `slow_regenerate` and staying silent on `clean` — a mechanism section telling a client their system regenerates answers, on a target that does nothing of the sort, is a false positive in every sense that matters commercially. The gate branches on whether a check *is* a measurement, never on its name.
+- **Specificity:** `clean` ⇒ every evaluator reports PASS or NOT_ELIGIBLE, zero findings, across 3 passes. **Any false positive is a release blocker.** `NOT_CAPTURED` does not satisfy this: a run where every request failed would show zero findings too, so the gate also asserts zero transport errors, no unrecognised query, and that citations, chunks and document identifiers were all captured.
 
 This is the strongest available answer to *"your harness is broken"*, it is cheap, and it is exactly the discipline [Source Map §7.5](../../../Business/Technical%20Consultancy/Content%20Creation/Legal%20Tech/Source%20Map%20-%20What%20Content%20Can%20Stand%20On.md) asks for — reporting our own instrument's limits in the same artefact.
 
@@ -1233,6 +1234,11 @@ This is the strongest available answer to *"your harness is broken"*, it is chea
 | `validate` exits 0 or 2, never 1 | A clean stub exits 0, an auth-rejecting stub exits 2; the findings code is unreachable from a mode that judges no answer |
 | `validate` writes nothing | A run in an empty directory leaves it empty, log file included |
 | Suggested paths are usable | Every candidate JSONPath parses and finds the value it was derived from |
+| Sensitivity | Each §14.1 profile against a live reference target ⇒ the check that looks for that defect reports it. Written against the check register, so an evaluator with no profile fails the build |
+| Specificity | `clean` at 3 passes ⇒ zero findings, zero transport errors, no unrecognised query, and every check `PASS` or `NOT_ELIGIBLE` — `NOT_CAPTURED` is not a pass either |
+| A pathology fails only what it claims | Each profile's findings are a subset of what it declares; the two unavoidable side effects are named on the profile rather than tolerated |
+| The reference target cannot read the answer key | Its import set is asserted: the probe file and the templates, nothing else. It recovers invariants from the uploaded bytes, so a clean run is three artefacts agreeing rather than the scorer agreeing with itself |
+| The published matrix describes the profiles that exist | `docs/harness-verification.md` is checked against the code, and states what the two numbers do not establish |
 | Plant collision guard | 10,000 generated plants: no corpus collision, no inter-plant collision, no real-authority hit (§3.2) |
 | Seed reproducibility | Same seed ⇒ identical plants, identical probe order (F20) |
 | Denominator integrity | Every reported denominator equals the count declared in the probe file (F39) |
@@ -1505,11 +1511,13 @@ Ordering rationale: the blocking contradiction first, then the thing that makes 
 - **Recorded deviations.** Two, both additions. (a) §7.1 says *nothing written*, and the CLI's log handler would have left a `.legal_rag_audit.log` in the directory a stranger ran the free pre-sale check from; `validate` now suppresses it, because qualifying the claim was the easier fix and the worse one. (b) The latency projection needs the battery size, and importing `probes/` to count it is the one edge §7.1 forbids — so the count is a constant in the `validate` package, pinned to `len(build_probes())` by a test. The constant can go stale; it cannot go stale silently.
 - **Acceptance:** ~~the non-leakage test passes; each failure condition on the mock target yields a named diagnosis rather than a stack trace.~~ **Met.** Non-leakage is asserted three ways — the import graph is walked (no edge to `probes`, `plants`, `corpus_loader`, `evaluators` or `score`), the neutral material is checked against every value a real planting mints, and the rendered output of a live run is checked against the same set. Each of the six conditions in §7.1's table has a test against a stub target configured to misbehave in exactly that way, asserting on the diagnosis *code* so the wording stays editable and the contract does not.
 
-**Phase F2 — reference target and self-verification (1.5 d)**
-- Mock target with the 18 profiles in §14.1 that exist at this point — 17 pathologies plus `clean`. `serve_licensed_content` arrives with Phase G, alongside the evaluator it exercises.
-- CI gates for sensitivity (every shipped evaluator — 17/17 here) and specificity (zero false positives on `clean`).
-- Publish the matrix in `docs/` — it is a credibility artefact, not just a test.
-- **Acceptance:** both gates green and wired as release blockers.
+**Phase F2 — reference target and self-verification (1.5 d)** — **Shipped 2026-08-04.**
+- ~~Mock target with the 18 profiles in §14.1 that exist at this point — 17 pathologies plus `clean`.~~ **Shipped** in `tests/mock_target/`, and the design decision that makes the numbers worth anything is what it is **not allowed to see**. It holds the probe file — the half of the battery a target receives — and the documents that arrived at `/upload`. It never reads the ground-truth manifest: the invariants it answers with are recovered from the uploaded bytes by aligning each document against the template it was planted from, so the corpus, the questions and the answer key stay three artefacts that have to agree. An oracle answering out of `expectation.must_contain` would have made the specificity gate a test that the scorer agrees with itself. A test asserts the mock's import set, so this cannot quietly stop being true.
+- ~~CI gates for sensitivity (every shipped evaluator — 17/17 here) and specificity (zero false positives on `clean`).~~ **Shipped**, written against `score.registry` rather than a count: a check with no profile fails the build. **Every run is a full run** — corpus planted to disk, uploaded over HTTP, answered, captured through the transport client's JSONPaths, written to `responses.jsonl`, scored offline against a key built from the same seed. That closes Phase E's recorded deviation: the variance acceptance was met against response files because this target did not exist yet, and both halves of it are now met against a live one.
+- **A third assertion the plan does not ask for: a pathology fails only what it claims.** A profile tripping six checks would make the matrix unreadable — nobody could tell which evaluator caught what — so the two unavoidable side effects are declared on the profile rather than tolerated. An answer cannot be entailed by chunks about something else, so `irrelevant_chunks` trips the entailment check too; and the pass on which a non-deterministic target moved is a genuine failure on that pass, which is what makes it a divergence rather than a rewording.
+- ~~Publish the matrix in `docs/`.~~ **Shipped** as [`docs/harness-verification.md`](docs/harness-verification.md), checked against the code on every run — a published claim about our own instrument that nobody re-derives is the kind we tell clients not to accept. It was also added to the four documents `check_readme_claims.py` covers, being the one document whose whole subject is how well our instrument works.
+- **Recorded deviations.** Two. (a) §14.2 says *its evaluator reports FAIL*, and **`latency` cannot**: it is a measurement with no pass condition (§8.2 #15), so a gate demanding a FAIL from it would be unsatisfiable by design. Detection for a measurement is the labelled paired reading firing instead, and the gate branches on `spec.measurement` rather than on the check's name so a second measurement is covered without anyone remembering. Against the reference target the ratio is 17.2 on `slow_regenerate` and 1.0 on `clean`. (b) The two Tier 2 rows fetch checkpoints resolved by name rather than by digest, so they are opt-in behind `LEGAL_RAG_AUDIT_TIER2_GATE=1`, set in one CI job and **not** in the release path: a pipeline built to eliminate mutable references should not acquire one on the way to signing an artefact. Where the flag is unset those rows skip and name the two checks they did not verify.
+- **Acceptance:** ~~both gates green and wired as release blockers.~~ **Met.** 42 tests; sensitivity green for all sixteen non-Tier-2 rows; `clean` at three passes produces zero findings, zero transport errors, no unrecognised query, and every check `PASS` or `NOT_ELIGIBLE` — never `NOT_CAPTURED`, which is not a pass either. Both gates run as their own CI check on every push and again in `release.yml` before anything is signed.
 
 **Phase G — existing corpus and point-in-time (3–4 d)**
 - `legislation.gov.uk` ingestion: chosen instruments, versioned snapshots, local store, refresh procedure, storage footprint documented.
@@ -1552,7 +1560,7 @@ The first £500 engagement can run after **A + B + C + F + I + one domain corpus
 - [ ] 16 of 18 evaluators are Tier 1 with no model in the scoring path
 - [ ] Plants generated from a seed; collision guard tested at scale
 - [ ] N-pass with variance as a first-class finding
-- [ ] Sensitivity across every shipped evaluator (17/17 at this milestone) and zero false positives on the clean profile, as CI gates
+- [x] Sensitivity across every shipped evaluator (17/17 at this milestone) and zero false positives on the clean profile, as CI gates — 2026-08-04. 15 rows verified unconditionally; `latency` by its paired reading rather than a FAIL, because a measurement has no pass condition; the 2 Tier 2 rows behind an opt-in flag so a release never depends on fetching unpinned weights
 
 **v0.4.0 — "runs without upload"** (G, H)
 - [ ] Existing-corpus mode complete; point-in-time pairs against versioned statute data
@@ -1583,7 +1591,7 @@ The first £500 engagement can run after **A + B + C + F + I + one domain corpus
 | 8 | Evaluators judgment-shaped where an inverted exact check exists (bleed, abstention, contradiction, routing) | Medium | Phase D / §8.2 |
 | 9 | No `responses.jsonl` interchange format; the tool is endpoint-coupled | High | F18, F19 / Phase B |
 | 10 | Bundled corpus positioned as the audit rather than the demo | Medium | §9.4 / Phase H |
-| 11 | No harness self-verification; no answer to "how do I know your tool is right" | High | §14 / Phase F2 |
+| 11 | ~~No harness self-verification; no answer to "how do I know your tool is right"~~ **Closed 2026-08-04.** A reference target with 18 profiles, two CI gates written against the check register, and the matrix published with what it does not establish printed beside it | High | §14 / Phase F2 |
 | 12 | No authorisation gating on injection/canary families | High | §13 / Phase I |
 
 ---

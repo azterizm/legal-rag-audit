@@ -17,7 +17,7 @@ exists to measure in other people's systems.
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
 | **E** | N-pass execution + variance reporting | 1 d | ✅ 2026-08-04 *(profiles are response files; the live mock target is F2)* |
 | **F** | `validate` mode | 0.5 d | ✅ 2026-08-04 |
-| **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ⬜ |
+| **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ✅ 2026-08-04 |
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ⬜ |
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ⬜ |
 | **I** | Authorisation controls + retention position | 0.5 d | ⬜ |
@@ -1597,3 +1597,168 @@ in the package, so six new modules bring eighteen more assertions with them.
   Tier 1 evaluator. It is one small file, named so it is obvious in a document list, and
   `--skip-upload` suppresses it — the output then says the question went unanswered rather
   than quietly passing it.
+
+---
+
+## Phase F2 — the reference target ✅
+
+Closes defect 11 in §19. The objection after *"is it safe to run against my system?"* is
+*"how do I know your tool is right?"*, and until this phase the honest answer was that
+the harness had never been run against a system whose defects were known in advance. Two
+numbers now answer it, and §14.2 makes both publishable claims about our own instrument:
+**sensitivity** — every registered check, given a target exhibiting the defect it looks
+for, reports it — and **specificity** — a target behaving correctly produces no findings
+at all.
+
+The second is the one that costs money. A missed detection is a bug; a finding raised
+against a system that did nothing wrong is a report we should never have sent, and in
+this niche a retracted finding takes the other seventeen with it. So a false positive
+blocks a release and a missed one does not.
+
+### What the mock is not allowed to see
+
+The whole phase turns on one decision. A reference target that answered by reading
+`expectation.must_contain` would make the specificity gate a test that the scorer agrees
+with itself — eighteen green rows establishing nothing. So the mock holds exactly what a
+real target holds:
+
+| It holds | It does not hold |
+|---|---|
+| The probe file — the questions, as handed over at §15.2 | The ground-truth manifest |
+| The documents that arrived at `/upload` | The expectations, or any plant value as a value |
+
+The invariants it answers with are **recovered from the uploaded bytes**. Each template
+in `plants.templates` is prose with `@@plant-id@@` holes; the uploaded document is that
+prose with the holes filled, so turning the template into a regex — literals escaped,
+each hole a capture group — reads every planted value back out of what arrived. The
+corpus, the questions and the answer key stay three separate artefacts that have to agree
+for a run to come out clean.
+
+The alignment does a second job nobody designed it for: it identifies *which* document
+arrived. The retainer notice's base and revised bodies differ in prose as well as in the
+fee, so the revision phase is observable to the target without being announced to it —
+which is what makes `stale_index` a pathology this harness can express at all, and what
+resolves `fresh-001` and `fresh-002` when a query alone cannot (they are the same
+sentence asked either side of the revision).
+
+A test asserts the mock's import set — `interchange.probe` and `plants.templates`, and
+nothing else — so none of this can quietly stop being true.
+
+### Every run is a full run
+
+Corpus planted to disk, uploaded over HTTP, answered by a server that has only the probe
+file and what arrived at `/upload`, captured through the transport client's JSONPaths,
+written to `responses.jsonl`, scored offline against a key built from the same seed.
+Eighteen profiles, twenty-one seconds, no network and no models.
+
+This is what closes Phase E's recorded deviation. That phase's acceptance named the
+`nondeterministic` and `clean` **mock profiles**, and both were expressed as response
+files because this target did not exist yet. Both halves are now met against a live one:
+three passes of `clean` produce zero divergent findings and a positive stable count, and
+one moved outcome on one pass of `disamb-001` produces exactly one divergence, naming
+`disambiguation` as the check that moved.
+
+The distinction matters more than it sounds. A fixture proves the scorer reads what we
+wrote into it. This proves the seams — upload, JSONPath extraction, capture notes,
+document identifiers, the two-phase revision, the probe-text verification at scoring time
+— and every one of those is a place a real engagement breaks that a fixture never touches.
+
+### A pathology fails only what it claims
+
+§14.2 does not ask for this and the number is worth much less without it. A mock that
+answered every probe badly would light up sixteen rows and demonstrate nothing about
+which evaluator caught which thing. So each profile's findings are asserted to be a
+subset of what it declares, and the two unavoidable side effects are declared on the
+profile rather than tolerated:
+
+- `irrelevant_chunks` replaces the retrieval, and an answer cannot be entailed by chunks
+  about something else — so the entailment check goes with it. The two Tier 2 checks read
+  the same chunks; there is no way to move one without the other.
+- `nondeterministic` moves a Tier 1 outcome on pass 2, and that pass is a genuine
+  disambiguation failure. It has to be: variance is classified on Tier 1 outcomes, so a
+  divergence that was not also a failure somewhere would be a rewording.
+
+### One check cannot fail, and the gate accommodates it
+
+§14.2 says *its evaluator reports FAIL*. `latency` cannot. It is a measurement (§8.2 #15)
+— no pass condition, because any threshold would be ours rather than a standard — so a
+gate demanding a FAIL from it would be unsatisfiable by design, and the tempting fix
+(give it a threshold for the test) would put back the exact defect Phase C removed.
+
+Detection for a measurement is the labelled paired reading instead: the contradictory
+query taking materially longer than the baseline. Against the reference target the ratio
+is **17.2 on `slow_regenerate` and 1.0 on `clean`**, and the clean case is asserted too —
+a mechanism section telling a client their system silently regenerates answers, on a
+target that does nothing of the sort, is a false positive in every sense that matters
+commercially even though it never reaches the findings table.
+
+The branch is taken off `spec.measurement` rather than off the check's name, so a second
+measurement added later is covered without anyone remembering. §14.2 was amended to say
+this rather than left describing something the code does not do.
+
+### The two Tier 2 rows are opt-in, and the skip says so
+
+They load checkpoints resolved by name rather than by digest — a gap
+`instruments.weights_revision` already records — so the first run fetches several hundred
+megabytes from a third party. Running that on every matrix entry of every push would mean
+downloading unpinned weights three times a commit, and putting it in the release path
+would mean a signed artefact depending on a third party returning the same bytes for a
+mutable reference, which is the substitution `release.yml` exists to prevent.
+
+So they sit behind `LEGAL_RAG_AUDIT_TIER2_GATE=1`, set in one CI job and nowhere else.
+Where the flag is unset the rows skip and **name the two checks they did not verify**. A
+gate that narrows itself quietly is the defect it exists to catch.
+
+**They are unverified in this environment.** The scoring layer is not installed here, so
+`unsupported_assertions` and `retrieval_relevance` were written against the same
+reference target as the other fifteen and have not been observed to fire. The first CI
+run with the flag set is what settles them.
+
+### The matrix is a published artefact, and it is checked
+
+[`docs/harness-verification.md`](docs/harness-verification.md) carries the eighteen
+profiles, the two gates, and what neither number establishes: not that the battery is
+complete, not that a real system fails the way a hand-written pathology does, not that
+one seed's corpus is representative. Same discipline as `docs/responses-schema.md` — the
+document is checked against the code on every run, because a published claim about our
+own instrument that nobody re-derives is the kind we tell clients not to accept.
+
+It was also added to the documents `check_readme_claims.py` covers, being the one whose
+entire subject is how well our instrument works. That first run found nothing wrong with
+the prose and one thing wrong with the gate: the determinism rule triggers on the
+substring, so a table row named `nondeterministic` and a sentence about a target's
+non-determinism both demanded a scoping clause about our scoring. NF2's whole point is
+that the two differ. The rule now removes the negation before testing, exactly as the
+sibling exfiltration rule already matched the assertion rather than the word — and a
+paragraph that also asserts our own determinism still trips.
+
+### Acceptance
+
+| Criterion | Result |
+|---|---|
+| Both gates green | 42 tests. Sensitivity green for all 16 non-Tier-2 rows; specificity green at 3 passes |
+| Wired as release blockers | Their own CI check on every push, and a step in `release.yml` before anything is signed |
+| The matrix published in `docs/` | `docs/harness-verification.md`, gated against the code |
+
+**626 tests, 610 passing under `-m "not slow"`.** Five gates clean.
+
+Specificity is asserted more strictly than §14.2 words it. Zero findings is satisfied by
+a run where every request failed, so the gate also asserts zero transport errors, no
+unrecognised query, that citations, chunks and document identifiers were all captured,
+that fifteen documents were accepted, and that every check is `PASS` or `NOT_ELIGIBLE` —
+never `NOT_CAPTURED`, which is not a pass either.
+
+### Deliberately not done
+
+- **`serve_licensed_content` is absent.** It is §14.1's nineteenth row and it arrives in
+  Phase G with the evaluator it exercises. A profile for a check that does not exist
+  would be a matrix row that could never go green, which is worse than a row that says
+  the check has not shipped.
+- **The mock does not retrieve.** It looks each question up and answers correctly. A
+  reference target with a real retriever would have its own defects, and a false failure
+  on `clean` traceable to the mock's embedding model would be a release blocker raised by
+  the instrument against itself. What the gate tests is the scorer, not the mock.
+- **One seed.** Every profile runs against the same planted corpus, so a failure is about
+  the profile rather than about which invariants that seed happened to mint. A sweep over
+  seeds would be a different test — that the checks are robust to the corpus — and it
+  belongs with the domain corpora in Phase H rather than here.

@@ -33,11 +33,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: subject is what the tool does and does not do, written for the reader least willing
 #: to take any of it on trust. Leaving them outside the gate would have put the
 #: strongest claims in the repository under the weakest scrutiny in it.
+#: Phase F2 added docs/harness-verification.md. It is the one document whose whole
+#: subject is how well our own instrument works, so a claim in it that outran its
+#: evidence would be the most damaging kind available — and it is exactly the document a
+#: reader who distrusts the rest will turn to first.
 DOCUMENTS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "SECURITY.md",
     REPO_ROOT / "docs" / "threat-model.md",
     REPO_ROOT / "docs" / "responses-schema.md",
+    REPO_ROOT / "docs" / "harness-verification.md",
 )
 
 BANNED_WORDS = ["comprehensive", "robust", "best practice", "naive"]
@@ -47,6 +52,15 @@ BANNED_PATTERNS = [r"\bsimply\b"]
 
 DETERMINISM_TRIGGER = re.compile(r"determinis", re.IGNORECASE)
 DETERMINISM_SCOPE = re.compile(r"scoring|scored|scorer", re.IGNORECASE)
+
+#: Removed before the trigger runs, for the same reason EXFIL_TRIGGER matches the
+#: assertion rather than the word: *non-determinism* asserts the opposite of the claim
+#: this rule guards, and it is nearly always said about a target rather than about us.
+#: NF2's whole point is that the two differ — scoring is deterministic, target systems
+#: typically are not — so a gate that could not tell them apart would force a scoping
+#: clause onto the sentence drawing the distinction. A paragraph that also asserts our
+#: own determinism still trips, because only this negation is removed.
+NOT_A_DETERMINISM_CLAIM = re.compile(r"non[- ]?determinis\w*", re.IGNORECASE)
 
 # Triggers on the *assertion*, not on the word. Naming exfiltration as something the
 # harness does not establish (the injection proxy limit) is a limit, not a claim, and
@@ -80,7 +94,8 @@ def check(path: Path) -> list[str]:
     failures = []
 
     for line_no, block in paragraphs(text):
-        if DETERMINISM_TRIGGER.search(block) and not DETERMINISM_SCOPE.search(block):
+        claimed = NOT_A_DETERMINISM_CLAIM.sub("", block)
+        if DETERMINISM_TRIGGER.search(claimed) and not DETERMINISM_SCOPE.search(block):
             failures.append(
                 f"{name}:{line_no}: determinism asserted without scoping it to "
                 f"scoring in the same paragraph"

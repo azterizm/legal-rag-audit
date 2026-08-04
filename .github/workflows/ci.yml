@@ -87,6 +87,33 @@ jobs:
       - name: Tests
         run: python3 -m pytest -q
 
+  self-verification:
+    name: sensitivity and specificity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Install the dev layer, hash-verified
+        run: |
+          python3 -m pip install --require-hashes -r requirements/dev.txt
+          python3 -m pip install --no-deps -e .
+
+      # §14.2's two numbers, as their own check rather than buried in the test matrix.
+      # Sensitivity: every registered evaluator, given a target exhibiting the defect it
+      # looks for, reports it. Specificity: a target behaving correctly produces no
+      # findings across three passes — and a false positive there is a release blocker.
+      #
+      # LEGAL_RAG_AUDIT_TIER2_GATE is set here and nowhere else. The two model-backed
+      # rows fetch checkpoints resolved by name, and running them on every matrix entry
+      # of every push would mean downloading unpinned weights three times a commit.
+      - name: Harness self-verification
+        env:
+          LEGAL_RAG_AUDIT_TIER2_GATE: "1"
+        run: python3 -m pytest tests/test_reference_target.py -q
+
   artefact-route:
     name: artefact route, no network
     runs-on: ubuntu-latest

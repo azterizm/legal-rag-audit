@@ -91,7 +91,7 @@ they are being built against a written spec, not discovered.
 | Seeded plant generation with collision guard | **Shipped** — `plant`, 29 invariants across 15 documents |
 | Two-phase corpus upload for index freshness | **Shipped** |
 | N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
-| Pathological reference target, sensitivity/specificity CI gates | Specified — v0.3.0 |
+| Pathological reference target, sensitivity/specificity CI gates | **Shipped** — 18 profiles, both gates green, [matrix published](docs/harness-verification.md) |
 | Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
 
 The mode split has landed: `generate` and `score` are separate commands, and scoring
@@ -942,10 +942,14 @@ Printed in every report, in the same artefact as the findings, not in a later po
   vendor may hold a bulk-ingestion or content-partnership agreement, and no run has
   visibility of their contracts. The finding names what a procurement reviewer will ask
   about. It never alleges infringement.
-- **The harness has not yet been verified against a reference target.** Sensitivity
-  (every pathology fires its evaluator) and specificity (zero false positives on a clean
-  profile) are v0.3.0 CI gates. Until they are green, treat findings as requiring hand
-  verification. They require it anyway before anything is delivered.
+- **The harness is verified against a reference target, and that is a narrow claim.**
+  Every registered check catches the defect it was pointed at, and a target behaving
+  correctly produces no findings across three passes — both gates run on every push and
+  again before a release is signed ([the matrix](docs/harness-verification.md)). What
+  that does not establish: that the battery is complete, that a real system fails the way
+  a hand-written pathology does, or that one seed's corpus is representative. It
+  establishes that the instrument responds to the signal it was built for and stays quiet
+  otherwise. Findings still require hand verification before anything is delivered.
 
 ---
 
@@ -994,9 +998,22 @@ Asserts there is no remote-scoring vendor, credential or endpoint anywhere in
 `src/legal_rag_audit/`, that no scoring code imports an HTTP client, that
 `internal_experiments/` is excluded from both the wheel and the image, and that no claim
 in a published document is made without its scope attached. That last check covers
-`README.md`, `SECURITY.md`, `docs/threat-model.md` and `docs/responses-schema.md` — it
-was widened from the README alone in Phase B2, and the first run over the new set found
-the schema document asserting *"nothing is sent anywhere"* with no scope on it.
+`README.md`, `SECURITY.md`, `docs/threat-model.md`, `docs/responses-schema.md` and
+`docs/harness-verification.md` — it was widened from the README alone in Phase B2, and
+the first run over the new set found the schema document asserting *"nothing is sent
+anywhere"* with no scope on it.
+
+```bash
+python3 -m pytest tests/test_reference_target.py -q
+```
+
+The two numbers of [§14.2](docs/harness-verification.md): sensitivity — every registered
+check, given a target exhibiting the defect it looks for, reports it — and specificity —
+a target behaving correctly produces no findings across three passes. Both run against a
+reference server in `tests/mock_target/` over the real HTTP path, and both block a
+release. The gate is written against the check register rather than a count, so shipping
+an evaluator without a pathology profile fails the build instead of shrinking the
+denominator.
 
 ```bash
 python3 scripts/check_pins.py
@@ -1058,5 +1075,7 @@ it.
 interchange schemas and execution plan. `V2_PROGRESS.md` tracks what has landed.
 [`SECURITY.md`](SECURITY.md) is the supply-chain and release-verification position, and
 [`docs/threat-model.md`](docs/threat-model.md) states the threat model split by
-configuration, because a blanket claim would be false against a real corpus. This README
-is the summary; where they disagree, the plan wins.
+configuration, because a blanket claim would be false against a real corpus.
+[`docs/harness-verification.md`](docs/harness-verification.md) is the answer to *"how do
+I know your tool is right?"* — the reference target, the two gates, and what neither
+number establishes. This README is the summary; where they disagree, the plan wins.

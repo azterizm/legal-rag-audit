@@ -107,6 +107,18 @@ jobs:
           python3 scripts/gen_schemas.py --check
           python3 scripts/gen_sbom.py --check
 
+      # §14.2's release blocker: a build that cannot find planted defects, or that
+      # invents findings against a target behaving correctly, does not get signed. Run
+      # here as well as in ci.yml for the same reason as the gates above — a tag can
+      # point at a commit that never passed CI.
+      #
+      # `-m "not slow"` excludes the two Tier 2 rows, which fetch model weights resolved
+      # by name. Making a signed release depend on a third party returning the same
+      # bytes for an unpinned reference is the substitution this entire workflow exists
+      # to prevent; those rows are verified in CI, where nothing is signed.
+      - name: Sensitivity and specificity
+        run: python3 -m pytest tests/test_reference_target.py -q -m "not slow"
+
       - name: Build the wheel and sdist
         run: python3 -m build --outdir dist/
 
