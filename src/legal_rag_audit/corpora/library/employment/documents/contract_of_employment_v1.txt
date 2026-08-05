@@ -1,0 +1,12 @@
+CONTRACT OF EMPLOYMENT (AS ISSUED)
+
+Clause 5 — Overtime
+The Employer shall pay an overtime supplement of @@syn-obligation@@ for each
+full hour worked beyond the contractual working week.
+
+Clause 12 — Termination payment cap
+Any payment in lieu of notice under this contract is capped at @@contra-v1@@.
+
+Clause 18 — Excluded periods
+Clause 5 does not apply to hours worked during a period designated in the
+staff handbook as a @@syn-exclusion@@ Period.

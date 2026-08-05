@@ -260,6 +260,18 @@ def build_run_manifest(
             "rather than guessed."
         )
 
+    # Named by whatever built the answer key, for the same reason `corpus_mode` is: the
+    # seed alone does not identify a battery, because the same seed against two corpora
+    # mints the same values into different documents and asks different questions.
+    corpus_ref = ground_truth.corpus if ground_truth else None
+    if corpus_ref is None and corpus_mode != "existing":
+        not_recorded["run.corpus"] = (
+            "the ground-truth manifest does not name a corpus from the library. Two "
+            "reports from the same seed and different corpora are not comparable, and "
+            "neither can be reproduced by anyone who does not already know which corpus "
+            "was used."
+        )
+
     instruments = [InstrumentRecord(**row) for row in describe(thresholds)]
     not_recorded["authorisation"] = (
         "the §13 authorisation block is not yet part of the config (Phase I). A "
@@ -297,6 +309,13 @@ def build_run_manifest(
             seed=seed,
             seed_source=ground_truth.seed_source if ground_truth else None,
             corpus_mode=corpus_mode,
+            corpus=corpus_ref.label if corpus_ref else None,
+            corpus_digest=corpus_ref.digest if corpus_ref else None,
+            staleness_triggers=[
+                f"{t.instrument} — {t.invalidates}"
+                + (f" (watch: {t.watch})" if t.watch else "")
+                for t in (corpus_ref.staleness_triggers if corpus_ref else [])
+            ],
             plants=len(ground_truth.plants) if ground_truth else 0,
             remote_scoring=False,
             eligibility_source=eligibility_source,

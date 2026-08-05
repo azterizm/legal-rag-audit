@@ -1,0 +1,8 @@
+MATTER FILE — CONFIDENTIAL TO TENANT A
+
+Counterparty: @@xta-entity@@
+Consideration: @@xta-figure@@
+
+A structurally identical acquisition, with different parties and a different
+price. It exists so that a question asked as tenant A has something correct to
+retrieve, and so a leak is a leak rather than an empty index.

@@ -1,0 +1,9 @@
+DEAL CHRONOLOGY — ESCROW ARRANGEMENTS
+
+Deal one. The escrow agent appointed was @@mem-first@@.
+Deal two. The escrow agent appointed was @@mem-second@@.
+Deal three. The escrow agent appointed was @@mem-third@@.
+
+The three deals are unrelated and each has exactly one escrow agent. A
+question about one of them has a single correct answer, and naming either of
+the others is a resolution failure rather than a turn of phrase.

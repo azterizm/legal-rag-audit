@@ -1,11 +1,17 @@
-"""The planting pipeline — templates in, a corpus and an answer key out.
+"""The planting pipeline — a corpus in, a planted corpus and an answer key out.
 
-One function does the work. `plant(seed)` walks the templates in declaration order,
-mints each slot through the collision guard, substitutes the values, and returns both
-halves of the run: the documents to upload, and the plants as the ground-truth manifest
-records them. Declaration order is what makes it reproducible — a set iteration or a
+One function does the work. `plant(seed, corpus)` walks the corpus's documents in spine
+order, mints each slot through the collision guard, substitutes the values, and returns
+both halves of the run: the documents to upload, and the plants as the ground-truth
+manifest records them. Spine order is what makes it reproducible — a set iteration or a
 dict ordering that varied would give two people with the same seed two different
 batteries, which is the one thing this module cannot do.
+
+**Which corpus.** Named, never assumed. Phase H made the documents a data artefact
+(§9.5), so a run planting the employment corpus and a run planting the commercial-contracts
+one differ in their documents and in nothing else — same seed derivation, same guard, same
+manifest shape. The corpus name, version and digest travel with the result, because two
+reports that used different corpora and say so are comparable and two that do not are not.
 
 Layout on disk, because it is a contract with the `hash` and `generate` commands:
 
@@ -26,12 +32,15 @@ seed is the published one cannot claim its plants were unguessable, and it does 
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Optional
+from typing import TYPE_CHECKING, Final, Optional
 
 from ..interchange.ground_truth import Plant
 from .guard import Guard
 from .mint import RECIPE
-from .templates import TEMPLATES, SLOT, Template, unplanted
+from .templates import SLOT, Template, unplanted
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle at runtime only
+    from ..corpora.library import DomainCorpus
 
 #: The seed for the try-it battery. Published on purpose: anyone can regenerate the demo
 #: corpus and check it against the one they were sent. An engagement supplies its own,
@@ -59,6 +68,10 @@ class PlantedCorpus:
     #: need it, and nothing that writes a probe file may see it.
     values: dict[str, str]
     guard: dict
+    #: The corpus these documents came from. Carried rather than looked up again, because
+    #: a report has to name the corpus that produced it (§9.5 item 4) and a second read of
+    #: the directory could return something else.
+    source: "DomainCorpus"
 
     def value(self, plant_id: str) -> str:
         try:
@@ -75,8 +88,12 @@ class PlantedCorpus:
         return self.seed == PUBLISHED_DEMO_SEED
 
 
-def plant(seed: Optional[str] = None) -> PlantedCorpus:
+def plant(
+    seed: Optional[str] = None, corpus: Optional["DomainCorpus"] = None
+) -> PlantedCorpus:
     """Mint every declared plant and substitute it into its document."""
+    from ..corpora.library import load
+
     resolved = seed or PUBLISHED_DEMO_SEED
     if not resolved.strip():
         raise PlantingError(
@@ -84,12 +101,15 @@ def plant(seed: Optional[str] = None) -> PlantedCorpus:
             "  reproducible and unguessable at the same time; an empty one is neither."
         )
 
-    guard = Guard.over({t.name + "#" + t.state: unplanted(t.body) for t in TEMPLATES})
+    source = corpus if corpus is not None else load()
+    templates = source.templates
+
+    guard = Guard.over({t.name + "#" + t.state: unplanted(t.body) for t in templates})
 
     values: dict[str, str] = {}
     plants: list[Plant] = []
 
-    for template in TEMPLATES:
+    for template in templates:
         for slot in template.slots:
             if slot.plant_id in values:
                 raise PlantingError(
@@ -114,9 +134,9 @@ def plant(seed: Optional[str] = None) -> PlantedCorpus:
                 )
             )
 
-    documents = {t.name: _substitute(t, values) for t in TEMPLATES if t.state == "base"}
+    documents = {t.name: _substitute(t, values) for t in templates if t.state == "base"}
     revisions = {
-        t.name: _substitute(t, values) for t in TEMPLATES if t.state == "revision"
+        t.name: _substitute(t, values) for t in templates if t.state == "revision"
     }
 
     return PlantedCorpus(
@@ -127,6 +147,7 @@ def plant(seed: Optional[str] = None) -> PlantedCorpus:
         plants=tuple(plants),
         values=values,
         guard={**guard.record(), "recipe": RECIPE},
+        source=source,
     )
 
 

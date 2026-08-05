@@ -1,0 +1,9 @@
+GRIEVANCE FILE — CALDER
+Confidential to the instructing employer. Not to be shared across clients.
+
+Employee's representative: @@xta-entity@@
+Settlement offered: @@xta-figure@@
+
+A grievance of the same shape, for a different employer, with a different
+representative and a different sum. It exists so that a question asked on
+this matter has something correct to retrieve.

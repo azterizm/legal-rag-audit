@@ -19,7 +19,7 @@ exists to measure in other people's systems.
 | **F** | `validate` mode | 0.5 d | ✅ 2026-08-04 |
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ✅ 2026-08-04 |
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ✅ 2026-08-05 *(hero benchmark not run — it needs a decision about targets, §16)* |
-| **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ⬜ |
+| **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ✅ 2026-08-05 *(second corpus timed at 4m43s, but by an agent — a human timing is still owed)* |
 | **I** | Authorisation controls + retention position | 0.5 d | ⬜ |
 
 Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
@@ -1943,3 +1943,172 @@ free-runnable.
   the operator asks and nowhere by default, because a store that appeared without being
   asked for would be a cache of Crown copyright material accumulating in someone's
   repository.
+
+---
+
+## Phase H — the corpus library ✅
+
+**Shipped 2026-08-05.** §9.5's claim is that the fifth corpus in a practice area is half a
+day because it is a template edit. The phase is about making that structurally true rather
+than aspirational, and the shape of the answer is a split: **the structure is code and the
+prose is data.**
+
+### The spine, and why it is not an author's to change
+
+`corpora/spine.py` declares the roles a corpus fills — which documents exist, what each is
+*for*, which invariants it carries and of what kind, which tenant and namespace it belongs
+to, which state it is in. Fifteen documents, twenty-nine roles. A corpus supplies prose for
+them and nothing else.
+
+That is what makes §9.5 item 3 enforceable. It says a contradiction pair, structural
+nesting, a tenant split, an injection document and a zero-answer topic are **mandatory in
+every domain corpus**, and the only form in which a rule like that means anything is one
+where a corpus without them cannot load. `MANDATORY` maps each element to its document keys
+and is checked at import; a corpus omitting one fails before a single request goes out.
+
+It is also what removes the largest class of authoring mistake. The battery references
+plants by id — `P("contra-v1")` — and those references are the same in every domain, so the
+expectations, the eligibility lists and the whole check register are authored once. A
+per-corpus copy of the expectations would let a domain corpus quietly start scoring against
+a different plant from the one it planted.
+
+Three things that were literals in the battery became references, because they are the
+author's and not ours: `must_cite_any_of` was two filenames, `adjacency` identifiers were
+the strings `"Statute Alpha"` and `"Statute Beta"`, and `planted_in` was `internal_memo.txt`.
+An employment corpus has none of those. They resolve now through `D("agreement_v1", "cite")`
+against the loaded corpus.
+
+### Validation is the deliverable
+
+The authoring loop is `plant --corpus <dir>`, run repeatedly. Every refusal names one thing
+to write: the marker to put in a body, the plant with no recorded location, the unworded
+probe, the document key the spine does not have, the remaining `TODO`. A validator that
+only said *invalid* would move the discovery to the first run against a live target — where
+a missing plant reads as a finding about somebody else's system, which is precisely what
+NF9 forbids.
+
+Two refusals are about something narrower and matter more than the rest:
+
+- **A probe may not quote the answer it is scored on.** `{plant:<id>}` exists so a question
+  can name a heading it could not otherwise retrieve on — you cannot ask about a support
+  band without naming the band. An expected invariant in the question makes the answer an
+  echo, and the check would pass a system that retrieved nothing.
+- **The `out_of_corpus` lure must genuinely be absent.** §8.2 #6 scores parametric bleed by
+  absence. A nominated phrase that turned out to be in a document would record a system
+  quoting its own corpus as having answered from its weights — a false positive against a
+  correct system, and §14.2 makes a false positive a release blocker. It was a module
+  constant before this phase and was never checked against anything.
+
+### What happened to the thirteen documents
+
+§17.2 says *reposition the bundled 13-doc corpus*. Those thirteen were the v1 corpus whose
+hand-written expectations Phase D replaced with seeded plants. By this phase nothing loaded
+them: `corpus.path` had no consumer, `mode: existing` stopped reading a path in Phase G, and
+the only thing keeping them alive was a packaging gate asserting they were in the wheel.
+
+So the **name moved rather than the files**. `bundled-demo` now names the corpus the free
+run actually uses — the fifteen planted documents, which carry the same nine roles §9.4's
+composition table lists and, unlike the thirteen, carry ground truth. The thirteen were
+retired; their content is in the history. Repositioning something that cannot generate a
+report would have been repositioning a label.
+
+The library lives at `src/legal_rag_audit/corpora/library/` rather than at the repository
+root where §5.2 puts it. A directory outside the package cannot go in a wheel, and the
+bundled demo has to run from a `pip install` — `tests/test_corpus_packaging.py` exists
+because it once silently did not. Two locations would mean two lookup rules and a corpus
+that resolves in a working tree and not from an install.
+
+### Staleness, in the right register
+
+§9.5 says corpora go stale because law moves, and that is the monitoring retainer's whole
+basis. Stated carelessly it is also wrong. **No amendment can falsify a planted
+invariant** — a correct answer is correct whatever Parliament does. What an amendment does
+is make a corpus **unrepresentative**: the drafting these documents encode, and the
+questions a reader would think to ask of them, are stated as at a date.
+
+Both domain corpora say it in those words, and `docs/authoring-a-corpus.md` tells an author
+to. Implying that a statutory amendment invalidates a synthetic document would be the exact
+overreach this project is built to find in other people's reports. It is still a re-run
+trigger, and it now reaches the attestation: the triggers are printed under *Limits*, so a
+report says when it stops being current rather than leaving that in a file nobody opens.
+
+### What ships
+
+| Corpus | Domain | Triggers |
+|---|---|---|
+| `bundled-demo` | none — synthetic | **none, and that is the answer**: it states no legal position, so nothing can reach it |
+| `commercial-contracts` | supply, services, procurement (E&W) | UCTA 1977, Late Payment 1998, Procurement Act 2023 |
+| `employment` | contracts, policies, tribunal work (E&W) | ERA 1996, WTR 1998, Equality Act 2010 |
+
+Plus `TEMPLATE/`, which is generated by `scripts/new_corpus.py` and committed. A test
+asserts the committed skeleton is byte-identical to what the generator produces, so adding
+a role to the spine breaks the build until the skeleton is regenerated. A drifted skeleton
+would scaffold a corpus missing the new document, and the author would discover it from a
+validation error rather than from the template — exactly the discovery this phase moves
+earlier.
+
+`ground_truth.v4` carries the corpus name, version and digest. A v3 manifest names a seed,
+and the same seed against two corpora mints the same values into different documents and
+asks different questions; without the corpus reference two reports could not be compared and
+neither could be reproduced by anyone who did not already know which corpus was used.
+
+**Verified:** the published demo seed produces a corpus byte-for-byte identical to the one
+it produced before the refactor. That was checked against a worktree at the previous commit
+rather than asserted.
+
+### The acceptance, and the part of it that is not met
+
+> *authoring a second domain corpus from the template is timed and comes in under half a
+> day.*
+
+The employment corpus was scaffolded and authored in **4 minutes 43 seconds** of wall clock,
+in a single pass, with no structural rework. That number is not the one the acceptance
+asks for: an agent writing prose at machine speed is not evidence about a human's half day,
+and reporting it as though it were would be the kind of measurement claim §3.5 exists to
+prevent.
+
+What the run does establish is the thing the half-day claim actually rests on: **no design
+work remained.** The scaffold arrived with every document, every slot, every location line
+and every probe placed. What an author adds is prose, question wording, and the two
+judgment calls the loader cannot make — what would date the corpus, and which authority a
+model reliably knows that no document here mentions. A human timing is owed and is recorded
+as outstanding.
+
+**754 tests, all passing — the whole suite, not `-m "not slow"`.** Six gates clean (`check_readme_claims.py`
+now covers `docs/authoring-a-corpus.md`). Sensitivity and specificity still 20/20.
+
+### Deliberately not done
+
+- **No third domain corpus.** Two is what §9.5 asks for and what makes the template claim
+  checkable; a third would be repetition rather than evidence.
+- **The reference target still runs against `bundled-demo` alone.** §14 verifies the
+  *harness*, and running the same nineteen probes against a second set of prose would
+  re-verify the mock rather than the instrument. What is tested per corpus is that every
+  shipped one loads, plants, builds a battery, and satisfies the two absence properties.
+- **`corpus.library` is not yet in the §6.1 config v2 migration.** It is a new optional key
+  with a null default, so an existing config still loads; the rename backlog
+  (`display_thresholds`, `battery.probes_path`, `battery.seed`) is unchanged.
+
+### Two defects the phase found, both older than it
+
+Running `pytest -m "slow"` — which Phases E through G did not — turned up two things that
+had nothing to do with corpora.
+
+**Four assertions had been stale since Phase G.** `checks_registered == 18`, written when
+the register held eighteen, in tests marked `slow`. Phase G took the register to twenty and
+these kept passing under `-m "not slow"`, which is the mode every phase since E has verified
+in. CI runs the full suite, so **`2d7495a` would have been red there**. All four now compare
+against `len(REGISTRY)`: a literal in a slow test is a claim nobody re-reads, and the claim
+in question is *the torch-free install sees every check* — exactly the kind that has to hold
+by construction rather than by having been true once.
+
+**A stale `build/` directory could put deleted files into a wheel.** The packaging test
+built with `python -m build --wheel`, which reuses `./build/lib` in place; the wheel it
+produced still carried `ground_truth.v2` and `v3` schemas that no longer exist in the source
+tree. Dropping `--wheel` builds an sdist first and the wheel from that, in a clean tree,
+which is both what a release does and the only way a test asserting *the artefact is what
+ships* can mean anything. The published artefacts were never affected — CI checks out clean —
+but the test that exists to catch exactly this was building the wrong thing.
+
+The habit that hid both: verifying a phase with `-m "not slow"` and reporting the number.
+The full suite is 754 tests and takes eighty seconds.

@@ -1,0 +1,14 @@
+SETTLEMENT SCHEDULE — COUNTERPARTY PAIRS
+
+First settlement
+    Payer: @@mask-payer@@
+    Payee: @@mask-payee@@
+    Amount: @@mask-amount@@
+
+Second settlement
+    Payer: @@mask-other-payer@@
+    Payee: @@mask-other-payee@@
+    Amount: @@mask-other-amount@@
+
+The pairs are deliberately parallel. Returning the second settlement's payee
+against the first settlement's payer is a swap, not an omission.

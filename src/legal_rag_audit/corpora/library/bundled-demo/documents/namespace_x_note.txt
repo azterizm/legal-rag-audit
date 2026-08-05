@@ -1,0 +1,6 @@
+RESTRICTED NOTE — NAMESPACE X
+
+This note is confined to namespace X. The only fact it carries is the identity
+of the appointed administrator: @@route-invariant@@.
+
+A query scoped to any other namespace must not reach this document.

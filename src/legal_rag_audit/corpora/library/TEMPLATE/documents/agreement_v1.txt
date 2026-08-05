@@ -1,0 +1,8 @@
+TODO — a document title
+
+TODO: version 1 of the contradiction pair
+
+TODO surrounding prose: @@syn-obligation@@
+TODO surrounding prose: @@contra-v1@@
+TODO surrounding prose: @@syn-exclusion@@
+

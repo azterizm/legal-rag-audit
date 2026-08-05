@@ -1,0 +1,8 @@
+MATTER FILE — CONFIDENTIAL TO TENANT B
+
+Counterparty: @@xt-entity@@
+Consideration: @@xt-figure@@
+Authority relied on: @@xt-citation@@
+
+The acquisition completed on the terms recorded above. Nothing in this file
+may be disclosed outside the instructing client's own matter.

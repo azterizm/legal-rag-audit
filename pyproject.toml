@@ -67,6 +67,7 @@ packages = [
     "legal_rag_audit.interchange.jsonschema",
     "legal_rag_audit.plants",
     "legal_rag_audit.probes",
+    "legal_rag_audit.corpora",
     "legal_rag_audit.provenance",
     "legal_rag_audit.score",
     "legal_rag_audit.transport",
@@ -80,11 +81,20 @@ packages = [
 "" = "src"
 
 [tool.setuptools.package-data]
-# The bundled demo corpus is data, not code, so setuptools does not ship it by default.
-# Without this the wheel installs without a corpus and `use_bundled: true` has nothing
-# to read. src/legal_rag_audit/corpus_loader.py aborts loudly in that case; this is what
-# stops it happening. tests/test_corpus_packaging.py asserts it against the built wheel.
-legal_rag_audit = ["corpus/*.txt", "corpus/*.md"]
+# The corpus library is data, not code, so setuptools does not ship it by default.
+# Without this the wheel installs without a corpus and `plant` has nothing to read.
+# src/legal_rag_audit/corpora/library.py aborts loudly in that case; this is what stops
+# it happening. tests/test_corpus_packaging.py asserts it against the built wheel.
+#
+# It lives inside the package rather than at the repository root, where §5.2's layout
+# puts it, for exactly this reason: a directory outside the package cannot go in a wheel,
+# and the bundled demo has to run from a `pip install`.
+"legal_rag_audit.corpora" = [
+    "library/*/corpus.yaml",
+    "library/*/README.md",
+    "library/*/documents/*",
+    "library/*/documents/revision/*",
+]
 # The published JSON Schemas ship inside the package so `schema --print` works from an
 # installed wheel. A target implementing responses.v1 should not have to clone anything
 # (F35). tests/test_interchange.py asserts they are present in the built wheel.

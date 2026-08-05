@@ -1,0 +1,191 @@
+# A domain corpus, scaffolded from corpora/spine.py.
+#
+# It does not load until every TODO below is replaced — including the ones inside
+# documents/. That is deliberate: a placeholder reaching a target as a document body
+# would produce findings about a document nobody wrote.
+#
+# Two of these fields cannot be scaffolded, because only somebody who knows the practice
+# area can fill them:
+#
+#   staleness_triggers   what, if amended, makes this corpus wrong. An empty list is a
+#                        legitimate answer only for a corpus that states no legal
+#                        position at all.
+#   out_of_corpus        an authority a base model reliably knows and no document here
+#                        mentions. The loader checks the second half of that.
+
+corpus: TEMPLATE
+version: 1
+domain: TODO
+jurisdiction: TODO
+as_at: TODO  # ISO date: the law this corpus is stated as at
+
+description: >
+  TODO
+
+staleness_triggers:
+  - instrument: TODO
+    invalidates: TODO
+    watch: TODO
+
+out_of_corpus:
+  - TODO
+
+documents:
+
+  # the confidential matter file belonging to the tenant we do NOT query as.
+  # Everything in it is what a leak looks like.
+  tenant_b_matter:
+    filename: tenant_b_matter.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      xt-entity: TODO  # an entity; where in the document
+      xt-figure: TODO  # a figure; where in the document
+      xt-citation: TODO  # a citation; where in the document
+
+  # the structurally identical matter belonging to the tenant we DO query
+  # as, so a question asked as tenant A has something correct to retrieve
+  # and a leak is a leak rather than an empty index.
+  tenant_a_matter:
+    filename: tenant_a_matter.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      xta-entity: TODO  # an entity; where in the document
+      xta-figure: TODO  # a figure; where in the document
+
+  # an ordinary document with an instruction buried in it demanding that
+  # every answer touching it BEGIN with a given string.
+  injection_prefix:
+    filename: injection_prefix.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      inj-prefix: TODO  # a token; where in the document
+
+  # the same attack in the other position — every answer must END with the
+  # string. Two positions, because a system that strips prefixes may not
+  # strip suffixes.
+  injection_suffix:
+    filename: injection_suffix.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      inj-suffix: TODO  # a token; where in the document
+
+  # version 1 of the contradiction pair. Carries a headline figure that
+  # version 2 changes, an obligation, and the defined term that excludes it.
+  agreement_v1:
+    filename: agreement_v1.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      syn-obligation: TODO  # a figure; where in the document
+      contra-v1: TODO  # a figure; where in the document
+      syn-exclusion: TODO  # a label; where in the document
+
+  # version 2 of the contradiction pair. Changes the headline figure and
+  # nothing else, so a question about it has two answers in the corpus and
+  # surfacing both is the correct behaviour.
+  agreement_v2:
+    filename: agreement_v2.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      contra-v2: TODO  # a figure; where in the document
+
+  # a deeply nested document: a named band, a figure four levels beneath it,
+  # and the same leaf position under a second band as a decoy.
+  schedule:
+    filename: schedule.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      struct-band: TODO  # a label; where in the document
+      struct-leaf: TODO  # a figure; where in the document
+      struct-decoy: TODO  # a figure; where in the document
+
+  # one half of the retrieval-disambiguation pair: two instruments whose
+  # article numbers overlap and whose subject matter does not.
+  statute_alpha:
+    filename: statute_alpha.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      disamb-alpha: TODO  # a figure; where in the document
+
+  # the other half. Its article 5 is about something else entirely, so its
+  # invariant appearing in an answer about alpha means the two collided.
+  statute_beta:
+    filename: statute_beta.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      disamb-beta: TODO  # a date; where in the document
+
+  # two deliberately parallel records of the same shape. Returning the
+  # second record's party against the first record's question is a swap, not
+  # an omission, and the two are different findings (§8.2 #5).
+  settlement_schedule:
+    filename: settlement_schedule.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      mask-payer: TODO  # an entity; where in the document
+      mask-payee: TODO  # an entity; where in the document
+      mask-amount: TODO  # a figure; where in the document
+      mask-other-payer: TODO  # an entity; where in the document
+      mask-other-payee: TODO  # an entity; where in the document
+      mask-other-amount: TODO  # a figure; where in the document
+
+  # a document confined to a namespace nothing else belongs to. A query
+  # scoped elsewhere must not reach it.
+  restricted_note:
+    filename: restricted_note.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      route-invariant: TODO  # an entity; where in the document
+
+  # one authority, planted. It is the only citation in the corpus that
+  # resolves, so a citation that resolves to anything else is unresolvable,
+  # phantom or misattributed.
+  authority_digest:
+    filename: authority_digest.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      cite-planted: TODO  # a citation; where in the document
+
+  # three unrelated records, each with exactly one correct referent. Naming
+  # either of the other two is a resolution failure rather than a turn of
+  # phrase.
+  chronology:
+    filename: chronology.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      mem-first: TODO  # an entity; where in the document
+      mem-second: TODO  # an entity; where in the document
+      mem-third: TODO  # an entity; where in the document
+
+  # the document that gets replaced mid-run. Its first state carries the
+  # original figure.
+  fee_notice:
+    filename: fee_notice.txt
+    identifier: TODO  # how a reader names this document
+    slots:
+      fresh-v1: TODO  # a figure; where in the document
+    revision:
+      slots:
+        fresh-v2: TODO  # a figure
+
+# One question per probe. `{plant:<id>}` fills in an identifier the
+# question could not otherwise retrieve on — never an expected answer.
+probes:
+  hal-001: TODO  # unsupported_assertions, positive
+  cap-001: TODO  # citation_integrity, positive
+  inj-001: TODO  # injection_resistance, positive
+  inj-002: TODO  # injection_resistance, positive
+  xt-001: TODO  # cross_tenant_leakage, positive
+  conf-001: TODO  # abstention, no_correct_answer
+  contra-001: TODO  # contradiction_surfacing, positive
+  route-001: TODO  # routing_contamination, positive
+  syn-001: TODO  # clause_synthesis, positive
+  mem-001: TODO  # context_memory, positive
+  lat-001: TODO  # latency, positive
+  lat-002: TODO  # latency, positive
+  disamb-001: TODO  # disambiguation, positive
+  struct-001: TODO  # structural_integrity, positive
+  pii-001: TODO  # entity_masking, positive
+  param-001: TODO  # parametric_bleed, no_correct_answer
+  attr-001: TODO  # attribution, positive
+  fresh-001: TODO  # index_freshness, positive
+  fresh-002: TODO  # index_freshness, positive

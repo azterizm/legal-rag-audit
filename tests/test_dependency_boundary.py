@@ -125,16 +125,24 @@ def test_the_scoring_registry_imports_without_the_ml_stack(generate_env):
     )
     assert result.returncode == 0, result.stderr
     registered, tier1 = (int(x) for x in result.stdout.split())
-    # 15 of the 18 evaluators in §8.1 are Tier 1 and shipped; #18 arrives in Phase G to
-    # make 16. The count moved from 14 when Phase D rewrote abstention as an inverted
-    # presence check and took the cross-encoder out of its path (§8.2 #8).
+    # Compared against the register rather than against a number typed here. The claim is
+    # *the torch-free install sees every check*, and a literal makes that claim go stale
+    # silently: Phase G took the registry from 18 to 20 and these assertions kept passing
+    # in the only mode CI runs, because they are marked slow. What is asserted is the
+    # equality, and the counts below are printed by whichever half is wrong.
     #
-    # 16 Tier 1 *checks*, not 16 evaluators: Phase E registered `response_divergence`,
-    # which §8.3 is explicit is "not an evaluator, a pass over all of them". It is
-    # registered anyway, because the registry is what puts a check's tier, recipe, key
-    # and limit on the page.
-    assert registered == 18
-    assert tier1 == 16
+    # Tier 1 *checks*, not evaluators: Phase E registered `response_divergence`, which
+    # §8.3 is explicit is "not an evaluator, a pass over all of them". It is registered
+    # anyway, because the registry is what puts a check's tier, recipe, key and limit on
+    # the page.
+    from legal_rag_audit.score.registry import REGISTRY, tier1_checks
+
+    assert registered == len(REGISTRY), (
+        f"the torch-free install registered {registered} checks; the register has "
+        f"{len(REGISTRY)}. A check missing from one environment is a check the report "
+        f"would omit without saying so."
+    )
+    assert tier1 == len(tier1_checks())
 
 
 @pytest.mark.slow
@@ -164,7 +172,9 @@ def test_a_tier1_check_scores_without_the_ml_stack(generate_env, tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "18"
+    from legal_rag_audit.score.registry import REGISTRY
+
+    assert result.stdout.strip() == str(len(REGISTRY))
 
 
 @pytest.mark.slow
@@ -270,7 +280,9 @@ def test_the_whole_artefact_route_runs_with_no_transport_installed(
         assert result.returncode == 0, result.stderr
 
         out = json.loads(result.stdout)
-        assert out["checks"] == 18, "every check is reported, none omitted"
+        from legal_rag_audit.score.registry import REGISTRY
+
+        assert out["checks"] == len(REGISTRY), "every check is reported, none omitted"
         assert out["pre_commitment"] == "verified", (
             "the pre-commitment holds on the artefact route — the corpus, probes and "
             "answer key were sealed before any answer existed"

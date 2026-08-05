@@ -1,0 +1,9 @@
+TRIBUNAL CHRONOLOGY — APPOINTED REPRESENTATIVES
+
+Claim one. The employee's representative was @@mem-first@@.
+Claim two. The employee's representative was @@mem-second@@.
+Claim three. The employee's representative was @@mem-third@@.
+
+The three claims are unrelated and each has exactly one representative. A
+question about one of them has a single correct answer, and naming either of
+the others is a resolution failure rather than a turn of phrase.

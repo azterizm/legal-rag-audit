@@ -148,7 +148,7 @@ def test_two_expectations_for_one_probe_and_check_are_refused(tmp_path):
     path.write_text(
         json.dumps(
             {
-                "schema": "ground_truth.v3",
+                "schema": "ground_truth.v4",
                 "expectations": [
                     {"probe_id": "p", "check": "c"},
                     {"probe_id": "p", "check": "c"},
@@ -324,7 +324,7 @@ def test_every_supported_version_has_a_published_schema():
 
 def test_the_schema_requires_the_version_declaration():
     """The loaders refuse a record with no `schema`; the published contract says so too."""
-    for version in ("probes.v2", "ground_truth.v3"):
+    for version in ("probes.v2", "ground_truth.v4"):
         assert "schema" in read_schema_document(version)["required"]
     for variant in read_schema_document("responses.v2")["oneOf"]:
         assert "schema" in variant["required"]
@@ -343,7 +343,12 @@ def test_schemas_ship_in_the_built_wheel(tmp_path):
     import sys
 
     result = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(tmp_path)],
+        # No `--wheel`: that builds in-place and reuses ./build/lib, so a file
+        # deleted from the source tree can still reach the artefact. The default
+        # path builds an sdist first and the wheel from that, in a clean tree —
+        # which is what a release does, and the only way this test can mean
+        # "the artefact is what ships".
+        [sys.executable, "-m", "build", "--outdir", str(tmp_path)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

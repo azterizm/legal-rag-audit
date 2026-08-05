@@ -1,4 +1,4 @@
-"""`ground_truth.v3` — the withheld manifest (V2_FULL_PLAN.md §6.4, F26).
+"""`ground_truth.v4` — the withheld manifest (V2_FULL_PLAN.md §6.4, F26).
 
 Everything a probe file deliberately does not say: what a correct answer contains, what
 it must never contain, and which document it has to be attributed to. Handed over
@@ -43,7 +43,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .jsonl import InterchangeError
-from .versions import GROUND_TRUTH_V3, assert_schema
+from .versions import GROUND_TRUTH_V4, assert_schema
 
 
 class Adjacency(BaseModel):
@@ -185,13 +185,55 @@ class Expectation(BaseModel):
     scoped_to: Optional[str] = None
 
 
+class StalenessTriggerRecord(BaseModel):
+    """What, if amended, would invalidate the corpus this run used (§9.5 item 2).
+
+    On the attestation rather than in a file somebody has to remember to read. A report
+    that names the amendment that would falsify it has said when it stops being current,
+    which is the difference between a dated conclusion and an undated one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument: str
+    invalidates: str
+    watch: Optional[str] = None
+
+
+class CorpusRef(BaseModel):
+    """Which corpus the plants were inserted into (§9.5 item 4).
+
+    The seed alone does not identify a battery: the same seed against two corpora mints
+    the same values into different documents and asks different questions. Without this,
+    two reports could not be compared and neither could be reproduced by anyone who did
+    not already know which corpus was used.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    version: int
+    #: SHA-256 over the corpus manifest and every document body, as authored — before
+    #: any planting. Distinct from `inputs.corpus_hash`, which seals the *planted* tree
+    #: and is what a pre-commitment rests on (§3.6).
+    digest: str
+    domain: str
+    jurisdiction: str
+    as_at: str
+    staleness_triggers: list[StalenessTriggerRecord] = Field(default_factory=list)
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} v{self.version}"
+
+
 class GroundTruth(BaseModel):
     """The manifest as a whole."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["ground_truth.v3"] = Field(
-        default=GROUND_TRUTH_V3, alias="schema"
+    schema_: Literal["ground_truth.v4"] = Field(
+        default=GROUND_TRUTH_V4, alias="schema"
     )
     #: The seed that generated `plants`. Null only for a battery with no plants at all.
     seed: Optional[str] = None
@@ -206,6 +248,9 @@ class GroundTruth(BaseModel):
     #: `run.corpus_mode`), because a finding against documents we wrote and a finding
     #: against the target's own index answer different objections.
     corpus_mode: Optional[Literal["planted", "existing"]] = None
+    #: Which corpus the plants were inserted into. Null on an existing-corpus battery,
+    #: where the documents are the target's own and we never see them.
+    corpus: Optional[CorpusRef] = None
     plants: list[Plant] = Field(default_factory=list)
     guard: Optional[PlantGuard] = None
     expectations: list[Expectation]
@@ -234,7 +279,7 @@ def load_ground_truth(path: str | Path) -> GroundTruth:
     if not isinstance(obj, dict):
         raise InterchangeError(f"{p}: expected a JSON object at the top level.")
 
-    assert_schema(obj.get("schema"), GROUND_TRUTH_V3, where=str(p))
+    assert_schema(obj.get("schema"), GROUND_TRUTH_V4, where=str(p))
 
     try:
         gt = GroundTruth(**obj)

@@ -92,6 +92,15 @@ class RunFacts(BaseModel):
     #: covers the other's weakness, so which one produced a report changes what it can
     #: establish.
     corpus_mode: Optional[str] = None
+    #: Which corpus from the library the documents came from, as `name vN`, and the
+    #: digest of that corpus as authored. Null on an existing-corpus run, where the
+    #: documents are the target's own (§9.5 item 4).
+    corpus: Optional[str] = None
+    corpus_digest: Optional[str] = None
+    #: What would make this run's corpus stale. On the page rather than in a file
+    #: somebody has to remember to open: a report that names the amendment that would
+    #: falsify it has said when it stops being current.
+    staleness_triggers: list[str] = Field(default_factory=list)
     #: How many invariants were planted. Zero on an existing-corpus run.
     plants: int = 0
     #: False, and enforced: `score` runs inside `offline()` and

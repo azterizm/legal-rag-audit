@@ -546,7 +546,7 @@ def test_skip_upload_is_still_allowed_without_an_endpoint():
 def test_the_published_schema_records_the_new_fields():
     from legal_rag_audit.interchange import read_schema_document
 
-    document = read_schema_document("ground_truth.v3")
+    document = read_schema_document("ground_truth.v4")
     fields = document["$defs"]["Expectation"]["properties"]
     assert {"as_at_date", "provision", "paired_with"} <= set(fields)
 

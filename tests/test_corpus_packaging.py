@@ -1,11 +1,13 @@
-"""The bundled demo corpus ships, and a missing one aborts instead of degrading.
+"""The corpus library ships, and a missing corpus aborts instead of degrading.
 
 Two failures are covered, and they are different failures.
 
 The packaging one: setuptools ships `.py` files and nothing else unless told otherwise,
 so the corpus was absent from the wheel while every local editable install worked fine.
 Testing the config that produces an artefact is not testing the artefact, so the wheel
-is built and opened here.
+is built and opened here. Phase H made this worse before it made it better — the corpus
+is now a directory of documents *and* a manifest, and a wheel carrying the manifest and
+not the documents would install and then fail at plant time.
 
 The behavioural one: with the corpus missing, the v1 runner substituted two stand-in
 documents and *completed*. The report then described a 2-document corpus while the config
@@ -23,13 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from legal_rag_audit.corpus_loader import (
-    BUNDLED_DOCUMENTS,
-    CorpusError,
-    bundled_corpus_path,
-    check_bundled_complete,
-    load_corpus,
-)
+from legal_rag_audit.corpora import DEFAULT, CorpusSpecError, available, library_root
+from legal_rag_audit.corpora import load as load_library_corpus
+from legal_rag_audit.corpus_loader import CorpusError, load_corpus
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,11 +35,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # --------------------------------------------------------------------------- packaging
 
 
-def test_bundled_corpus_present_in_source_tree():
-    corpus_dir = Path(bundled_corpus_path())
-    assert corpus_dir.is_dir()
-    present = {p.name for p in corpus_dir.iterdir() if not p.name.startswith(".")}
-    assert set(BUNDLED_DOCUMENTS) <= present
+def test_the_bundled_demo_corpus_is_present_in_the_source_tree():
+    assert DEFAULT in available()
+    corpus = load_library_corpus(DEFAULT)
+    assert corpus.documents and corpus.probes
 
 
 def test_every_subpackage_is_declared():
@@ -89,7 +86,12 @@ def test_bundled_corpus_is_inside_the_built_wheel(tmp_path):
         pytest.skip("no interpreter available to build with")
 
     result = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(tmp_path)],
+        # No `--wheel`: that builds in-place and reuses ./build/lib, so a file
+        # deleted from the source tree can still reach the artefact. The default
+        # path builds an sdist first and the wheel from that, in a clean tree —
+        # which is what a release does, and the only way this test can mean
+        # "the artefact is what ships".
+        [sys.executable, "-m", "build", "--outdir", str(tmp_path)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -103,50 +105,65 @@ def test_bundled_corpus_is_inside_the_built_wheel(tmp_path):
     with zipfile.ZipFile(wheels[0]) as zf:
         names = zf.namelist()
 
-    shipped = {
-        Path(n).name for n in names if n.startswith("legal_rag_audit/corpus/")
-    }
-    missing = sorted(set(BUNDLED_DOCUMENTS) - shipped)
-    assert not missing, f"wheel is missing bundled corpus documents: {missing}"
+    prefix = f"legal_rag_audit/corpora/library/{DEFAULT}/"
+    shipped = {n[len(prefix):] for n in names if n.startswith(prefix)}
+
+    expected = {"corpus.yaml", "README.md"}
+    corpus = load_library_corpus(DEFAULT)
+    for document in corpus.documents:
+        state = "documents/revision/" if document.state == "revision" else "documents/"
+        expected.add(state + document.filename)
+
+    missing = sorted(expected - shipped)
+    assert not missing, f"wheel is missing corpus files: {missing}"
 
 
 # ------------------------------------------------------------------------- guardrail
 
 
-def test_bundled_corpus_loads():
-    documents = load_corpus(bundled_corpus_path())
-    assert len(documents) == len(BUNDLED_DOCUMENTS)
-    assert all(d["content"].strip() for d in documents)
-    assert {d["filename"] for d in documents} == set(BUNDLED_DOCUMENTS)
+def test_the_bundled_demo_corpus_loads_from_the_installed_location():
+    """Read through the library, not through a path a test happens to know.
+
+    The point of the check is that a *shipped* corpus resolves by name — which is what
+    `plant` does with no configuration at all, and therefore what the try-it path does.
+    """
+    corpus = load_library_corpus()
+    assert corpus.name == DEFAULT
+    assert all(d.body.strip() for d in corpus.documents)
+    assert Path(library_root(), DEFAULT).is_dir()
 
 
-def test_incomplete_bundled_corpus_aborts_and_names_what_is_missing(tmp_path, monkeypatch):
-    partial = tmp_path / "corpus"
-    partial.mkdir()
-    kept = BUNDLED_DOCUMENTS[:3]
-    for name in kept:
-        (partial / name).write_text("placeholder content", encoding="utf-8")
+def test_a_corpus_missing_a_document_aborts_and_names_it(tmp_path):
+    """The successor to the old partial-install check.
 
-    monkeypatch.setattr(
-        "legal_rag_audit.corpus_loader.bundled_corpus_path", lambda: str(partial)
-    )
+    An incomplete corpus is no longer a missing file among thirteen equals — every
+    document fills a declared role, so the diagnosis can say what the absent one was
+    *for*, which is the difference between a message an author can act on and one they
+    have to come and ask about.
+    """
+    partial = tmp_path / "partial"
+    shutil.copytree(Path(library_root(), DEFAULT), partial)
+    (partial / "documents" / "supplier_agreement_v2.txt").unlink()
 
-    with pytest.raises(CorpusError) as excinfo:
-        check_bundled_complete()
+    with pytest.raises(CorpusSpecError) as excinfo:
+        load_library_corpus(str(partial))
 
     message = str(excinfo.value)
-    assert "incomplete" in message
-    # The diagnosis names the missing documents rather than only the count.
-    assert BUNDLED_DOCUMENTS[-1] in message
+    assert "supplier_agreement_v2.txt" in message
+    assert "contradiction pair" in message
 
 
-def test_missing_bundled_corpus_directory_aborts(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "legal_rag_audit.corpus_loader.bundled_corpus_path",
-        lambda: str(tmp_path / "does-not-exist"),
-    )
-    with pytest.raises(CorpusError, match="not installed"):
-        check_bundled_complete()
+def test_a_directory_that_is_not_a_corpus_aborts(tmp_path):
+    empty = tmp_path / "nothing"
+    empty.mkdir()
+    with pytest.raises(CorpusSpecError, match="is not a corpus"):
+        load_library_corpus(str(empty))
+
+
+def test_an_unknown_corpus_name_lists_the_ones_that_exist():
+    with pytest.raises(CorpusSpecError) as excinfo:
+        load_library_corpus("no-such-practice-area")
+    assert DEFAULT in str(excinfo.value)
 
 
 def test_no_corpus_configured_aborts():

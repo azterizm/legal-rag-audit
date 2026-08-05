@@ -43,6 +43,7 @@ DOCUMENTS = (
     REPO_ROOT / "docs" / "threat-model.md",
     REPO_ROOT / "docs" / "responses-schema.md",
     REPO_ROOT / "docs" / "harness-verification.md",
+    REPO_ROOT / "docs" / "authoring-a-corpus.md",
 )
 
 BANNED_WORDS = ["comprehensive", "robust", "best practice", "naive"]

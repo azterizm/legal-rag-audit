@@ -1,0 +1,15 @@
+SCHEDULE 5 — MILESTONE PAYMENTS
+
+First milestone
+    Paying party: @@mask-payer@@
+    Receiving party: @@mask-payee@@
+    Amount: @@mask-amount@@
+
+Second milestone
+    Paying party: @@mask-other-payer@@
+    Receiving party: @@mask-other-payee@@
+    Amount: @@mask-other-amount@@
+
+The two milestones are deliberately parallel in form. Returning the second
+milestone's receiving party against a question about the first is a swap
+rather than an omission.

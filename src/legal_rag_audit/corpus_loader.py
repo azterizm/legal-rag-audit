@@ -5,42 +5,26 @@ a finding. Before this module existed, a missing corpus fell through to two hard
 stand-in documents and the run *completed*: the report characterised a 2-document corpus
 while the config said thirteen, and nothing on the page said so.
 
-Two shapes of corpus, and the reader below handles both the same way once they are on
-disk — which is deliberate. A planted corpus is written out by `plants.pipeline` and then
-read back through this module, so what gets uploaded is byte-for-byte what `hash` sealed.
-Passing the documents in memory would be faster and would mean the sealed tree and the
-uploaded tree were two objects nobody had compared.
+This module reads a **planted** corpus: a directory `plants.pipeline` has already written
+values into. What a corpus *is* — which documents, which invariants, which questions —
+lives in `corpora/`, and the two are deliberately separate. A planted corpus is written
+out and then read back through here, so what gets uploaded is byte-for-byte what `hash`
+sealed. Passing the documents in memory would be faster and would mean the sealed tree and
+the uploaded tree were two objects nobody had compared.
 
     <root>/base/       every document in its first state
     <root>/revision/   documents that replace their base counterpart later
 
-The bundled thirteen-document set is still shipped and still checked for completeness by
-`tests/test_corpus_packaging.py`. Nothing selects it automatically any more: Phase D
-replaced the hand-written expectations it carried with seeded plants, and §9.4 gives Phase
-H the job of deciding what it becomes. Until then it is reachable by pointing
-`corpus.path` at `bundled_corpus_path()`.
+**Where the thirteen bundled documents went.** Phase D replaced the hand-written
+expectations they carried with seeded plants, which left thirteen files that nothing
+loaded and a packaging gate protecting them. Phase H retired them and gave their name to
+the corpus that the free run actually uses: `corpora/library/bundled-demo/`, whose
+documents carry the same nine roles §9.4 lists and, unlike these, carry ground truth.
+Their content is in the history if it is ever wanted.
 """
 
 import os
 from typing import Any, Dict, List, Optional
-
-# The bundled demo corpus, by filename. Declared rather than counted so that a partial
-# install names the documents it is missing.
-BUNDLED_DOCUMENTS = (
-    "adversarial_injection.txt",
-    "case_01_smith_v_crown.txt",
-    "case_02_jones_v_state.txt",
-    "case_03_doe_v_megacorp.txt",
-    "fake_statute_reference.txt",
-    "pii_employee_record.txt",
-    "reg_finance_404.md",
-    "saas_agreement_v1.txt",
-    "saas_agreement_v2.txt",
-    "statute_alpha.txt",
-    "statute_beta.txt",
-    "tenant_a_matter.txt",
-    "tenant_b_matter.txt",
-)
 
 #: Where the two states of a planted corpus live under its root.
 BASE = "base"
@@ -49,10 +33,6 @@ REVISION = "revision"
 
 class CorpusError(Exception):
     """A corpus setup problem. Aborts the run; never becomes a finding."""
-
-
-def bundled_corpus_path() -> str:
-    return os.path.join(os.path.dirname(__file__), "corpus")
 
 
 def read_documents(corpus_path: str) -> List[Dict[str, str]]:
@@ -85,30 +65,6 @@ def read_documents(corpus_path: str) -> List[Dict[str, str]]:
     return documents
 
 
-def check_bundled_complete(corpus_path: Optional[str] = None) -> None:
-    """Refuse a partial install of the bundled set, naming what is missing."""
-    corpus_path = corpus_path or bundled_corpus_path()
-    if not os.path.isdir(corpus_path):
-        raise CorpusError(
-            f"The bundled demo corpus is not installed.\n"
-            f"  expected at: {corpus_path}\n"
-            f"This means the package was built without its corpus data. Reinstall from "
-            f"a wheel built with package-data, or install in editable mode "
-            f"(pip install -e .)."
-        )
-    present = {d["filename"] for d in read_documents(corpus_path)}
-    missing = [name for name in BUNDLED_DOCUMENTS if name not in present]
-    if not missing:
-        return
-    raise CorpusError(
-        f"The bundled demo corpus is incomplete at {corpus_path}\n"
-        f"  expected {len(BUNDLED_DOCUMENTS)} documents, found {len(present)}\n"
-        f"  missing: {', '.join(missing)}\n"
-        f"If this package was installed from a wheel, the wheel was built without its "
-        f"package data."
-    )
-
-
 def load_corpus(path: Optional[str]) -> List[Dict[str, Any]]:
     """Read a directory of documents, or raise CorpusError with a diagnosis.
 
@@ -117,7 +73,8 @@ def load_corpus(path: Optional[str]) -> List[Dict[str, Any]]:
     if not path:
         raise CorpusError(
             "No corpus configured. Set corpus.mode to `planted` to have one generated "
-            "from a seed, or corpus.path to a directory of text or markdown documents."
+            "from a seed and a named corpus (see `corpus.library`), or corpus.mode to "
+            "`existing` to probe the target's own index and upload nothing."
         )
 
     if not os.path.isdir(path):

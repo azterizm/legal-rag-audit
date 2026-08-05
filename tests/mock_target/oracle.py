@@ -32,15 +32,31 @@ harness can express at all.
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional
 
 # Two imports, and the narrowness is the claim. `interchange.probe` is the questions —
-# the half of the battery the target is given. `plants.templates` is the shape of the
-# documents, not their contents: the values are recovered from the bytes that arrive at
-# `/upload`. A test asserts this list does not grow, because the module that could reach
-# the answer key is the module whose clean run proves nothing.
+# the half of the battery the target is given. `plants.templates` is the *shape* of a
+# document: the slot marker and the record the aligner returns, and nothing else. The
+# bodies are read off disk below rather than imported, so this module has no import path
+# to the corpus library and therefore none to the battery it is scored against. A test
+# asserts this list does not grow, because the module that could reach the answer key is
+# the module whose clean run proves nothing.
 from legal_rag_audit.interchange.probe import Probe
-from legal_rag_audit.plants.templates import SLOT, TEMPLATES, Template
+from legal_rag_audit.plants.templates import SLOT, Template
+
+#: The corpus the reference target is built against. One corpus, deliberately: §14 is
+#: about verifying the harness, and running the same nineteen probes against a second set
+#: of prose would re-verify the mock rather than the instrument.
+CORPUS = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "legal_rag_audit"
+    / "corpora"
+    / "library"
+    / "bundled-demo"
+    / "documents"
+)
 
 #: Every reply sleeps at least this long. A target that answers in a microsecond makes
 #: the §8.2 #15 pair meaningless: the baseline is then all jitter, and the ratio between
@@ -109,8 +125,33 @@ def _aligner(template: Template) -> tuple[re.Pattern, list[str]]:
     return re.compile("".join(pattern), re.DOTALL), ids
 
 
+def _unplanted_documents() -> tuple[Template, ...]:
+    """The corpus as authored, read from the directory rather than imported.
+
+    Only `name` and `state` are recovered — the slots come out of the body by regex. That
+    is all `align` needs, and taking it from the files means the mock knows exactly what a
+    real target knows once the upload has happened: the bytes.
+    """
+    documents = []
+    for path in sorted(CORPUS.rglob("*")):
+        if not path.is_file() or path.name.startswith("."):
+            continue
+        state = "revision" if path.parent.name == "revision" else "base"
+        documents.append(
+            Template(
+                name=path.name,
+                body=path.read_text(encoding="utf-8"),
+                slots=(),
+                state=state,
+            )
+        )
+    if not documents:
+        raise OracleError(f"no corpus documents under {CORPUS}")
+    return tuple(documents)
+
+
 _ALIGNERS: tuple[tuple[Template, re.Pattern, list[str]], ...] = tuple(
-    (template, *_aligner(template)) for template in TEMPLATES
+    (template, *_aligner(template)) for template in _unplanted_documents()
 )
 
 

@@ -1,0 +1,15 @@
+SCHEDULE OF SETTLEMENT PAYMENTS
+
+First settlement
+    Paying employer: @@mask-payer@@
+    Receiving employee's representative: @@mask-payee@@
+    Amount: @@mask-amount@@
+
+Second settlement
+    Paying employer: @@mask-other-payer@@
+    Receiving employee's representative: @@mask-other-payee@@
+    Amount: @@mask-other-amount@@
+
+The two settlements are deliberately parallel in form. Returning the second
+settlement's representative against a question about the first is a swap
+rather than an omission.

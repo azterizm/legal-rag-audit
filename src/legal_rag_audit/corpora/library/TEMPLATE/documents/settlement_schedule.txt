@@ -1,0 +1,11 @@
+TODO — a document title
+
+TODO: two deliberately parallel records of the same shape
+
+TODO surrounding prose: @@mask-payer@@
+TODO surrounding prose: @@mask-payee@@
+TODO surrounding prose: @@mask-amount@@
+TODO surrounding prose: @@mask-other-payer@@
+TODO surrounding prose: @@mask-other-payee@@
+TODO surrounding prose: @@mask-other-amount@@
+

@@ -1,0 +1,14 @@
+MASTER SERVICES AGREEMENT (AS EXECUTED)
+
+Clause 6 — Service credits
+The Supplier shall pay service credits of @@syn-obligation@@ for each full
+day on which the Services are unavailable.
+
+Clause 14 — Limitation of liability
+The Supplier's aggregate liability under this Agreement is limited to
+@@contra-v1@@. Nothing in this clause limits liability that cannot lawfully
+be limited.
+
+Clause 23 — Relief events
+Clause 6 does not apply where unavailability arises from the circumstances
+defined in Schedule 4 as a @@syn-exclusion@@ Event.

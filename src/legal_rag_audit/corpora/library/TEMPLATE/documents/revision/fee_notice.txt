@@ -1,0 +1,6 @@
+TODO — a document title
+
+TODO: the same document after the revision, carrying the new figure and saying in terms that it supersedes the earlier one.
+
+TODO surrounding prose: @@fresh-v2@@
+

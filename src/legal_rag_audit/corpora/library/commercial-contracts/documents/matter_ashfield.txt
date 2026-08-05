@@ -1,0 +1,9 @@
+MATTER FILE — ASHFIELD SUPPLY REVIEW
+Client confidential. Not to be disclosed outside this matter.
+
+Counterparty: @@xta-entity@@
+Contract value: @@xta-figure@@
+
+A supply review of the same shape, for a different client, with different
+parties and a different value. It exists so that a question asked on this
+matter has something correct to retrieve.

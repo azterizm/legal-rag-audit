@@ -259,6 +259,12 @@ def cmd_plant(args: argparse.Namespace) -> int:
     from .plants import PlantError, PlantingError, plant, write_corpus
     from .probes import build_ground_truth, build_probes, validate_battery
 
+    from .corpora import CorpusSpecError
+    from .corpora import load as load_library_corpus
+
+    if getattr(args, "list_corpora", False):
+        return _list_corpora()
+
     out = Path(args.output)
 
     if args.mode == "existing":
@@ -266,10 +272,12 @@ def cmd_plant(args: argparse.Namespace) -> int:
 
     try:
         validate_battery()
-        corpus = plant(args.seed)
+        corpus = plant(args.seed, load_library_corpus(args.library))
         written = write_corpus(out / "corpus", corpus)
         probes = build_probes(passes=args.passes, corpus=corpus)
         ground_truth = build_ground_truth(corpus)
+    except CorpusSpecError as e:
+        return _abort(f"The corpus could not be read:\n{e}")
     except (PlantError, PlantingError) as e:
         return _abort(f"The corpus could not be planted:\n{e}")
 
@@ -278,10 +286,12 @@ def cmd_plant(args: argparse.Namespace) -> int:
 
     guard = ground_truth.guard
     print()
+    print(f"  corpus              {corpus.source.label}  "
+          f"({corpus.source.domain}; as at {corpus.source.as_at})")
     print(f"  seed                {corpus.seed}  ({corpus.seed_source})")
     print(f"  plants              {len(corpus.plants)}")
     print(f"  regenerations       {guard.regenerations if guard else 0}")
-    print(f"  corpus              {out / 'corpus'}  "
+    print(f"  documents           {out / 'corpus'}  "
           f"({written['base']} base, {written['revision']} revision)")
     print(f"  probes              {out / 'probes.jsonl'}  ({len(probes)})")
     print(f"  ground truth        {out / 'ground_truth.json'}  "
@@ -301,6 +311,30 @@ def cmd_plant(args: argparse.Namespace) -> int:
         f"                         --ground-truth {out / 'ground_truth.json'} "
         f"-o {out / 'handover.json'}"
     )
+    print()
+    return EXIT_OK
+
+
+def _list_corpora() -> int:
+    """What this build ships, and what each one is for."""
+    from .corpora import CorpusSpecError, available
+    from .corpora import load as load_library_corpus
+
+    print()
+    for name in available():
+        try:
+            corpus = load_library_corpus(name)
+        except CorpusSpecError as e:
+            # Printed rather than raised: one broken corpus must not hide the others,
+            # and the whole point of the listing is to find out which one is broken.
+            print(f"  {name:<24}  DOES NOT LOAD — {str(e).splitlines()[0]}")
+            continue
+        print(f"  {name:<24}  v{corpus.version}  {corpus.domain}")
+        print(f"  {'':<24}  as at {corpus.as_at}, {corpus.jurisdiction}")
+        for trigger in corpus.staleness_triggers:
+            print(f"  {'':<24}  stale if: {trigger.instrument}")
+        print()
+    print("  Pass one to `plant --corpus <name>`, or a path to a directory of your own.")
     print()
     return EXIT_OK
 
@@ -587,6 +621,22 @@ def build_parser() -> argparse.ArgumentParser:
             "records that it did — a battery anyone can regenerate is right for a "
             "demonstration and wrong for an engagement"
         ),
+    )
+    pl.add_argument(
+        "--corpus",
+        default=None,
+        dest="library",
+        help=(
+            "which corpus from the library to plant into — a name that ships with this "
+            "build, or a path to a directory of your own (§9.5). Omitted uses "
+            "`bundled-demo`, which is a demonstration and says so on its own face. Run "
+            "`plant --list-corpora` to see what is available"
+        ),
+    )
+    pl.add_argument(
+        "--list-corpora",
+        action="store_true",
+        help="print the corpora this build ships and exit",
     )
     pl.add_argument(
         "-o", "--output", default="./run", help="directory to write the run into"

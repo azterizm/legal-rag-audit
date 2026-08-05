@@ -31,12 +31,9 @@ from .pipeline import (
 )
 from .templates import (
     MASK_TOKENS,
-    OUT_OF_CORPUS,
-    TEMPLATES,
+    SLOT,
     Slot,
     Template,
-    base_templates,
-    revision_templates,
     unplanted,
 )
 
@@ -53,21 +50,18 @@ __all__ = [
     "MAX_ATTEMPTS",
     "Minted",
     "NOT_CHECKED",
-    "OUT_OF_CORPUS",
     "PUBLISHED_DEMO_SEED",
     "PlantError",
     "PlantExhausted",
     "PlantedCorpus",
     "PlantingError",
     "RECIPE",
+    "SLOT",
     "Slot",
-    "TEMPLATES",
     "TOKEN",
     "Template",
-    "base_templates",
     "mint",
     "plant",
-    "revision_templates",
     "unplanted",
     "write_corpus",
 ]

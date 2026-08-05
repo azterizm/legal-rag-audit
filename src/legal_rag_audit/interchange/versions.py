@@ -21,6 +21,7 @@ RESPONSES_V2: Final = "responses.v2"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
 GROUND_TRUTH_V2: Final = "ground_truth.v2"
 GROUND_TRUTH_V3: Final = "ground_truth.v3"
+GROUND_TRUTH_V4: Final = "ground_truth.v4"
 HANDOVER_V1: Final = "handover.v1"
 RUN_MANIFEST_V1: Final = "run_manifest.v1"
 #: The one identifier whose number tracks the *tool* generation rather than the
@@ -34,7 +35,7 @@ REPORT_V2: Final = "report.v2"
 SUPPORTED: Final[dict[str, str]] = {
     PROBES_V2: "probe file",
     RESPONSES_V2: "response file",
-    GROUND_TRUTH_V3: "ground-truth manifest",
+    GROUND_TRUTH_V4: "ground-truth manifest",
     HANDOVER_V1: "pre-commitment record",
     RUN_MANIFEST_V1: "run manifest",
     REPORT_V2: "report",
@@ -68,6 +69,13 @@ SUPERSEDED: Final[dict[str, str]] = {
         f"without the date the question asked about, and *the right provision quoted "
         f"from the wrong version* is a different finding from getting both wrong — "
         f"neither distinction can be drawn from a v2 manifest"
+    ),
+    GROUND_TRUTH_V3: (
+        f"{GROUND_TRUTH_V4} — Phase H added `corpus`: which corpus the plants were "
+        f"inserted into, at which version and digest, and what would make it stale "
+        f"(§9.5 item 4). A v3 manifest names a seed, and the same seed against two "
+        f"different corpora produces two different batteries — so two reports could not "
+        f"be compared, and neither could say when it stopped being current"
     ),
 }
 

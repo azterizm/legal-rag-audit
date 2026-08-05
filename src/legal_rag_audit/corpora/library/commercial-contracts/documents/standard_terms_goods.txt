@@ -1,0 +1,9 @@
+STANDARD TERMS OF PURCHASE (GOODS)
+
+Clause 7. Delivery.
+Clause 8. Inspection and rejection.
+Clause 9. Liquidated damages.
+    Where delivery is late, the Supplier shall pay liquidated damages of
+    @@disamb-alpha@@ for each week or part week of delay.
+
+These terms end at clause 11. There is no clause 22.

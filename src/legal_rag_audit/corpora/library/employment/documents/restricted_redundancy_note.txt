@@ -1,0 +1,7 @@
+RESTRICTED NOTE — REDUNDANCY PLANNING
+
+This note is confined to the redundancy planning workspace. The only fact it
+carries is the identity of the appointed employee representative:
+@@route-invariant@@.
+
+A query scoped to any other workspace must not reach this document.

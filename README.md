@@ -93,6 +93,7 @@ they are being built against a written spec, not discovered.
 | N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
 | Pathological reference target, sensitivity/specificity CI gates | **Shipped** — 20 profiles over both batteries, [matrix published](docs/harness-verification.md) |
 | Existing-corpus mode and point-in-time probe pairs | **Shipped** — no `upload` endpoint needed; anchors quoted from `legislation.gov.uk` |
+| Domain corpus library, versioned, with staleness triggers | **Shipped** — 3 corpora; a corpus that omits a spine role does not load |
 
 The mode split has landed: `generate` and `score` are separate commands, and scoring
 runs with sockets disabled. A run now produces a complete handover document — the
@@ -460,6 +461,7 @@ target:
 
 corpus:
   mode: "planted"                  # plant a seeded corpus (default) | existing
+  library: null                    # which corpus from the library — null uses bundled-demo
   seed: null                       # null uses the published demo seed — read the caveat below
   path: "./planted-corpus"         # where the planted corpus is written
   revision_wait_seconds: 60        # wait between replacing a document and re-asking
@@ -712,15 +714,53 @@ The report says so in its limits rather than implying otherwise.
 
 ---
 
-## The corpus
+## The corpus library
 
-`plant` writes a 15-document corpus from 14 templates, with 29 invariants inserted at
-declared locations. It is **a demo, not an audit.** It measures whether a pipeline has
-generic properties on a best case: fifteen short synthetic documents uploaded and queried
-immediately. It is not your production ingestion history, not your chunking at 40,000
-documents, not your index at scale, and not your practice area. **A system can pass this
-run cleanly and fail badly in production.** A generic corpus cannot tell you whether you
-are compliant, and this README will not pretend otherwise.
+A corpus is an artefact on disk, not code: a `corpus.yaml` and a directory of documents
+with `@@plant-id@@` where each invariant goes. Three ship with this build.
+
+```bash
+legal-rag-audit plant --list-corpora
+legal-rag-audit plant --corpus employment --seed <your seed> -o run/
+```
+
+| Corpus | Domain | What it is |
+|---|---|---|
+| `bundled-demo` | none | The try-it corpus. Published seed, synthetic prose, no practice area |
+| `commercial-contracts` | supply, services, procurement (E&W) | A practice-area corpus |
+| `employment` | contracts, policies, tribunal work (E&W) | A practice-area corpus |
+
+Each ships a README saying what a run of it does **not** establish. Read that before
+quoting a number from one anywhere.
+
+**What does not vary.** Every corpus fills the same roles, declared once in
+`corpora/spine.py`: the same fifteen documents in the same states, the same 29 invariants
+with the same kinds, the same nineteen probes scored by the same checks. A corpus that
+omits a role, invents one, or leaves one without a recorded location **does not load**, and
+the refusal names what to write. That is what makes §9.5's contradiction pair, tenant
+split, injection document, structural nesting and zero-answer topic *mandatory* rather
+than merely recommended: they are not an author's to leave out.
+
+**What varies.** The prose, the filenames, how a reader names each document, where in each
+document an invariant sits, and the wording of each question — because *what is the
+aggregate liability limit in the supplier agreement* retrieves nothing from an employment
+index. Plus two judgment calls the loader cannot make for you: what would make the corpus
+stale, and which authority a model reliably knows that no document here mentions.
+
+Scaffold a new one with `python3 scripts/new_corpus.py <name>`. It arrives complete except
+for the prose, and refuses to load until every `TODO` is gone.
+[`docs/authoring-a-corpus.md`](docs/authoring-a-corpus.md) is the method.
+
+### The bundled demo
+
+`plant` with no `--corpus` writes a 15-document corpus from 14 documents plus one
+revision, with 29 invariants inserted at declared locations. It is **a demo, not an
+audit.** It measures whether a pipeline has generic properties on a best case: fifteen
+short synthetic documents uploaded and queried immediately. It is not your production
+ingestion history, not your chunking at 40,000 documents, not your index at scale, and not
+your practice area. **A system can pass this run cleanly and fail badly in production.** A
+generic corpus cannot tell you whether you are compliant, and this README will not pretend
+otherwise.
 
 | Documents | What they exercise |
 |---|---|
@@ -736,10 +776,13 @@ are compliant, and this README will not pretend otherwise.
 | 1 retainer notice, in two states | Index freshness |
 | A question the corpus deliberately cannot answer | Parametric bleed, abstention |
 
-Each document carrying a positive expectation gets **at least three invariant types,
-including one entity and one figure**. A system that paraphrases a leaked clause still
-emits the counterparty name or the amount, because those are the payload. A single planted
-string would be defeated by rewording.
+Most documents carry **at least three invariants of at least two types**, because a system
+that paraphrases a leaked clause still emits the counterparty name or the amount — those
+are the payload, and a single planted string would be defeated by rewording. Five
+documents carry fewer, and each records why beside itself in `corpora/spine.py`: in every
+one, a second invariant would give the question a second correct answer, and a check that
+cannot tell a right answer from a wrong one fails correct systems. A sixth appearing
+without a recorded reason fails the build.
 
 **What the collision guard checks**, and what it does not, goes into every ground-truth
 manifest. It verifies that no value occurs in the corpus as authored, that no two plants

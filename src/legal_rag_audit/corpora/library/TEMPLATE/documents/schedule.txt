@@ -1,0 +1,8 @@
+TODO — a document title
+
+TODO: a deeply nested document: a named band, a figure four levels beneath it, and the same leaf position under a second band as a decoy.
+
+TODO surrounding prose: @@struct-band@@
+TODO surrounding prose: @@struct-leaf@@
+TODO surrounding prose: @@struct-decoy@@
+

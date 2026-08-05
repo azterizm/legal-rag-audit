@@ -162,7 +162,13 @@ def test_a_file_from_the_documented_example_scores(stub_target, tmp_path):
     assert result.returncode in (0, 1), f"{result.stdout}\n{result.stderr}"
 
     report = json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))
-    assert report["summary"]["checks_registered"] == 18
+    from legal_rag_audit.score.registry import REGISTRY
+
+    # Against the register, not a literal: a number typed here goes stale the next time a
+    # check is added, and this test is marked slow — so it goes stale without anybody
+    # finding out. Phase G took the registry to 20 and four assertions like this one kept
+    # passing in the only mode CI runs.
+    assert report["summary"]["checks_registered"] == len(REGISTRY)
     assert report["capture"]["eligibility_source"] == "probe file"
     # Chunks were never captured by the documented pipeline, so the check that reads
     # them must say so rather than pass.

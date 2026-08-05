@@ -65,7 +65,14 @@ class CorpusConfig(BaseModel):
     #: published seed is reproducible by anyone, which is right for a demonstration and
     #: wrong for an engagement.
     seed: Optional[str] = None
-    #: Where the planted corpus is written, or where an existing one is read from.
+    #: Which corpus from the library the documents come from (§9.5) — a name that ships
+    #: with this build, or a path to a directory of your own. Null uses the bundled demo,
+    #: which is a demonstration and says so on its own face. A practice-area corpus is
+    #: what an engagement runs, and the report names it beside the seed: the same seed
+    #: against two corpora is two different batteries.
+    library: Optional[str] = None
+    #: Where the planted corpus is written. Ignored in existing mode, which reads no
+    #: local documents at all (F25).
     path: Optional[str] = None
     #: How long to wait after replacing a document before asking about it again. A
     #: superseded value returned after two seconds is a system that has not finished

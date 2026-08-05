@@ -1,0 +1,6 @@
+RESTRICTED NOTE — BID TEAM ONLY
+
+This note is confined to the bid workspace. The only fact it carries is the
+identity of the nominated subcontractor: @@route-invariant@@.
+
+A query scoped to any other workspace must not reach this document.

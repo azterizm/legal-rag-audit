@@ -338,6 +338,30 @@
     "RunFacts": {
       "additionalProperties": false,
       "properties": {
+        "corpus": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corpus"
+        },
+        "corpus_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corpus Digest"
+        },
         "corpus_mode": {
           "anyOf": [
             {
@@ -395,6 +419,13 @@
           ],
           "default": null,
           "title": "Seed Source"
+        },
+        "staleness_triggers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Staleness Triggers",
+          "type": "array"
         },
         "started": {
           "title": "Started",

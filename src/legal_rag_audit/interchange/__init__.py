@@ -61,7 +61,7 @@ from .run_manifest import (
 )
 from .schema_files import available_schemas, read_schema_document
 from .versions import (
-    GROUND_TRUTH_V3,
+    GROUND_TRUTH_V4,
     HANDOVER_V1,
     PROBES_V2,
     REPORT_V2,
@@ -81,7 +81,7 @@ __all__ = [
     "CheckResult",
     "EvidenceIndex",
     "Expectation",
-    "GROUND_TRUTH_V3",
+    "GROUND_TRUTH_V4",
     "GroundTruth",
     "HANDOVER_V1",
     "Handover",

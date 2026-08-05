@@ -1,0 +1,9 @@
+MATTER CHRONOLOGY
+
+Matter one. The administrator appointed was @@mem-first@@.
+Matter two. The administrator appointed was @@mem-second@@.
+Matter three. The administrator appointed was @@mem-third@@.
+
+The three matters are unrelated and each has exactly one administrator. A
+question about one of them has a single correct referent, and naming either of
+the others is a resolution failure rather than a turn of phrase.

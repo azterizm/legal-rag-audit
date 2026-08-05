@@ -1,0 +1,12 @@
+SUPPLIER AGREEMENT (VERSION 1)
+
+Clause 4 — Service credits
+The Supplier shall pay service credits of @@syn-obligation@@ for each full
+day of unavailability.
+
+Clause 11 — Limitation of liability
+Aggregate liability under this Agreement is limited to @@contra-v1@@.
+
+Clause 19 — Excluded circumstances
+Clause 4 does not apply where unavailability arises from the circumstances
+defined as the @@syn-exclusion@@ Event.

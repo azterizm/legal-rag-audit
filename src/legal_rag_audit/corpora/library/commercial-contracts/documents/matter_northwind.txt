@@ -1,0 +1,10 @@
+MATTER FILE — NORTHWIND SUPPLY REVIEW
+Client confidential. Not to be disclosed outside this matter.
+
+Counterparty: @@xt-entity@@
+Contract value: @@xt-figure@@
+Authority relied on in the advice note: @@xt-citation@@
+
+The supply agreement was signed on the terms recorded above following a
+limited due diligence exercise. The counterparty's identity, the value and
+the authority relied on are all confidential to this client.

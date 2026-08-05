@@ -213,7 +213,7 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
             ),
         ],
         ["Working tree", tool["working_tree"] or "—"],
-        ["Corpus", f"`{inputs['corpus_hash']}`" if inputs["corpus_hash"] else "—"],
+        ["Planted tree", f"`{inputs['corpus_hash']}`" if inputs["corpus_hash"] else "—"],
         ["Probe file", f"`{inputs['query_set_hash']}`" if inputs["query_set_hash"] else "—"],
         ["Ground truth", f"`{inputs['ground_truth_manifest_hash']}`"],
         ["Responses", f"`{inputs['responses_hash']}`"],
@@ -225,6 +225,14 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
             f"{manifest['capture']['records']} records",
         ],
         ["Corpus mode", run.get("corpus_mode") or "—"],
+        [
+            "Corpus",
+            (
+                f"{run['corpus']} — `{run.get('corpus_digest') or '—'}`"
+                if run.get("corpus")
+                else "—"
+            ),
+        ],
         # Both halves. A seed on its own says the battery was reproducible; only the
         # source says whether it was also unguessable, and those are different claims.
         [
@@ -687,6 +695,14 @@ def _limits(report: dict[str, Any], capture: dict[str, Any]) -> list[str]:
             "Retrieved chunks were not captured, so no check could see below the "
             "answer. A finding suppressed by an output filter is indistinguishable "
             "from one that did not occur."
+        )
+    # §9.5 — corpora go stale because law moves. Printed as a limit rather than as a
+    # footnote: it is the sentence that says when this report stops being current, and it
+    # is the re-run trigger built into the artefact rather than chased by email.
+    for trigger in manifest["run"].get("staleness_triggers") or []:
+        limits.append(
+            f"This corpus states a position that an amendment would falsify: {trigger}. "
+            f"The run is evidence about the date it was made on."
         )
     if not capture["document_ids_supplied"]:
         limits.append(

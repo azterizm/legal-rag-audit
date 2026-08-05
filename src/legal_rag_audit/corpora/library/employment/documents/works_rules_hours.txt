@@ -1,0 +1,7 @@
+WORKS RULES (HOURS)
+
+Rule 3. Rest breaks.
+Rule 4. Night working.
+Rule 5. Annual leave requests.
+    A request for annual leave must be submitted on or before
+    @@disamb-beta@@ for leave falling in the following holiday year.

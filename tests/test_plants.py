@@ -11,6 +11,7 @@ only true while three things hold, and each is tested here rather than assumed:
 import hmac
 import re
 from hashlib import sha256
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,7 +25,6 @@ from legal_rag_audit.plants import (
     LABEL,
     NOT_CHECKED,
     PUBLISHED_DEMO_SEED,
-    TEMPLATES,
     TOKEN,
     Guard,
     Minted,
@@ -36,6 +36,7 @@ from legal_rag_audit.plants import (
     unplanted,
     write_corpus,
 )
+from legal_rag_audit.corpora import load
 from legal_rag_audit.plants.guard import MAX_ATTEMPTS
 from legal_rag_audit.plants.register import is_real_party
 
@@ -144,7 +145,8 @@ def test_ten_thousand_generations_produce_no_collision():
     impossible, because a reused value makes two findings indistinguishable and the
     report attributes a leak to the wrong document.
     """
-    guard = Guard.over({t.name: unplanted(t.body) for t in TEMPLATES})
+    templates = load().templates
+    guard = Guard.over({t.name: unplanted(t.body) for t in templates})
     high_entropy = (ENTITY, LABEL, FIGURE, CITATION, TOKEN)
 
     seen: set[str] = set()
@@ -159,8 +161,9 @@ def test_ten_thousand_generations_produce_no_collision():
 
 
 def test_no_generated_value_occurs_in_the_corpus_as_authored():
-    guard = Guard.over({t.name: unplanted(t.body) for t in TEMPLATES})
-    corpus = "\n".join(unplanted(t.body) for t in TEMPLATES).lower()
+    templates = load().templates
+    guard = Guard.over({t.name: unplanted(t.body) for t in templates})
+    corpus = "\n".join(unplanted(t.body) for t in templates).lower()
     for n in range(1_000):
         minted, _ = guard.mint(ENTITY, SEED, f"bulk-{n}")
         assert minted.value.lower() not in corpus
@@ -287,12 +290,22 @@ def test_the_published_demo_seed_is_labelled_as_such():
     assert engagement.seed_source == "supplied for this run"
 
 
+def _one_document(template):
+    """A stand-in corpus holding a single deliberately broken document.
+
+    The pipeline only reads `.templates`, so a real corpus directory would be four files
+    of scaffolding to test a two-line abort. What matters is that the abort happens before
+    anything is written, and that is visible from here.
+    """
+    return SimpleNamespace(templates=(template,), label="stand-in")
+
+
 def test_an_empty_seed_is_refused():
     with pytest.raises(PlantingError, match="empty"):
         plant("   ")
 
 
-def test_a_slot_with_no_declared_plant_aborts(monkeypatch):
+def test_a_slot_with_no_declared_plant_aborts():
     """The body and the `slots` tuple disagreeing is a battery defect. It has to abort
     before the corpus is written, not produce a document with a marker in it."""
     from legal_rag_audit.plants import pipeline, templates
@@ -300,12 +313,11 @@ def test_a_slot_with_no_declared_plant_aborts(monkeypatch):
     broken = templates.Template(
         name="broken.txt", body="A value: @@nobody-declared-this@@\n", slots=()
     )
-    monkeypatch.setattr(pipeline, "TEMPLATES", (broken,))
     with pytest.raises(PlantingError, match="no declared plant"):
-        pipeline.plant(SEED)
+        pipeline.plant(SEED, _one_document(broken))
 
 
-def test_a_declared_plant_with_no_slot_aborts(monkeypatch):
+def test_a_declared_plant_with_no_slot_aborts():
     """The mirror image: minted, in the answer key, and nowhere in the corpus. The check
     against it would fail a correct system."""
     from legal_rag_audit.plants import pipeline, templates
@@ -315,9 +327,8 @@ def test_a_declared_plant_with_no_slot_aborts(monkeypatch):
         body="Nothing here.\n",
         slots=(templates.Slot("orphan", LABEL, "nowhere"),),
     )
-    monkeypatch.setattr(pipeline, "TEMPLATES", (broken,))
     with pytest.raises(PlantingError, match="no slot for them"):
-        pipeline.plant(SEED)
+        pipeline.plant(SEED, _one_document(broken))
 
 
 def test_asking_for_a_plant_that_does_not_exist_aborts():

@@ -404,14 +404,15 @@ def resolve_corpus(
             )
         return [], [], EXISTING_INDEX
 
+    from ..corpora import load as load_library_corpus
     from ..plants import plant, write_corpus
 
     root = os.path.join(config.corpus.path or DEFAULT_PLANTED_PATH, "corpus")
-    corpus = plant(config.corpus.seed)
+    corpus = plant(config.corpus.seed, load_library_corpus(config.corpus.library))
     written = write_corpus(root, corpus)
     logger.info(
         f"Planted {written['base']} documents and {written['revision']} revisions into "
-        f"{root} from {corpus.seed_source}."
+        f"{root} from {corpus.seed_source}, using corpus {corpus.source.label}."
     )
     documents, revisions = load_planted(root)
     return documents, revisions, root

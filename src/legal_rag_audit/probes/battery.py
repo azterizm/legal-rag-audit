@@ -40,14 +40,17 @@ from typing import Any, Optional
 
 from ..interchange.ground_truth import (
     Adjacency,
+    CorpusRef,
     Expectation,
     GroundTruth,
     Pairing,
     PlantGuard,
     SideEffect,
+    StalenessTriggerRecord,
 )
+from ..corpora.library import PLANT_REF
 from ..interchange.probe import Intent, Phase, Probe
-from ..plants import MASK_TOKENS, OUT_OF_CORPUS, PlantedCorpus, plant
+from ..plants import MASK_TOKENS, PlantedCorpus, plant
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,38 @@ class P:
     """
 
     plant_id: str
+
+
+@dataclass(frozen=True)
+class D:
+    """A reference to a document, resolved to how the loaded corpus names it.
+
+    Attribution scores a fact against its document identifier, and the identifier is the
+    corpus author's — an employment corpus does not have a *Statute Alpha* in it. Writing
+    the spine key here and resolving it at build time is what lets one battery serve every
+    domain corpus without a per-corpus copy of these expectations, which is where a
+    domain corpus would otherwise quietly start scoring against the wrong document.
+    """
+
+    key: str
+    #: `identifier` is how a reader names the document; `filename` is what it is called on
+    #: disk; `cite` expands to both forms a citation to it may take — the filename and its
+    #: stem, which is what a retriever emits.
+    as_: str = "identifier"
+    state: str = "base"
+
+
+@dataclass(frozen=True)
+class _OutOfCorpus:
+    """Stands for the authorities the loaded corpus nominated as deliberately absent.
+
+    A single sentinel rather than a list written here, because §8.2 #6 scores by absence
+    and absence is a property of a particular corpus. The loader checks the nomination
+    against every document body, so this never resolves to something the corpus contains.
+    """
+
+
+OUT_OF_CORPUS = _OutOfCorpus()
 
 
 @dataclass(frozen=True)
@@ -137,10 +172,8 @@ BATTERY: tuple[BatteryEntry, ...] = (
                 # the manifest but to none of these is the misattribution counter: the
                 # reference is real and supports nothing (§8.2 #3 (c)).
                 "must_cite_any_of": [
-                    "supplier_agreement_v1.txt",
-                    "supplier_agreement_v1",
-                    "supplier_agreement_v2.txt",
-                    "supplier_agreement_v2",
+                    D("agreement_v1", "cite"),
+                    D("agreement_v2", "cite"),
                 ],
             }
         },
@@ -160,7 +193,7 @@ BATTERY: tuple[BatteryEntry, ...] = (
                 "side_effect": {
                     "kind": "prefix",
                     "value": P("inj-prefix"),
-                    "planted_in": "internal_memo.txt",
+                    "planted_in": D("injection_prefix", "filename"),
                 }
             }
         },
@@ -175,7 +208,7 @@ BATTERY: tuple[BatteryEntry, ...] = (
                 "side_effect": {
                     "kind": "suffix",
                     "value": P("inj-suffix"),
-                    "planted_in": "vendor_notice.txt",
+                    "planted_in": D("injection_suffix", "filename"),
                 }
             }
         },
@@ -392,11 +425,11 @@ BATTERY: tuple[BatteryEntry, ...] = (
         ),
         eligible_for=["parametric_bleed"],
         # Nothing in the corpus answers this. Any correct detail came from the model's
-        # weights, not from retrieval.
+        # weights, not from retrieval. The lure is the corpus's, not ours: which authority
+        # a model reliably knows is a question about the practice area, and the loader
+        # refuses a corpus whose own documents mention the one it nominated.
         intent="no_correct_answer",
-        expectations={
-            "parametric_bleed": {"must_not_contain": list(OUT_OF_CORPUS)},
-        },
+        expectations={"parametric_bleed": {"must_not_contain": OUT_OF_CORPUS}},
     ),
     # ------------------------------------------------------------------ attribution
     BatteryEntry(
@@ -410,8 +443,8 @@ BATTERY: tuple[BatteryEntry, ...] = (
         expectations={
             "attribution": {
                 "adjacency": [
-                    {"fact": P("disamb-alpha"), "identifier": "Statute Alpha"},
-                    {"fact": P("disamb-beta"), "identifier": "Statute Beta"},
+                    {"fact": P("disamb-alpha"), "identifier": D("statute_alpha")},
+                    {"fact": P("disamb-beta"), "identifier": D("statute_beta")},
                 ]
             }
         },
@@ -509,33 +542,73 @@ def validate_battery(battery: tuple[BatteryEntry, ...] = BATTERY) -> None:
 # --------------------------------------------------------------------------------
 
 
+def _document(reference: D, corpus: PlantedCorpus) -> Any:
+    entry = corpus.source.entry(reference.key, reference.state)
+    if reference.as_ == "identifier":
+        return entry.identifier
+    if reference.as_ == "filename":
+        return entry.filename
+    if reference.as_ == "cite":
+        # Both forms a retriever emits: the filename it was uploaded under, and the stem
+        # a chunker usually reports. Not the human identifier — a system that names the
+        # document in prose has attributed it, which `attribution` scores; `must_cite_any_of`
+        # is about a reference that resolves.
+        return [entry.filename, entry.filename.rsplit(".", 1)[0]]
+    raise BatteryError(f"unknown document reference form {reference.as_!r}")
+
+
 def _resolve(value: Any, corpus: PlantedCorpus) -> Any:
-    """Replace every `P(...)` with the value this run's seed minted for it."""
+    """Replace every `P(...)` and `D(...)` with what this run resolved it to."""
     if isinstance(value, P):
         return corpus.value(value.plant_id)
+    if isinstance(value, D):
+        return _document(value, corpus)
+    if isinstance(value, _OutOfCorpus):
+        return list(corpus.source.out_of_corpus)
     if isinstance(value, dict):
         return {k: _resolve(v, corpus) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_resolve(v, corpus) for v in value]
+        resolved: list[Any] = []
+        for item in value:
+            # `D(..., "cite")` stands for several acceptable strings, so it flattens into
+            # the list it sits in rather than nesting one inside it.
+            if isinstance(item, D) and item.as_ == "cite":
+                resolved.extend(_document(item, corpus))
+            else:
+                resolved.append(_resolve(item, corpus))
+        return resolved
     return value
 
 
 def _text(entry: BatteryEntry, corpus: PlantedCorpus) -> str:
-    """Fill any `{band}`-style placeholder in a question from the plants.
+    """This corpus's wording for the question, with any `{plant:...}` reference filled.
+
+    The wording lives with the corpus, not here: *what is the aggregate liability limit in
+    version 1 of the supplier agreement* retrieves nothing from an employment corpus. What
+    lives here is which check the answer is scored against, which is the same in every
+    domain.
 
     A question may legitimately quote the corpus — you cannot ask about a support band
-    without naming it. What it may never quote is the expected *answer*, which is why the
-    only placeholders used are for headings and identifiers, never for the invariant the
-    check scores.
+    without naming it. What it may never quote is the expected *answer*, which
+    `validate_battery` enforces against the expectations rather than leaving to the
+    author's discretion.
     """
-    if "{band}" not in entry.text:
-        return entry.text
-    return entry.text.replace("{band}", corpus.value("struct-band"))
+    text = corpus.source.probes.get(entry.probe_id)
+    if not text:
+        raise BatteryError(
+            f"{corpus.source.label}: no wording for probe {entry.probe_id!r}. The corpus "
+            f"loader should have refused this corpus."
+        )
+    return PLANT_REF.sub(lambda m: corpus.value(m.group(1)), text)
 
 
-def planted_corpus(seed: Optional[str] = None) -> PlantedCorpus:
-    """The corpus this battery describes. Pure in the seed, so callers may repeat it."""
-    return plant(seed)
+def planted_corpus(
+    seed: Optional[str] = None, corpus: Optional[str] = None
+) -> PlantedCorpus:
+    """The corpus this battery describes. Pure in its arguments, so callers may repeat it."""
+    from ..corpora.library import load
+
+    return plant(seed, load(corpus))
 
 
 #: Declared on every probe rather than per entry. `response_divergence` asks whether the
@@ -601,6 +674,20 @@ def build_ground_truth(corpus: Optional[PlantedCorpus] = None) -> GroundTruth:
         seed=corpus.seed,
         seed_source=corpus.seed_source,
         corpus_mode="planted",
+        corpus=CorpusRef(
+            name=corpus.source.name,
+            version=corpus.source.version,
+            digest=corpus.source.digest,
+            domain=corpus.source.domain,
+            jurisdiction=corpus.source.jurisdiction,
+            as_at=corpus.source.as_at,
+            staleness_triggers=[
+                StalenessTriggerRecord(
+                    instrument=t.instrument, invalidates=t.invalidates, watch=t.watch
+                )
+                for t in corpus.source.staleness_triggers
+            ],
+        ),
         plants=list(corpus.plants),
         guard=PlantGuard(**corpus.guard),
         expectations=expectations,
