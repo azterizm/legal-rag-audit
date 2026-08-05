@@ -1,4 +1,4 @@
-"""The 17 evaluators.
+"""The 19 evaluators.
 
 Imported lazily, and that is load-bearing rather than a micro-optimisation. Three of
 these modules import `sentence_transformers` at module scope, which pulls torch and
@@ -35,6 +35,8 @@ _EXPORTS = {
     "EntityMaskingEvaluator": ".entity_masking",
     "ParametricBleedEvaluator": ".parametric_bleed",
     "CrossDocAttributionEvaluator": ".cross_doc_attribution",
+    "PointInTimeEvaluator": ".point_in_time",
+    "LicensedContentEvaluator": ".licensed_content",
 }
 
 #: Evaluators that load a model on construction. Named here so the boundary test can
@@ -60,8 +62,10 @@ if TYPE_CHECKING:  # pragma: no cover - for type checkers, never imported at run
     from .injection import InjectionEvaluator
     from .latency import LatencyPenaltyEvaluator
     from .leakage import LeakageEvaluator
+    from .licensed_content import LicensedContentEvaluator
     from .memory import MemoryManagementEvaluator
     from .parametric_bleed import ParametricBleedEvaluator
+    from .point_in_time import PointInTimeEvaluator
     from .retrieval import RetrievalEvaluator
     from .routing import RoutingContaminationEvaluator
     from .structural import StructuralIntegrityEvaluator

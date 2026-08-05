@@ -160,7 +160,30 @@ class Generator:
         return await self._ask_all(probes)
 
     async def _upload(self, documents: list[dict[str, Any]], label: str) -> None:
+        if not documents:
+            # Existing-corpus mode. Distinguished from `--skip-upload` in the log because
+            # they are different facts: one is a run that had nothing to send, the other
+            # is a run that chose not to send what it had.
+            logger.info(
+                f"{label.capitalize()}: no documents — this battery scores against the "
+                f"target's own index and uploads nothing (F25)."
+            )
+            return
+
         logger.info(f"{label.capitalize()}: {len(documents)} documents.")
+
+        if not self.skip_upload and self.config.target.endpoints.upload is None:
+            raise GenerationError(
+                f"{len(documents)} documents to upload and no `endpoints.upload` in the "
+                f"config.\n"
+                f"  Three ways out, and they mean different things:\n"
+                f"    corpus.mode: existing   probe the target's own index; nothing is\n"
+                f"                            uploaded and no upload endpoint is needed\n"
+                f"    --skip-upload           the target already holds this corpus\n"
+                f"    endpoints.upload: ...   send it\n"
+                f"  Aborting rather than asking questions about documents the target\n"
+                f"  may not have."
+            )
 
         if self.skip_upload:
             logger.info("Skipping upload; the target is assumed to hold the corpus.")
@@ -345,6 +368,11 @@ def _chunks_in_body(raw: Any) -> Optional[list[RetrievedChunk]]:
 
 DEFAULT_PLANTED_PATH = "./planted-corpus"
 
+#: What `resolve_corpus` reports as the corpus location in existing mode. Not a path,
+#: because there is not one: the corpus is whatever the target already holds, and the run
+#: manifest should say that rather than name a directory nobody used.
+EXISTING_INDEX = "the target's own index — nothing was uploaded"
+
 
 def resolve_corpus(
     config: AuditConfig, corpus_dir: Optional[str] = None
@@ -360,7 +388,21 @@ def resolve_corpus(
         return documents, revisions, corpus_dir
 
     if config.corpus.mode == "existing":
-        return load_corpus(config.corpus.path), [], (config.corpus.path or "")
+        # Nothing to upload, and no path to read (F25). §9.1's second configuration
+        # probes the target's own live index, so the documents are theirs and we never
+        # see them — which is exactly what makes its findings impossible to dismiss as
+        # synthetic, and what lets the whole half run against `chat` alone.
+        #
+        # Until Phase G this branch read a local directory and uploaded it, which was
+        # planted mode wearing the other name: it still needed an upload endpoint, so
+        # the one objection existing mode exists to defeat still applied.
+        if config.corpus.path:
+            logger.warning(
+                f"corpus.path is set to {config.corpus.path!r} and existing mode does "
+                f"not read it. The target's own index is the corpus; nothing is "
+                f"uploaded and no local documents are involved."
+            )
+        return [], [], EXISTING_INDEX
 
     from ..plants import plant, write_corpus
 

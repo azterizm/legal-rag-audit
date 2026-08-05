@@ -148,7 +148,7 @@ def test_two_expectations_for_one_probe_and_check_are_refused(tmp_path):
     path.write_text(
         json.dumps(
             {
-                "schema": "ground_truth.v2",
+                "schema": "ground_truth.v3",
                 "expectations": [
                     {"probe_id": "p", "check": "c"},
                     {"probe_id": "p", "check": "c"},
@@ -324,7 +324,7 @@ def test_every_supported_version_has_a_published_schema():
 
 def test_the_schema_requires_the_version_declaration():
     """The loaders refuse a record with no `schema`; the published contract says so too."""
-    for version in ("probes.v2", "ground_truth.v2"):
+    for version in ("probes.v2", "ground_truth.v3"):
         assert "schema" in read_schema_document(version)["required"]
     for variant in read_schema_document("responses.v2")["oneOf"]:
         assert "schema" in variant["required"]

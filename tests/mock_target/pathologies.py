@@ -210,6 +210,68 @@ def _nondeterministic(reply: Reply, o: Oracle, pass_index: int) -> Reply:
     return reply
 
 
+def _answer_current_law(reply: Reply, _o: Oracle, _pass: int) -> Reply:
+    """One version of every provision, served whatever date the question asks about.
+
+    §14.1 does not list this profile: point-in-time correctness is F27's *distinct
+    evaluator* rather than one of §8.2's eighteen, so it arrived with no pathology beside
+    it. The registry-driven gate refused to build until one existed, which is the gate
+    doing precisely the job §14.2 claims for it.
+    """
+    from . import statutes
+
+    if reply.probe_id not in statutes.PROVISIONS:
+        return reply
+    other = statutes.OTHER_READING[reply.probe_id]
+    url, text = statutes.PROVISIONS[other]
+    reply.answer = f"Under {statutes.PROVISION_NAMES[reply.probe_id]}: {text}"
+    reply.chunks = [Chunk(doc_id=url, text=text)]
+    return reply
+
+
+def _serve_licensed_content(reply: Reply, _o: Oracle, _pass: int) -> Reply:
+    """A publisher-assigned identifier in the retrieval. §14.1's nineteenth row.
+
+    In the chunks, not the answer, and that is the whole distinction §8.2 #18 turns on:
+    a marker their retriever returned is evidence about their index, where the same
+    marker in prose could be a live fetch or parametric recall.
+    """
+    from . import statutes
+
+    if reply.probe_id != "lic-001":
+        return reply
+    reply.chunks = [
+        Chunk(doc_id="internal-caselaw-00412", text=statutes.LICENSED_CHUNK)
+    ]
+    reply.citations = ["internal-caselaw-00412"]
+    return reply
+
+
+def _cite_publisher_service(reply: Reply, _o: Oracle, _pass: int) -> Reply:
+    """The marker, cited to the publisher's own service. **Not a finding** (§8.2 #18).
+
+    Not in `PROFILES`: it is the control for `serve_licensed_content` rather than a
+    pathology, and a profile that must produce *no* finding does not belong in a table
+    whose column is *the check that must fire*. `test_reference_target` drives it
+    directly, because the outcome it proves — `external_fetch` passing — is the one that
+    stops this check being an accusation.
+    """
+    from . import statutes
+
+    if reply.probe_id != "lic-001":
+        return reply
+    reply.answer = (
+        f"According to the reported headnote {statutes.PUBLISHER_MARKER}, the duty "
+        f"extended to a party outside the contractual chain. Retrieved from "
+        f"{statutes.PUBLISHER_SERVICE_URL}"
+    )
+    reply.citations = [statutes.PUBLISHER_SERVICE_URL]
+    return reply
+
+
+CITE_PUBLISHER_SERVICE: Pathology = _cite_publisher_service
+
+
 def _beta_article_5(o: Oracle) -> str:
     """Statute Beta's Article 5 offered as the answer about Statute Alpha's."""
     return (
@@ -234,6 +296,12 @@ class Profile:
     #: Probes the pathology touches. In the matrix so a reader can see how narrow it is.
     probes: tuple[str, ...]
     apply: Optional[Pathology] = None
+    #: Which battery this profile is exercised against. `planted` is §9.1's first
+    #: configuration — we author the documents and they are uploaded. `existing` is the
+    #: second: no upload endpoint at all, and ground truth that is external and public
+    #: (F25). Two of the twenty checks are only eligible on the second, so the gate has
+    #: to be able to run both or it could not claim to cover the register.
+    battery: str = "planted"
     #: Checks this profile also trips as a side effect of what it does. Declared so the
     #: gate can allow them without allowing anything else.
     also_trips: tuple[str, ...] = ()
@@ -364,6 +432,22 @@ PROFILES: tuple[Profile, ...] = (
         # An answer about liability limits is not entailed by a settlement schedule.
         # Unavoidable: the two Tier 2 checks read the same chunks.
         also_trips=("unsupported_assertions",),
+    ),
+    Profile(
+        name="serve_licensed_content",
+        behaviour="Returns publisher editorial markers in retrieved chunks",
+        detects=("licensed_content_reproduction",),
+        probes=("lic-001",),
+        apply=_serve_licensed_content,
+        battery="existing",
+    ),
+    Profile(
+        name="answer_current_law",
+        behaviour="Serves one version of a provision whatever date is asked about",
+        detects=("point_in_time",),
+        probes=("pit-era-108-1", "pit-era-108-2", "pit-era-124-1", "pit-era-124-2"),
+        apply=_answer_current_law,
+        battery="existing",
     ),
     Profile(
         name="nondeterministic",

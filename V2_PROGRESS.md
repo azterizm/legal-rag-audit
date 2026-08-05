@@ -18,7 +18,7 @@ exists to measure in other people's systems.
 | **E** | N-pass execution + variance reporting | 1 d | ✅ 2026-08-04 *(profiles are response files; the live mock target is F2)* |
 | **F** | `validate` mode | 0.5 d | ✅ 2026-08-04 |
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ✅ 2026-08-04 |
-| **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ⬜ |
+| **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ✅ 2026-08-05 *(hero benchmark not run — it needs a decision about targets, §16)* |
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ⬜ |
 | **I** | Authorisation controls + retention position | 0.5 d | ⬜ |
 
@@ -1762,3 +1762,184 @@ never `NOT_CAPTURED`, which is not a pass either.
   the profile rather than about which invariants that seed happened to mint. A sweep over
   seeds would be a different test — that the checks are robust to the corpus — and it
   belongs with the domain corpora in Phase H rather than here.
+
+---
+
+## Phase G — existing corpus and point-in-time ✅
+
+Closes defect 4 in §19: `upload` was effectively required, which is a much larger access
+ask than a chat probe and the one that turns a £500 engagement into a security review.
+§9.1's second configuration now runs standalone — **no corpus, no upload endpoint, no
+authorisation** — on ground truth that is a matter of public record.
+
+The two configurations answer different objections and that is why the plan says to run
+both. A planted run invites *"those are synthetic documents"*. This one invites nothing:
+the questions are ones anyone could type into the product, and the answers are in the
+statute book.
+
+### The committed artefact is the anchor set, not the store
+
+The phase brief reads *"ingestion: versioned snapshots, local store"*, which implies the
+fetched text is the ground truth. It is not, and the inversion is the main design decision
+here.
+
+| Committed | Built by `ingest`, not committed |
+|---|---|
+| The anchor: a provision, a date, the phrase in force then, the URL | The snapshot: what the provision said when we looked, its digest, a bounded excerpt |
+| Enough to build and score the battery, offline, with no network | Enough to prove the anchor is still right |
+
+Scoring against fetched text was rejected for three reasons, and the third is the one that
+settles it: every run would depend on a third party being up; a network fetch would sit
+inside the one command that must work offline; and **a report's ground truth could change
+between two runs of the same battery without anyone deciding that it should**. The whole
+pre-commitment apparatus of §3.6 exists to stop exactly that.
+
+`ingest --strict` is the refresh procedure and it inverts the usual risk. The one thing
+the extractor cannot verify about itself is that its reading of CLML is right — a selector
+matching nothing returns an empty string, and an empty string contains no phrase. So the
+anchor's phrase is the test of the fetch rather than the other way round: a broken
+extractor fails on every anchor at once instead of quietly agreeing with whatever it found.
+
+**Footprint: 1.4 kB kept of 810 kB fetched** across four snapshots. §20.1 item 3 asked
+whether versioned statute data is affordable to hold locally; the answer is that it is not
+close, because the store keeps phrases rather than statutes.
+
+### A phrase, not a provision
+
+Matching a whole provision needs similarity, similarity needs a model, and a model would
+move point-in-time correctness to Tier 2 — where the finding becomes contestable on our
+threshold rather than on the law. That would give away the single strongest property this
+check has: it is unarguably a **legal**-correctness question rather than an
+engineering-taste one.
+
+So an anchor carries a short phrase chosen under three rules, and every candidate that
+failed one was left out rather than weakened:
+
+1. **Discriminating** — in this version of the provision and no other.
+2. **Not reachable by paraphrase of the other version.** This is the rule that rejects
+   most candidates and it is the reason the commercial-contracts anchor §20.1 item 3 asks
+   for is **absent**: the Late Payment of Commercial Debts (Interest) Act 1998 s.4 was
+   restructured in 2015 around a defined term, *agreed payment day*, that a paraphrase of
+   the pre-2015 wording — which lets the parties *agree a date for payment* — lands on
+   without the system doing anything wrong. §14.2 makes a false positive a release
+   blocker, so a phrase that can be reached innocently is not a phrase.
+3. **Stable** — prefer two historic dates, because a closed validity range can never
+   change again. `era-124` is that pattern on purpose and needs no maintenance ever;
+   `era-108`'s second reading is the law as it stands, which is the more natural question
+   and the one that can go stale. The two together are the argument for why `ingest`
+   exists.
+
+Both shipped anchors were verified against the primary source during the phase, and all
+four readings came back clean.
+
+### An answer carrying both versions passes
+
+The decision that keeps this check off correct systems. An answer to *"as at 1 January
+2011"* that says *"the period was then not less than one year; it is now not less than two
+years"* is better than the one asked for, not worse. The finding is only ever **the
+correct version is absent and the superseded one is there**.
+
+`version_mismatch` ships as a **counter of `point_in_time` rather than a registered
+check**. §10.5 lists it beside `unresolvable_citations` and `non_existent_authorities`,
+which are both counters inside `citation_integrity`, and it reads the same way. It is
+counted apart because an answer that names the provision correctly and then gives the
+superseded text reads as authoritative and is wrong about the only thing that mattered —
+which a reader triaging findings needs to know.
+
+The **pair** is reported as a mechanism sentence and never as a second finding. One half
+of a pair already fails on its own, so counting the pairing would count the same defect
+twice in a report whose whole discipline is that denominators are visible.
+
+### The licensed-content check is built so it cannot become an accusation
+
+A finding here says a company's index holds material whose licence sits between them and a
+publisher. §16.3 is blunt about the cost of getting it wrong: unlike a wrong grounding
+call, this one alleges unlawful conduct by a named company. So the restraint is structural.
+
+- **Identifiers only.** Westlaw and LEXIS citations and West Key Numbers — publisher-assigned
+  strings that appear nowhere in the primary source. The editorial-prose class is not
+  shipped at all: storing a publisher's headnotes in order to test whether somebody else
+  has stored them would be the act under examination (§20.1 item 7).
+- **Two classes are specified and not scored**, for the same reason citation counter (b)
+  is not. Star pagination is indistinguishable from a page number in emphasis, and the
+  signal marks are ordinary English words. The result says they were not scored.
+- **Two of the three outcomes are not findings**, and both are tested. `external_fetch` —
+  the marker cited to the publisher's own service — is the licensed thing working, and it
+  passes. `unattributed` is `NOT_CAPTURED`: consistent with an index holding the licensed
+  edition *and* with parametric recall, and this check cannot separate them, so it says so
+  rather than picking the reading that produces a finding.
+
+### Three deviations, all of them things the phase found
+
+**`ground_truth.v3`.** `as_at_date`, `provision` and `paired_with` — none of which a v2
+manifest can express — plus `corpus_mode`, which was added after the reference target's
+existing-corpus run produced a manifest saying `corpus_mode: null`. `score` sees no config
+and no corpus, and the absence of plants is true of a hand-authored planted battery as
+well as an existing-corpus one, so the answer key now declares which of §9.1's two
+configurations it is for. A report has to name that: a finding against documents we wrote
+and a finding against the target's own index answer different objections.
+
+**`endpoints.upload` became optional.** Found by the gate: the two new profiles failed
+with a pydantic error, because the config schema required an upload endpoint even in the
+mode whose entire purpose is not needing one. Requiring the key meant F25 could not be
+configured without contradicting itself. The check that replaced it is behavioural — a run
+with documents to send and nowhere to send them aborts naming the three ways out, because
+*probe their index*, *assume they hold the corpus* and *declare somewhere to send it* mean
+different things.
+
+**`corpus.mode: existing` no longer reads a path.** It used to load a local directory and
+upload it, which was planted mode wearing the other name — it still needed an upload
+endpoint, so the one objection existing mode exists to defeat still applied.
+
+### The gate went to 20/20, not 18/18
+
+The phase brief expected `serve_licensed_content` to take the sensitivity gate from 17/17
+to 18/18. It went to 20/20, because `point_in_time` is a registered check and the gate is
+written against the register rather than against §8.2's list — so it refused to build
+until that had a profile too. §14.1's table gains `answer_current_law` for it.
+
+The reference target now runs **both batteries**, and the clean control runs on both. Each
+battery reports the other's checks as `NOT_ELIGIBLE` rather than as passes: F40 applied at
+the level of a configuration rather than a probe. A test asserts that between them the two
+cover every Tier 1 check, because a check no battery exercises is one the register counts
+and nothing tests.
+
+### Acceptance
+
+| Criterion | Result |
+|---|---|
+| A full run needs `chat` only — no `upload` endpoint | Met, and asserted on the config: the existing-corpus config declares no upload endpoint, so a run that tried could not have resolved a URL |
+| `serve_licensed_content` produces an `in_index` finding | Met |
+| A profile citing the publisher's own service produces `external_fetch` and no finding | Met |
+| A marker with no retrieval evidence produces `NOT_CAPTURED` | Met |
+| The aggregate result is publishable naming nobody | **Not met — the run has not happened.** See below |
+
+**697 tests, all passing under `-m "not slow"`.** Five gates clean.
+
+### Not done: the hero benchmark
+
+§17.2 asks for a run across public configurations with the run sheet written first, and
+preregistration is the cheapest credibility purchase available. The half that is not ours
+to decide is **which configurations**. §16 makes that a question about authorisation
+rather than capability — signing up for a product authorises use, not testing, and most
+SaaS terms separately prohibit benchmarking. So the target list is a decision for a
+person, and the preregistration document is worth writing once it exists rather than with
+a blank where its subject goes.
+
+Everything the benchmark needs is now built: the battery runs against `chat` alone, needs
+no authorisation, and its findings are the rate-shaped class §16.4 identifies as
+free-runnable.
+
+### Deliberately not done
+
+- **No commercial-contracts anchor.** §20.1 item 3 asks for employment *and* commercial
+  anchors and only the first shipped. Naming the gap is better than filling it with a
+  phrase that can be reached by paraphrase, which would fail correct systems on the check
+  whose whole value is that its ground truth is not arguable.
+- **No shingle hashing for editorial prose.** §8.2 #18 names it as the method where a paid
+  engagement warrants matching headnotes without storing them. It stays out of the
+  open-source core, which is what §20.1 item 7 decided.
+- **The store is not committed and not gitignored into invisibility.** It is written where
+  the operator asks and nowhere by default, because a store that appeared without being
+  asked for would be a cache of Crown copyright material accumulating in someone's
+  repository.

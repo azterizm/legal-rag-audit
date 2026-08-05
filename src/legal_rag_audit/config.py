@@ -16,7 +16,12 @@ class EndpointConfig(BaseModel):
 class EndpointsConfig(BaseModel):
     chat: Union[str, EndpointConfig]
     receive: Optional[Union[str, EndpointConfig]] = None
-    upload: Union[str, EndpointConfig]
+    #: Optional since Phase G, and that is F25 rather than a convenience. Existing-corpus
+    #: mode probes the target's own index and uploads nothing, so requiring the key would
+    #: have meant the half of §9.1 that exists to need no upload endpoint could not be
+    #: configured without naming one. `generate` refuses a run that has documents to send
+    #: and nowhere to send them, which is the check that actually matters.
+    upload: Optional[Union[str, EndpointConfig]] = None
     retrieval: Optional[Union[str, EndpointConfig]] = None
 
 class AuthConfig(BaseModel):

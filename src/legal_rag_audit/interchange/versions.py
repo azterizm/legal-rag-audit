@@ -20,6 +20,7 @@ RESPONSES_V1: Final = "responses.v1"
 RESPONSES_V2: Final = "responses.v2"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
 GROUND_TRUTH_V2: Final = "ground_truth.v2"
+GROUND_TRUTH_V3: Final = "ground_truth.v3"
 HANDOVER_V1: Final = "handover.v1"
 RUN_MANIFEST_V1: Final = "run_manifest.v1"
 #: The one identifier whose number tracks the *tool* generation rather than the
@@ -33,7 +34,7 @@ REPORT_V2: Final = "report.v2"
 SUPPORTED: Final[dict[str, str]] = {
     PROBES_V2: "probe file",
     RESPONSES_V2: "response file",
-    GROUND_TRUTH_V2: "ground-truth manifest",
+    GROUND_TRUTH_V3: "ground-truth manifest",
     HANDOVER_V1: "pre-commitment record",
     RUN_MANIFEST_V1: "run manifest",
     REPORT_V2: "report",
@@ -60,6 +61,13 @@ SUPERSEDED: Final[dict[str, str]] = {
         f"take the §8.2 recipes directly, so expectations carry named fields "
         f"(`swaps`, `mask_tokens`, `shapes`, `side_effect`, `pairing`) instead of a "
         f"free-form bag, `adjacency` is a list, and `plants` and `guard` are populated"
+    ),
+    GROUND_TRUTH_V2: (
+        f"{GROUND_TRUTH_V3} — Phase G added `as_at_date`, `provision` and `paired_with` "
+        f"for point-in-time correctness (§9.2, F27). A version finding is unreadable "
+        f"without the date the question asked about, and *the right provision quoted "
+        f"from the wrong version* is a different finding from getting both wrong — "
+        f"neither distinction can be drawn from a v2 manifest"
     ),
 }
 

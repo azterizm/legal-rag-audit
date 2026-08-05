@@ -40,6 +40,18 @@
           "title": "Adjacency",
           "type": "array"
         },
+        "as_at_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As At Date"
+        },
         "check": {
           "title": "Check",
           "type": "string"
@@ -72,6 +84,18 @@
           "title": "Must Not Contain",
           "type": "array"
         },
+        "paired_with": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Paired With"
+        },
         "pairing": {
           "anyOf": [
             {
@@ -86,6 +110,18 @@
         "probe_id": {
           "title": "Probe Id",
           "type": "string"
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provision"
         },
         "queried_as": {
           "anyOf": [
@@ -336,11 +372,27 @@
       "type": "object"
     }
   },
-  "$id": "https://github.com/legal-rag-audit/schemas/ground_truth.v2.schema.json",
+  "$id": "https://github.com/legal-rag-audit/schemas/ground_truth.v3.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The manifest as a whole.",
   "properties": {
+    "corpus_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "planted",
+            "existing"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Corpus Mode"
+    },
     "expectations": {
       "items": {
         "$ref": "#/$defs/Expectation"
@@ -367,8 +419,8 @@
       "type": "array"
     },
     "schema": {
-      "const": "ground_truth.v2",
-      "default": "ground_truth.v2",
+      "const": "ground_truth.v3",
+      "default": "ground_truth.v3",
       "title": "Schema",
       "type": "string"
     },

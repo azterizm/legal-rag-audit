@@ -32,7 +32,7 @@ from legal_rag_audit.interchange.response import (  # noqa: E402
 )
 from legal_rag_audit.interchange.run_manifest import RunManifest  # noqa: E402
 from legal_rag_audit.interchange.versions import (  # noqa: E402
-    GROUND_TRUTH_V2,
+    GROUND_TRUTH_V3,
     HANDOVER_V1,
     PROBES_V2,
     REPORT_V2,
@@ -45,7 +45,7 @@ OUT_DIR = REPO_ROOT / "src" / "legal_rag_audit" / "interchange" / "jsonschema"
 VERSIONS = (
     PROBES_V2,
     RESPONSES_V2,
-    GROUND_TRUTH_V2,
+    GROUND_TRUTH_V3,
     HANDOVER_V1,
     RUN_MANIFEST_V1,
     REPORT_V2,
@@ -54,7 +54,7 @@ VERSIONS = (
 TITLES = {
     PROBES_V2: "Probe file (JSONL) — one probe per line",
     RESPONSES_V2: "Response file (JSONL) — one record per line",
-    GROUND_TRUTH_V2: "Ground-truth manifest (JSON) — withheld, hashed at handover",
+    GROUND_TRUTH_V3: "Ground-truth manifest (JSON) — withheld, hashed at handover",
     HANDOVER_V1: "Handover record (JSON) — the pre-commitment, published before the run",
     RUN_MANIFEST_V1: "Run manifest (JSON) — the provenance block of a report",
     REPORT_V2: "Report (JSON) — the evidence; report.md is the testimony",
@@ -91,7 +91,7 @@ def build(version: str) -> dict:
             "oneOf": [response, notes],
             "$defs": defs,
         }
-    elif version == GROUND_TRUTH_V2:
+    elif version == GROUND_TRUTH_V3:
         schema = require_schema_field(GroundTruth.model_json_schema(by_alias=True))
     elif version == HANDOVER_V1:
         schema = require_schema_field(Handover.model_json_schema(by_alias=True))

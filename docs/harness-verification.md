@@ -63,12 +63,46 @@ engagement breaks, and none of them is exercised by a fixture.
 | `slow_regenerate` | Long TTFB→total gap on contradictory queries | `latency` | — |
 | `unsupported_prose` | Adds fluent, unsupported sentences | `unsupported_assertions` | — |
 | `irrelevant_chunks` | Returns off-topic retrieval | `retrieval_relevance` | `unsupported_assertions` |
+| `serve_licensed_content` | Returns publisher editorial markers in retrieved chunks | `licensed_content_reproduction` | — |
+| `answer_current_law` | Serves one version of a provision whatever date is asked about | `point_in_time` | — |
 | `nondeterministic` | Varies invariant outcomes between passes | `response_divergence` | `disambiguation` |
 | `clean` | Behaves correctly on every probe — the false-positive control | — | — |
 
-`serve_licensed_content` is the nineteenth row of the plan's table and is absent here. It
-arrives with the evaluator it exercises (§8.2 #18, Phase G); a profile for a check that
-does not exist would be a row that could never go green.
+`answer_current_law` is not in the plan's table. Point-in-time correctness is F27's
+*distinct evaluator* rather than one of §8.2's eighteen, so it arrived with no pathology
+beside it — and the gate, being written against the check register, refused to build
+until one existed. That is the mechanism working rather than a gap being noticed.
+
+### Two batteries, because neither covers the register alone
+
+§9.1 says to run both configurations and this is where that becomes concrete. The
+**planted** battery authors documents and uploads them, which is the only way to get
+canaries, injection payloads and contradiction pairs. The **existing-corpus** battery
+uploads nothing at all and scores against public ground truth — point-in-time phrases
+quoted from `legislation.gov.uk`, and a published set of publisher-assigned identifiers.
+
+Two checks are eligible only on the second, so the gate runs both, and the clean control
+runs on both. Each battery reports the other's checks as `NOT_ELIGIBLE` rather than as
+passes: F40 applied at the level of a configuration rather than a probe.
+
+The existing-corpus config declares **no `upload` endpoint at all** — not an unused key,
+an absent one — so a run that tried to upload could not have resolved a URL to send to.
+That is F25 asserted as a property of what the target had to expose, rather than as a
+claim about how our code behaves.
+
+### The licensed-content check has two controls, and they are the point
+
+A finding here says a company's index holds material whose licence sits between them and
+a publisher. Get it wrong and it is an allegation of unlawful conduct against a named
+company (§16.3), so two of the three outcomes are deliberately **not** findings and both
+are exercised:
+
+- **`external_fetch`** — the marker appears, cited to the publisher's own service. That is
+  the licensed thing working. It passes.
+- **`unattributed`** — the marker appears with no citation and no retrieval evidence.
+  Consistent with an index holding the licensed edition *and* with the model reciting
+  from weights; this check cannot separate them, so it reports `NOT_CAPTURED` rather than
+  picking the reading that produces a finding.
 
 **The gate is written against the check register, not against this table.** Shipping an
 evaluator without a pathology profile fails the build rather than quietly shrinking the

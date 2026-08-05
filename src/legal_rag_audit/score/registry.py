@@ -435,6 +435,102 @@ def _score_context_memory(probe, response, expectation, data):
     )
 
 
+def _score_point_in_time_record(probe, response, expectation, data):
+    from ..evaluators import PointInTimeEvaluator
+
+    return PointInTimeEvaluator().evaluate(
+        answer=response.answer,
+        in_force=_require(expectation, "must_contain", "point_in_time", probe.probe_id),
+        superseded=(expectation.must_not_contain if expectation else []),
+        provision=(expectation.provision if expectation else None),
+        as_at=(expectation.as_at_date if expectation else None),
+    )
+
+
+def _score_point_in_time(data: CheckInput) -> CheckOutcome:
+    """Per-probe outcomes, plus the paired reading the per-probe view cannot show.
+
+    Each dated question is scored on its own, and that is where the findings come from.
+    But the phenomenon §9.2 is actually about — *this system only has one version of the
+    law* — is a property of the **pair**: an identical answer to two questions about two
+    moments. One of the pair fails on its own, so the finding lands either way; what the
+    pairing adds is the mechanism sentence (§10.4), which is the difference between
+    telling a client they got one answer wrong and telling them their index is not
+    time-aware.
+
+    Recorded as an observation, never as a second finding. Counting it would count the
+    same defect twice in a report whose whole discipline is that denominators are visible.
+    """
+    outcome = per_probe(_score_point_in_time_record)(data)
+
+    answers = {
+        probe.probe_id: response.answer
+        for probe, response, _ in data.pairs()
+        if response.pass_index == 1
+    }
+    pairs: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for expectation in data.expectations.values():
+        other = expectation.paired_with
+        if not other:
+            continue
+        key = tuple(sorted((expectation.probe_id, other)))
+        if key in seen or key[0] not in answers or key[1] not in answers:
+            continue
+        seen.add(key)
+        identical = _flat(answers[key[0]]) == _flat(answers[key[1]])
+        pairs.append(
+            {
+                "probes": list(key),
+                "as_at": [
+                    data.expectations[p].as_at_date
+                    if p in data.expectations
+                    else None
+                    for p in key
+                ],
+                "same_answer": identical,
+                "reading": (
+                    "the same answer was returned to both dates, which is what a system "
+                    "holding one version of the provision looks like"
+                    if identical
+                    else "the two dates were answered differently"
+                ),
+            }
+        )
+
+    outcome.detail["pairs"] = pairs
+    outcome.detail["pairs_compared"] = len(pairs)
+    if pairs and all(p["same_answer"] for p in pairs):
+        outcome.detail["mechanism"] = (
+            "every point-in-time pair returned the same answer to both dates. Reported "
+            "in the mechanism section rather than as a separate finding — it is the "
+            "same defect the per-probe results already counted"
+        )
+    return outcome
+
+
+def _flat(text: str) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def _score_licensed_content(probe, response, expectation, data):
+    from ..evaluators import LicensedContentEvaluator
+
+    chunks = (
+        [
+            {"text": c.text, "doc_id": c.doc_id}
+            for c in (response.retrieved_chunks or [])
+        ]
+        if response.retrieved_chunks is not None
+        else None
+    )
+    return LicensedContentEvaluator().evaluate(
+        answer=response.answer,
+        retrieved_chunks=chunks,
+        citations=response.citations or [],
+    )
+
+
 def _score_latency(data: CheckInput) -> CheckOutcome:
     """Timings as distributions, plus the paired reading kept out of the findings.
 
@@ -793,6 +889,47 @@ REGISTRY: tuple[CheckSpec, ...] = (
         scorer=per_probe(_score_context_memory),
         recipe="Distinct invariant per referent; which one the pronoun resolved to",
         key=HELD,
+    ),
+    CheckSpec(
+        name="point_in_time",
+        tier=1,
+        needs=frozenset({ANSWER}),
+        scorer=_score_point_in_time,
+        recipe="Phrase in force on the date asked, against the other version's phrase",
+        # A positive expectation, so `held` by the mechanical test above. The **bundled**
+        # anchors ship in the wheel and are therefore public — the same position as the
+        # published demo seed, and for the same reason: the law is public, so an anchor
+        # set anyone can check is right for a demonstration and wrong for an engagement,
+        # which authors its own.
+        key=HELD,
+        limit=(
+            "This measures whether the version of a provision in force on a stated date "
+            "was returned. It does not measure whether the answer was legally correct in "
+            "any wider sense, and it says nothing about provisions outside the anchor "
+            "set — which is small and named. An answer carrying both versions passes: "
+            "telling a reader what the law was and what it became is more than was asked "
+            "for, not less"
+        ),
+    ),
+    CheckSpec(
+        name="licensed_content_reproduction",
+        tier=1,
+        needs=frozenset({ANSWER}),
+        scorer=per_probe(_score_licensed_content),
+        recipe="Publisher-assigned identifiers in retrieved chunks; in_index / external_fetch / unattributed",
+        # Chunk capture moves detection below the layer an output filter reaches, so the
+        # marker set stops being worth withholding (§3.6.1).
+        key=CONDITIONAL,
+        limit=(
+            "This establishes that publisher-proprietary content is present in the "
+            "retrieval index. It does **not** establish a licence breach: the vendor may "
+            "hold a bulk-ingestion licence or a content-partnership agreement, and no run "
+            "has visibility of their contracts. The finding is that content whose terms "
+            "sit between them and the publisher is being served from their index, and "
+            "that a TPRM reviewer will ask which licence covers that. It is never an "
+            "allegation of infringement. A marker fetched from the publisher's own "
+            "service is recorded as `external_fetch` and is not a finding at all"
+        ),
     ),
     CheckSpec(
         name="latency",

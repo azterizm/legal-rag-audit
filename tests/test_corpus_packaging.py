@@ -247,10 +247,14 @@ def test_cli_exits_2_on_a_corpus_problem(tmp_path):
         "    chat: http://127.0.0.1:1/chat\n"
         "    upload: http://127.0.0.1:1/upload\n"
         "corpus:\n"
-        f"  mode: existing\n"
-        f"  path: {tmp_path / 'does-not-exist'}\n",
+        "  mode: planted\n",
         encoding="utf-8",
     )
+    # A directory that exists and is not a planted corpus. Phase G took the other route
+    # away: `mode: existing` no longer reads a path, because §9.1's second configuration
+    # probes the target's own index and uploads nothing at all (F25). What is still a
+    # corpus problem is being handed a tree with no `base/` in it.
+    (tmp_path / "not-planted").mkdir()
     result = subprocess.run(
         [
             sys.executable,
@@ -259,6 +263,10 @@ def test_cli_exits_2_on_a_corpus_problem(tmp_path):
             "generate",
             "-c",
             str(config),
+            "--corpus",
+            str(tmp_path / "not-planted"),
+            "--probes-in",
+            str(tmp_path / "probes.jsonl"),
             "-o",
             str(tmp_path / "responses.jsonl"),
         ],

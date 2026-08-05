@@ -16,8 +16,16 @@ Three consequences, and they are the point of the phase:
 * Nothing here can be a typo that becomes a false finding. An expectation naming a plant
   the templates do not declare aborts the build rather than failing a correct system.
 * Every check has real ground truth, including the two the fixed corpus could not support.
-  `UNTESTABLE_ON_THE_BATTERY` is now empty, and it stays in the file so that emptying it
+  `UNTESTABLE_ON_THE_BATTERY` was emptied here and stays in the file so that emptying it
   was a visible event rather than a deletion.
+
+**What Phase G changed.** This is now one of two batteries. `external.battery` is §9.1's
+other configuration: it uploads nothing, scores against public ground truth, and carries
+the two checks that cannot live here — point-in-time correctness, whose answers are
+matters of public record rather than things we can plant, and licensed-content
+reproduction, where planting the content would be the act the check asks about. Both are
+named in `UNTESTABLE_ON_THE_BATTERY` with the battery they do live on, so a check can
+never leave the register by nobody writing a probe for it.
 
 > [!IMPORTANT]
 > **With the published demo seed, the ground truth is not withheld and cannot be.** The
@@ -76,16 +84,30 @@ class BatteryEntry:
 
 #: Registered checks that no probe below declares, and why.
 #:
-#: Empty, and kept so that emptying it was an event. Phase B shipped with
-#: `index_freshness` in here: the fixed corpus held both versions of an agreement from
-#: the start, so there was no stale index to detect, and the check reported NOT_ELIGIBLE
-#: on every run. The planting pipeline's two corpus states closed it.
+#: It was emptied in Phase D and refilled in Phase G, and the two entries are a different
+#: kind of thing from the one that used to be here. Phase B had `index_freshness` in this
+#: dict because the corpus could not support it — a defect, closed by the planting
+#: pipeline's two corpus states. These two are here because they belong to the **other
+#: configuration**: §9.1's existing-corpus half, which uploads nothing and scores against
+#: public ground truth. Nothing about the planted battery could ever exercise them, and
+#: nothing should try.
 #:
 #: A check with no eligible probe reports NOT_ELIGIBLE, which is the true statement about
 #: a run that could not exercise it — better than an expectation the run cannot satisfy,
 #: because a check that fails a correct system is a false positive and §14.2 makes a false
 #: positive a release blocker.
-UNTESTABLE_ON_THE_BATTERY: dict[str, str] = {}
+UNTESTABLE_ON_THE_BATTERY: dict[str, str] = {
+    "point_in_time": (
+        "ground truth is the version of a provision in force on a date, which is a "
+        "matter of public record rather than something we can plant. Lives on the "
+        "existing-corpus battery (`external.battery`), where it needs no upload endpoint"
+    ),
+    "licensed_content_reproduction": (
+        "we do not plant licensed content — planting it would be the act the check asks "
+        "about (§8.2 #18). Lives on the existing-corpus battery, and needs `chat` and "
+        "nothing else"
+    ),
+}
 
 
 BATTERY: tuple[BatteryEntry, ...] = (
@@ -578,6 +600,7 @@ def build_ground_truth(corpus: Optional[PlantedCorpus] = None) -> GroundTruth:
     return GroundTruth(
         seed=corpus.seed,
         seed_source=corpus.seed_source,
+        corpus_mode="planted",
         plants=list(corpus.plants),
         guard=PlantGuard(**corpus.guard),
         expectations=expectations,

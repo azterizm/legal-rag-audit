@@ -61,6 +61,7 @@ test = [
 packages = [
     "legal_rag_audit",
     "legal_rag_audit.evaluators",
+    "legal_rag_audit.external",
     "legal_rag_audit.generate",
     "legal_rag_audit.interchange",
     "legal_rag_audit.interchange.jsonschema",

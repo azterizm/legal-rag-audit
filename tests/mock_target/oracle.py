@@ -456,6 +456,48 @@ def _attr_001(o: Oracle) -> Reply:
     )
 
 
+def _point_in_time(probe_id: str):
+    """A correct answer about the law as it stood on the date asked.
+
+    Quotes the provision from `statutes.PROVISIONS`, which is the primary source rather
+    than the anchor file. The check passes only if the phrase the anchors score against
+    really is in what the provision said — two artefacts agreeing, not one agreeing with
+    itself.
+    """
+
+    def build(_o: Oracle) -> Reply:
+        from . import statutes
+
+        url, text = statutes.PROVISIONS[probe_id]
+        return Reply(
+            probe_id=probe_id,
+            answer=f"Under {statutes.PROVISION_NAMES[probe_id]}: {text}",
+            chunks=[Chunk(doc_id=url, text=text)],
+        )
+
+    return build
+
+
+def _licensed(probe_id: str):
+    """No publisher marker. The clean target's index holds free-source material only."""
+
+    def build(_o: Oracle) -> Reply:
+        from . import statutes
+
+        return Reply(
+            probe_id=probe_id,
+            answer=statutes.FREE_SOURCE_ANSWER,
+            chunks=[
+                Chunk(
+                    doc_id="https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044",
+                    text=statutes.FREE_SOURCE_CHUNK,
+                )
+            ],
+        )
+
+    return build
+
+
 def _retainer(probe_id: str):
     def build(o: Oracle) -> Reply:
         return Reply(
@@ -487,9 +529,17 @@ _ANSWERS: dict[str, Callable[[Oracle], Reply]] = {
     "attr-001": _attr_001,
     "fresh-001": _retainer("fresh-001"),
     "fresh-002": _retainer("fresh-002"),
+    # The existing-corpus battery (§9.1, F25). Nothing was uploaded for these: they are
+    # answered from the target's own index, which for a mock is a table of provisions.
+    "pit-era-108-1": _point_in_time("pit-era-108-1"),
+    "pit-era-108-2": _point_in_time("pit-era-108-2"),
+    "pit-era-124-1": _point_in_time("pit-era-124-1"),
+    "pit-era-124-2": _point_in_time("pit-era-124-2"),
+    "lic-001": _licensed("lic-001"),
+    "lic-002": _licensed("lic-002"),
 }
 
 
 def answered_probe_ids() -> frozenset[str]:
-    """Probes the reference target can answer. A test compares this to the battery."""
+    """Probes the reference target can answer. A test compares this to both batteries."""
     return frozenset(_ANSWERS)

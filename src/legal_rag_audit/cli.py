@@ -2,6 +2,8 @@
 
 Five modes, and which side of the engagement runs each one is the whole design:
 
+    legal-rag-audit plant  --mode existing -o run/     # §9.1's other configuration
+    legal-rag-audit ingest --strict                    # re-check the anchors
     legal-rag-audit plant  --seed <seed> -o run/
     legal-rag-audit hash   --corpus run/corpus --probes run/probes.jsonl \
                            --ground-truth run/ground_truth.json -o run/handover.json
@@ -24,6 +26,18 @@ and planting sits on our side alongside `hash` rather than adding a fourth party
 engagement. It exists as a command for the same reason `hash` does: a pipeline step that
 only ever ran inside another command could not be inspected, repeated, or checked by the
 client.
+
+`plant --mode existing` writes **no corpus**: §9.1's second configuration probes the
+target's own index, so its ground truth is public rather than planted and it needs no
+`upload` endpoint at all (F25). It shares the command rather than taking one of its own
+because the operator is doing the same act — producing the two halves of a battery and
+sealing them — and only the source of the answers differs.
+
+`ingest` is the refresh procedure for that battery and is the only command that fetches
+from a third party. It scores nothing and changes no ground truth: it re-checks that each
+anchored phrase is still in the provision it was quoted from, so an anchor that has gone
+stale is a reported event rather than a battery quietly scoring against a version of the
+law that no longer exists.
 
 Exit codes are a contract, because this runs in CI:
 
@@ -246,6 +260,10 @@ def cmd_plant(args: argparse.Namespace) -> int:
     from .probes import build_ground_truth, build_probes, validate_battery
 
     out = Path(args.output)
+
+    if args.mode == "existing":
+        return _plant_existing(out, args)
+
     try:
         validate_battery()
         corpus = plant(args.seed)
@@ -283,6 +301,111 @@ def cmd_plant(args: argparse.Namespace) -> int:
         f"                         --ground-truth {out / 'ground_truth.json'} "
         f"-o {out / 'handover.json'}"
     )
+    print()
+    return EXIT_OK
+
+
+def _plant_existing(out, args: argparse.Namespace) -> int:
+    """The existing-corpus battery: probes and an answer key, and no corpus (F25).
+
+    Shares `plant` rather than taking a command of its own, because what the operator is
+    doing is the same act — producing the two halves of a battery and sealing them. What
+    differs is where the answers come from, and that is what `--mode` names.
+    """
+    from .external import (
+        AnchorError,
+        build_external_ground_truth,
+        build_external_probes,
+        validate_anchors,
+    )
+    from .interchange import write_ground_truth, write_probes
+
+    try:
+        validate_anchors()
+        probes = build_external_probes(passes=args.passes)
+        ground_truth = build_external_ground_truth()
+    except AnchorError as e:
+        return _abort(f"The anchor set is not usable:\n{e}")
+
+    write_probes(out / "probes.jsonl", probes)
+    write_ground_truth(out / "ground_truth.json", ground_truth)
+
+    print()
+    print("  mode                existing — no corpus, no upload endpoint needed")
+    print(f"  probes              {out / 'probes.jsonl'}  ({len(probes)})")
+    print(
+        f"  ground truth        {out / 'ground_truth.json'}  "
+        f"({len(ground_truth.expectations)} expectations)"
+    )
+    print()
+    print(
+        "  Ground truth here is external and public: point-in-time phrases quoted from\n"
+        "  legislation.gov.uk, and a published set of publisher-assigned identifiers.\n"
+        "  Nothing is planted, so nothing here needs authorisation — every probe is a\n"
+        "  question anyone could type into the product."
+    )
+    print()
+    print(
+        "  The bundled anchors ship in the wheel and are therefore public, exactly as\n"
+        "  the demo seed is. An engagement authors its own; a run against these\n"
+        "  demonstrates the method and establishes less about a target."
+    )
+    print()
+    print(
+        f"  Next: seal it before the target sees anything.\n"
+        f"    legal-rag-audit hash --probes {out / 'probes.jsonl'} \\\n"
+        f"                         --ground-truth {out / 'ground_truth.json'} "
+        f"-o {out / 'handover.json'}"
+    )
+    print()
+    return EXIT_OK
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    """Re-check every anchor against the primary source. Scores nothing."""
+    from .external import ANCHORS
+    from .external.ingest import IngestError, ingest
+
+    try:
+        store = ingest(ANCHORS)
+    except IngestError as e:
+        return _abort(str(e))
+
+    drift = store.drift(ANCHORS)
+    footprint = store.footprint()
+
+    print()
+    print(f"  anchors             {len(ANCHORS)}")
+    print(f"  snapshots           {footprint['snapshots']}")
+    print(
+        f"  footprint           {footprint['stored_bytes']} bytes kept of "
+        f"{footprint['fetched_bytes']} fetched"
+    )
+    print()
+    for snapshot in store.snapshots:
+        mark = "ok  " if snapshot.invariant_present else "GONE"
+        print(f"  {mark}  {snapshot.anchor_id} @ {snapshot.as_at or 'current'}  "
+              f"{snapshot.invariant!r}")
+    print()
+
+    if args.output:
+        store.save(args.output)
+        print(f"  Store written to {args.output}")
+        print()
+
+    if drift:
+        print("  The anchor set and the primary source disagree:")
+        for problem in drift:
+            print(f"    {problem}")
+        print()
+        print(
+            "  Until this is resolved the battery would score answers against a version\n"
+            "  of the law that is no longer there. Fix the anchor, not the answer."
+        )
+        print()
+        return EXIT_SETUP if args.strict else EXIT_OK
+
+    print("  Every anchor still says what the primary source says.")
     print()
     return EXIT_OK
 
@@ -474,7 +597,42 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="how many times each probe should be asked",
     )
+    pl.add_argument(
+        "--mode",
+        choices=("planted", "existing"),
+        default="planted",
+        help=(
+            "`planted` authors the corpus and mints its invariants. `existing` writes "
+            "no corpus at all: the battery scores against the target's own index using "
+            "public ground truth, and needs no upload endpoint (§9.1, F25)"
+        ),
+    )
     pl.set_defaults(func=cmd_plant)
+
+    ing = sub.add_parser(
+        "ingest",
+        help="re-check the point-in-time anchors against legislation.gov.uk",
+        description=(
+            "The refresh procedure for existing-corpus mode. Fetches each anchored "
+            "provision as it stood on its date and confirms the phrase the battery "
+            "scores against is still there. Scores no answers and changes no ground "
+            "truth: an anchor that has drifted is reported so a person can fix the "
+            "anchor, because the alternative is a battery quietly scoring against a "
+            "version of the law that no longer exists."
+        ),
+    )
+    ing.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="write the snapshot store here (it is corroboration, not a scoring input)",
+    )
+    ing.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit 2 if any anchor has drifted, for running this on a schedule",
+    )
+    ing.set_defaults(func=cmd_ingest)
 
     sc = sub.add_parser(
         "score",

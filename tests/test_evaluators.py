@@ -604,14 +604,22 @@ def test_no_tier1_evaluator_can_reach_a_model():
 
     assert not offenders, f"a model is reachable from a Tier 1 evaluator: {offenders}"
 
-    # 15 evaluators, plus one cross-cutting pass that is not an evaluator. §8.3 is
+    # 17 evaluators, plus one cross-cutting pass that is not an evaluator. §8.3 is
     # explicit that variance is "not an evaluator, a pass over all of them", and the
     # two are counted apart here so a future evaluator cannot arrive disguised as a
     # pass — or a pass be mistaken for progress against §8.1's list of eighteen.
+    #
+    # The 17 are **not** 17 of that list. Phase G brought #18 to Tier 1, making it 16 of
+    # the eighteen; `point_in_time` is the seventeenth and is not one of them at all —
+    # F27 specifies it as a distinct evaluator, so counting it against §8.1 would inflate
+    # progress against a list it was never on. The split is asserted rather than
+    # explained, because a number in a docstring is what drifts.
     tier1 = tier1_checks()
     evaluators = [c for c in tier1 if not BY_NAME[c].cross_cutting]
     crossing = [c for c in tier1 if BY_NAME[c].cross_cutting]
+    from_the_eighteen = [c for c in evaluators if c != "point_in_time"]
 
-    assert len(evaluators) == 15, "15 of the 18 evaluators in §8.1 are Tier 1 today"
+    assert len(evaluators) == 17
+    assert len(from_the_eighteen) == 16, "16 of the 18 evaluators in §8.1 are Tier 1 today"
     assert crossing == ["response_divergence"]
     assert all(BY_NAME[c].tier == 1 for c in tier1)

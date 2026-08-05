@@ -113,10 +113,20 @@ def test_every_registered_check_has_an_eligible_probe_or_a_stated_reason():
 def test_an_untestable_check_reports_not_eligible(tmp_path):
     """The exemption above has to show up on the page, not vanish from it.
 
-    The set is empty since Phase D: the planting pipeline's two corpus states gave
-    `index_freshness` a probe pair, which was the only entry. The test still runs so that
-    a future exemption cannot be added without appearing on the report.
+    **Two entries since Phase G, and they are a different kind from the one Phase D
+    removed.** `index_freshness` used to be here because the corpus could not support it
+    — a defect, closed by the planting pipeline's two corpus states. `point_in_time` and
+    `licensed_content_reproduction` are here because they belong to §9.1's *other*
+    configuration: they score against public ground truth on the target's own index, and
+    the planted battery could not exercise them however it were written. We do not plant
+    licensed content, because planting it would be the act §8.2 #18 asks about.
+
+    So the assertion changed shape rather than being relaxed. What it now demands is that
+    each exemption names the battery its check does live on — an exemption that named no
+    home would be a check nothing anywhere exercises, which is how a register quietly
+    shrinks.
     """
+    from legal_rag_audit.external import build_external_probes
     from legal_rag_audit.probes import UNTESTABLE_ON_THE_BATTERY
 
     report = run(tmp_path, answers(build_probes()))
@@ -124,9 +134,13 @@ def test_an_untestable_check_reports_not_eligible(tmp_path):
         assert report["checks"][name]["status"] == NOT_ELIGIBLE
         assert report["checks"][name]["eligible"] == 0
 
-    assert not UNTESTABLE_ON_THE_BATTERY, (
-        "an exemption was added — update this test's docstring so the reason is "
-        "recorded where somebody will read it"
+    elsewhere = {
+        check for probe in build_external_probes() for check in probe.eligible_for
+    }
+    homeless = set(UNTESTABLE_ON_THE_BATTERY) - elsewhere
+    assert not homeless, (
+        f"exempt from the planted battery and eligible on no other: {sorted(homeless)}. "
+        f"A check no battery exercises is one the register counts and nothing tests."
     )
 
 
@@ -457,8 +471,19 @@ def test_the_open_half_matches_the_plan():
         "structural_integrity",
         "disambiguation",
         "context_memory",
+        # A positive expectation, so `held` by the mechanical test — and the bundled
+        # anchor set ships in the wheel, so for a demo run it is not withheld in fact.
+        # Exactly the published-demo-seed position: right for a demonstration, and an
+        # engagement authors its own anchors.
+        "point_in_time",
     }
-    assert by_key[CONDITIONAL] == {"cross_tenant_leakage"}
+    # Chunk capture moves detection below the layer an output filter reaches, which is
+    # what both of these turn on: a canary and a publisher marker can each be stripped
+    # from prose while staying in the index.
+    assert by_key[CONDITIONAL] == {
+        "cross_tenant_leakage",
+        "licensed_content_reproduction",
+    }
 
 
 def test_an_inverted_expectation_is_never_withheld():
@@ -518,7 +543,7 @@ def test_the_summary_counts_what_was_published(tmp_path):
     """Withholding stated as a bounded number, not an atmosphere."""
     report = run(tmp_path, answers(build_probes()))
     assert report["summary"]["published_keys"] == 9  # 8, plus response_divergence
-    assert report["summary"]["withheld_keys"] == 9  # 8 held + cross-tenant, no chunks
+    assert report["summary"]["withheld_keys"] == 11  # 9 held + 2 conditional, no chunks
 
 
 def test_the_summary_reports_counts_not_a_rate(tmp_path):

@@ -18,7 +18,7 @@ report along with their definitions.
 
 | Tier | What it is | Register label | Defensibility |
 |---|---|---|---|
-| **Tier 1 — assertion-free** | Exact match against ground truth we authored and planted in the corpus. **No model anywhere in the evaluation path.** | Measured | A planted token either appeared or it did not |
+| **Tier 1 — assertion-free** | Exact match against ground truth that is ours by construction (planted in the corpus) or a matter of public record (a phrase quoted from the primary source). **No model anywhere in the evaluation path.** | Measured | The token either appeared or it did not |
 | **Tier 2 — instrument-scored** | Semantic scoring by a named local model against a stated threshold | Measured (instrument disclosed) | Contestable on threshold and model choice. Bounded by full disclosure |
 
 The split matters more than the checks themselves. The predictable response to any
@@ -75,15 +75,15 @@ they are being built against a written spec, not discovered.
 | Public CI: tests, gates, `pip-audit` / Bandit / Semgrep / Trivy | **Shipped** — actions pinned by commit SHA |
 | Signed releases: GPG tag, SLSA provenance, cosign | **Shipped** — `scripts/verify_release.sh` is the reader's half |
 | Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
-| 17 evaluators against a configured endpoint | **Shipped** — single pass, all rewritten to the §8.2 recipes |
-| Licensed-content reproduction check (#18) | Specified — v0.4.0 |
+| 19 evaluators against a configured endpoint | **Shipped** — all rewritten to the §8.2 recipes |
+| Licensed-content reproduction check (#18) | **Shipped** — identifiers only; `in_index` / `external_fetch` / `unattributed` never collapsed |
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
 | JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
 | Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
 | Non-root container, base image pinned by digest, deps under `--require-hashes` | **Shipped** — single image; the split, publication and image signing are pending |
 | `validate` / `generate` / `score` mode split; scoring offline and enforced | **Shipped** |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
-| Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 15 Tier 1, 2 Tier 2 |
+| Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 17 Tier 1, 2 Tier 2 |
 | Run manifest: hashes, commit SHA, model versions, seed, corpus mode, battery composition | **Shipped** |
 | `hash` handover record; `score` refuses a ground truth that moved | **Shipped** |
 | `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | **Shipped** |
@@ -91,8 +91,8 @@ they are being built against a written spec, not discovered.
 | Seeded plant generation with collision guard | **Shipped** — `plant`, 29 invariants across 15 documents |
 | Two-phase corpus upload for index freshness | **Shipped** |
 | N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
-| Pathological reference target, sensitivity/specificity CI gates | **Shipped** — 18 profiles, both gates green, [matrix published](docs/harness-verification.md) |
-| Existing-corpus mode and point-in-time probe pairs | Specified — v0.4.0 |
+| Pathological reference target, sensitivity/specificity CI gates | **Shipped** — 20 profiles over both batteries, [matrix published](docs/harness-verification.md) |
+| Existing-corpus mode and point-in-time probe pairs | **Shipped** — no `upload` endpoint needed; anchors quoted from `legislation.gov.uk` |
 
 The mode split has landed: `generate` and `score` are separate commands, and scoring
 runs with sockets disabled. A run now produces a complete handover document — the
@@ -123,6 +123,7 @@ convenience.
 | `validate` | 3 neutral probes; prints the raw response body and what each JSONPath extracted; names every setup problem that would otherwise reach the report as a finding; exits | Target only | Them, pre-sale, free |
 | `generate` | Fires the battery at the configured endpoints, writes `responses.jsonl` | Target only | Them — or replaced entirely by their own tooling |
 | `score` | Reads `responses.jsonl` plus the ground-truth manifest, writes the report | **None** | Us |
+| `ingest` | Re-checks the point-in-time anchors against `legislation.gov.uk`. Scores nothing, changes no ground truth | Primary source only | Us, on a schedule |
 
 ```
                          ┌──────────────── OUR SIDE ────────────────┐
@@ -748,9 +749,58 @@ High Court has issued in a year. It does **not** check the body of reported auth
 scoring is offline by construction, so no lookup leaves the machine, and the residue is
 closed by manual review of the generated citations in the first corpus of each domain.
 
-**Existing corpus:** set `mode: existing` and give a `path:`. Nothing is uploaded and
-ground truth is external — point-in-time pairs and licensed-content reproduction land
-there in v0.4.0.
+### Existing corpus — the half that needs no upload endpoint
+
+Set `mode: existing`. There is no `path:`, because there is nothing to read: the corpus is
+whatever the target already holds, and **`endpoints.upload` need not be in the config at
+all**. That is the point rather than a convenience. Upload access is usually the friction
+that turns a £500 engagement into a security review, so this half runs standalone.
+
+```bash
+legal-rag-audit plant --mode existing -o run/       # probes + answer key, no corpus
+legal-rag-audit generate -c config.yaml --probes-in run/probes.jsonl -o responses.jsonl
+```
+
+What it gives up is everything planting buys — no canaries, no injection payloads, no
+contradiction pairs. What it gives back is ground truth nobody has to take our word for,
+and findings that cannot be dismissed as synthetic. [§9.1 says to run
+both](V2_FULL_PLAN.md); each covers the other's weakness.
+
+Two checks live only here:
+
+| Check | Ground truth | Needs |
+|---|---|---|
+| `point_in_time` | The phrase in force on a date, quoted from `legislation.gov.uk` under the Open Government Licence | `chat` |
+| `licensed_content_reproduction` | A published set of publisher-assigned identifiers | `chat` |
+
+**Point-in-time pairs ask the same provision at two moments, and the pair is the test.** A
+single dated question measures almost nothing: a system that always answers with the
+current law passes every question about the present. Two anchors ship — the unfair
+dismissal qualifying period under ERA 1996 s.108, and the compensatory award cap under
+s.124 — chosen so each phrase appears in one version and no other, and so neither can be
+reached by a paraphrase of the other. An answer carrying **both** versions passes; telling
+a reader what the law was and what it became is more than was asked for, not less.
+
+**Refreshing them is a command, not a diary note:**
+
+```bash
+legal-rag-audit ingest --strict -o run/statutes.json
+```
+
+It fetches each anchored provision as it stood on its date and confirms the phrase is
+still there. Scoring never touches it — the anchors are committed and the battery runs
+offline — so what this catches is an anchor going stale, which would otherwise mean
+scoring answers against a version of the law that no longer exists. **Storage footprint:
+1.4 kB kept of 810 kB fetched** across the four snapshots, because the store keeps a
+window around each phrase rather than the statute.
+
+**Licensed content is the question procurement already asks**, and the check is built so
+it can never become an accusation. Only publisher-assigned *identifiers* are matched —
+never editorial prose, which would mean storing a publisher's headnotes in order to ask
+whether somebody else is storing them. A marker in the retrieval is the finding; a marker
+cited to the publisher's own service passes as `external_fetch`; a marker with no evidence
+either way is `NOT_CAPTURED`. The finding says content whose licence sits between them and
+the publisher is being served from their index — never that anyone is infringing.
 
 ### The corpus is checked before anything is sent
 
@@ -760,7 +810,11 @@ it **aborts the run with a diagnosis and writes no report** (exit code 2). Check
 - A planted root has a `base/` directory. A flat directory is refused rather than read as
   one, because reading it that way would silently drop the revision phase and take index
   freshness with it.
-- `mode: existing` — `path` is set, exists, and holds at least one readable document.
+- `mode: existing` — nothing is checked, because nothing is read. The corpus is the
+  target's own index and no local documents are involved.
+- A run with documents to upload and no `endpoints.upload` aborts naming the three ways
+  out, because they mean different things: probe their index, assume they hold the
+  corpus, or declare somewhere to send it.
 - Every document is UTF-8 and non-empty. Hidden files are skipped.
 - Document order is sorted, not filesystem order, so the same corpus reads the same way
   on every machine.

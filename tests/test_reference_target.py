@@ -32,13 +32,15 @@ sensitivity number is worth less without them:
 import ast
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
 from legal_rag_audit.config import AuditConfig
 from legal_rag_audit.evaluators.latency import SUGGESTIVE_GAP_RATIO
+from legal_rag_audit.external import build_external_ground_truth, build_external_probes
 from legal_rag_audit.generate import generate
 from legal_rag_audit.interchange import write_ground_truth, write_probes
 from legal_rag_audit.plants import plant, write_corpus
@@ -69,55 +71,74 @@ class Run:
     report: dict
     uploaded: list[str]
     unknown_queries: list[str]
+    config_path: Path
 
 
-def _config(work: Path, endpoints: dict[str, str], passes: int) -> Path:
+def _config(work: Path, endpoints: dict[str, str], passes: int, mode: str) -> Path:
     path = work / "config.yaml"
-    path.write_text(
-        "target:\n"
-        "  name: reference-target\n"
-        "  endpoints:\n"
-        f"    chat: {endpoints['chat']}\n"
-        f"    upload: {endpoints['upload']}\n"
-        f"    retrieval: {endpoints['retrieval']}\n"
-        "  auth:\n"
-        "    type: none\n"
-        "  response_format:\n"
-        "    answer_field: response.text\n"
-        "    citations_field: response.sources\n"
-        "corpus:\n"
-        "  mode: planted\n"
+    lines = [
+        "target:",
+        "  name: reference-target",
+        "  endpoints:",
+        f"    chat: {endpoints['chat']}",
+        f"    retrieval: {endpoints['retrieval']}",
+    ]
+    # Existing-corpus mode declares no upload endpoint at all. Not merely unused — absent
+    # from the config, so a run that tried to upload could not resolve a URL to send to.
+    # That is what F25 means by *needs no `upload` endpoint*, and writing the key anyway
+    # would leave the claim resting on the code's good behaviour.
+    if mode == "planted":
+        lines.append(f"    upload: {endpoints['upload']}")
+    lines += [
+        "  auth:",
+        "    type: none",
+        "  response_format:",
+        "    answer_field: response.text",
+        "    citations_field: response.sources",
+        "corpus:",
+        f"  mode: {mode}",
         # Zero, and the report says so beside the freshness finding. A mock invalidates
         # its index the instant the document arrives, so a wait would measure nothing
         # except how patient the test suite is.
-        "  revision_wait_seconds: 0\n"
-        "battery:\n"
-        f"  passes: {passes}\n",
-        encoding="utf-8",
-    )
+        "  revision_wait_seconds: 0",
+        "battery:",
+        f"  passes: {passes}",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
-def _execute(work: Path, profile: Profile, tier2: bool) -> Run:
+def _execute(work: Path, profile: Profile, tier2: bool, battery: str) -> Run:
     work.mkdir(parents=True, exist_ok=True)
+    existing = battery == "existing"
 
-    corpus = plant(SEED)
-    corpus_root = work / "corpus"
-    write_corpus(corpus_root, corpus)
-    probes = build_probes(passes=profile.passes, corpus=corpus)
+    corpus_root: Optional[Path] = None
+    if existing:
+        probes = build_external_probes(passes=profile.passes)
+        ground_truth = build_external_ground_truth()
+    else:
+        corpus = plant(SEED)
+        corpus_root = work / "corpus"
+        write_corpus(corpus_root, corpus)
+        probes = build_probes(passes=profile.passes, corpus=corpus)
+        ground_truth = build_ground_truth(corpus)
+
     probes_path = work / "probes.jsonl"
     write_probes(probes_path, probes)
     ground_truth_path = work / "ground_truth.json"
-    write_ground_truth(ground_truth_path, build_ground_truth(corpus))
+    write_ground_truth(ground_truth_path, ground_truth)
 
     responses_path = work / "responses.jsonl"
     with serve(profile, probes) as running:
-        config_path = _config(work, running.endpoints(), profile.passes)
+        config_path = _config(
+            work, running.endpoints(), profile.passes, "existing" if existing else "planted"
+        )
         generate(
             config=AuditConfig.load_from_yaml(str(config_path)),
             responses_path=str(responses_path),
             passes=profile.passes,
-            corpus_dir=str(corpus_root),
+            corpus_dir=None if existing else str(corpus_root),
             probes_in=str(probes_path),
         )
         uploaded = running.uploaded
@@ -133,7 +154,13 @@ def _execute(work: Path, profile: Profile, tier2: bool) -> Run:
         skip_tier2=not tier2,
         config_path=str(config_path),
     )
-    return Run(profile=profile, report=report, uploaded=uploaded, unknown_queries=unknown)
+    return Run(
+        profile=profile,
+        report=report,
+        uploaded=uploaded,
+        unknown_queries=unknown,
+        config_path=config_path,
+    )
 
 
 class _Runs:
@@ -141,14 +168,17 @@ class _Runs:
 
     def __init__(self, root: Path):
         self.root = root
-        self._cache: dict[tuple[str, bool], Run] = {}
+        self._cache: dict[tuple[str, bool, str], Run] = {}
 
-    def get(self, profile: Profile, tier2: bool = False) -> Run:
-        key = (profile.name, tier2)
+    def get(
+        self, profile: Profile, tier2: bool = False, battery: Optional[str] = None
+    ) -> Run:
+        battery = battery or profile.battery
+        key = (profile.name, tier2, battery)
         if key not in self._cache:
-            suffix = "-tier2" if tier2 else ""
+            suffix = f"-{battery}" + ("-tier2" if tier2 else "")
             self._cache[key] = _execute(
-                self.root / f"{profile.name}{suffix}", profile, tier2
+                self.root / f"{profile.name}{suffix}", profile, tier2, battery
             )
         return self._cache[key]
 
@@ -229,18 +259,21 @@ def test_the_profile_set_is_the_one_the_plan_names():
         "slow_regenerate",
         "unsupported_prose",
         "irrelevant_chunks",
+        "serve_licensed_content",
+        # Not in §14.1's table. Point-in-time correctness is F27's *distinct evaluator*
+        # rather than one of §8.2's eighteen, so it arrived with no pathology beside it
+        # and the registry-driven gate refused to build until one existed.
+        "answer_current_law",
         "nondeterministic",
         "clean",
     ]
-    assert "serve_licensed_content" not in {p.name for p in PROFILES}, (
-        "the licensed-content profile arrives in Phase G with evaluator #18; a profile "
-        "for a check that does not exist would be a matrix row that can never go green"
-    )
 
 
-def test_the_reference_target_answers_every_probe_in_the_battery():
+def test_the_reference_target_answers_every_probe_in_both_batteries():
     """A probe the mock cannot answer would be scored as the target failing to."""
-    assert answered_probe_ids() == {entry.probe_id for entry in BATTERY}
+    planted = {entry.probe_id for entry in BATTERY}
+    existing = {probe.probe_id for probe in build_external_probes()}
+    assert answered_probe_ids() == planted | existing
 
 
 def test_the_reference_target_cannot_read_the_answer_key():
@@ -338,20 +371,26 @@ def test_sensitivity_tier2(runs, profile):
 # ------------------------------------------------------------------- specificity
 
 
-def test_specificity_the_clean_target_produces_no_findings(runs):
-    """§14.2's release blocker. Three passes, zero findings, Tier 1."""
-    report = runs.get(CLEAN).report
+@pytest.mark.parametrize("battery", ["planted", "existing"])
+def test_specificity_the_clean_target_produces_no_findings(runs, battery):
+    """§14.2's release blocker. Three passes, zero findings, Tier 1, both batteries."""
+    report = runs.get(CLEAN, battery=battery).report
     assert _findings(report) == set()
     assert report["summary"]["verdict"] == "PASS"
 
 
-def test_specificity_every_check_passed_or_did_not_apply(runs):
+@pytest.mark.parametrize("battery", ["planted", "existing"])
+def test_specificity_every_check_passed_or_did_not_apply(runs, battery):
     """`PASS` or `NOT_ELIGIBLE` — never `NOT_CAPTURED`, which is not a pass either.
 
     Tier 2 is excluded here because this run scored with `--skip-tier2`, which reports
     those two as not run; `test_sensitivity_tier2` covers them where the layer exists.
+
+    Across the two batteries every check is exercised at least once, and each battery
+    reports the other's checks as `NOT_ELIGIBLE` rather than as passes — which is the
+    whole of F40 applied at the level of a configuration rather than a probe.
     """
-    report = runs.get(CLEAN).report
+    report = runs.get(CLEAN, battery=battery).report
     for name, check in report["checks"].items():
         if CHECKS[name].tier == 2:
             continue
@@ -359,6 +398,81 @@ def test_specificity_every_check_passed_or_did_not_apply(runs):
             f"{name} is {check['status']} on a target known to be correct: "
             f"{check.get('reason') or check.get('partial')}"
         )
+
+
+def test_the_two_batteries_between_them_exercise_every_check(runs):
+    """Neither configuration covers the register alone, and §9.1 says to run both."""
+    covered: set[str] = set()
+    for battery in ("planted", "existing"):
+        report = runs.get(CLEAN, battery=battery).report
+        covered |= {
+            name
+            for name, check in report["checks"].items()
+            if check["status"] != "NOT_ELIGIBLE"
+        }
+    tier1 = {spec.name for spec in REGISTRY if spec.tier == 1}
+    assert tier1 <= covered, f"never eligible in either battery: {sorted(tier1 - covered)}"
+
+
+def test_the_existing_battery_needs_no_upload_endpoint(runs):
+    """F25, asserted on the config rather than on the run.
+
+    The existing-corpus config declares no `endpoints.upload` at all — not an unused
+    key, an absent one — so a run that tried to upload could not have resolved a URL to
+    send to. That is the difference between a claim about the code's behaviour and a
+    claim about what the target had to expose.
+    """
+    run = runs.get(CLEAN, battery="existing")
+    config = AuditConfig.load_from_yaml(str(run.config_path))
+    assert config.target.endpoints.upload is None
+    assert run.uploaded == []
+    assert run.report["capture"]["document_ids_supplied"] is False
+
+
+def test_a_marker_cited_to_the_publishers_own_service_is_not_a_finding(runs):
+    """§8.2 #18's control, and the reason this check is not an accusation.
+
+    `external_fetch` is the outcome that keeps a licensing finding honest: a system
+    showing a publisher's marker because it queried the publisher is doing the licensed
+    thing, and reporting that as evidence about their index would be alleging unlawful
+    conduct against a company behaving correctly. It passes, and it is recorded.
+    """
+    from mock_target.pathologies import CITE_PUBLISHER_SERVICE
+
+    profile = replace(
+        PROFILE["clean"],
+        name="cite_publisher_service",
+        apply=CITE_PUBLISHER_SERVICE,
+        battery="existing",
+        passes=1,
+    )
+    report = runs.get(profile).report
+    check = report["checks"]["licensed_content_reproduction"]
+    assert check["status"] == "PASS"
+    outcomes = {row["outcome"] for row in check["detail"]["per_probe"]}
+    assert "external_fetch" in outcomes
+    assert "in_index" not in outcomes
+    assert _findings(report) == set()
+
+
+def test_a_marker_with_no_retrieval_evidence_is_not_captured(runs):
+    """The third outcome. Not a finding, and not a pass either (F40).
+
+    A marker in prose with no citation is consistent with an index holding the licensed
+    edition and with the model reciting from weights. This check cannot separate them, so
+    it says so rather than picking the reading that produces a finding.
+    """
+    from legal_rag_audit.evaluators import LicensedContentEvaluator
+    from mock_target import statutes
+
+    result = LicensedContentEvaluator().evaluate(
+        answer=f"The headnote at {statutes.PUBLISHER_MARKER} says the duty extended.",
+        retrieved_chunks=None,
+        citations=[],
+    )
+    assert result["status"] == "NOT_CAPTURED"
+    assert result["outcome"] == "unattributed"
+    assert result["appeared"] == []
 
 
 def test_the_clean_run_reached_the_target_cleanly(runs):

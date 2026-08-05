@@ -245,13 +245,20 @@ def build_run_manifest(
             "from one. Its expectations were authored directly, and a report from it "
             "cannot claim its invariants were unguessable."
         )
-        corpus_mode = None
+
+    # Declared by whatever built the answer key, not inferred here. `score` sees no
+    # config and no corpus, and the absence of plants is true of a hand-authored planted
+    # battery as well as of an existing-corpus one — so inferring it would mean the
+    # report naming §9.1's configuration on a guess.
+    corpus_mode = ground_truth.corpus_mode if ground_truth else None
+    if corpus_mode is None:
         not_recorded["run.corpus_mode"] = (
-            "no seed and no plants in the ground-truth manifest, so `score` cannot tell "
-            "whether the target was probed against a corpus we authored or its own."
+            "the ground-truth manifest does not declare which of the two configurations "
+            "in §9.1 this battery is for, and `score` sees no config and no corpus to "
+            "tell from. A finding against documents we authored and a finding against "
+            "the target's own index answer different objections, so this is left unsaid "
+            "rather than guessed."
         )
-    else:
-        corpus_mode = "planted"
 
     instruments = [InstrumentRecord(**row) for row in describe(thresholds)]
     not_recorded["authorisation"] = (

@@ -1,4 +1,4 @@
-"""`ground_truth.v2` — the withheld manifest (V2_FULL_PLAN.md §6.4, F26).
+"""`ground_truth.v3` — the withheld manifest (V2_FULL_PLAN.md §6.4, F26).
 
 Everything a probe file deliberately does not say: what a correct answer contains, what
 it must never contain, and which document it has to be attributed to. Handed over
@@ -20,6 +20,20 @@ carried in a free-form dict under a name that said what it was. The §8.2 rewrit
 each of them a named field, so the contract now describes the check rather than the
 function signature that happened to implement it, and `adjacency` became a list because
 two checks need more than one pairing.
+
+**What changed from v2.** Phase G added `as_at_date`, `provision` and `paired_with` for
+point-in-time correctness (§9.2, F27). All three are distinctions a v2 manifest cannot
+draw: *the wrong version came back* is unreadable without the date the question asked
+about; an answer that names the provision correctly and then gives the superseded text is
+a different finding from one that gets both wrong, because it reads as authoritative; and
+a single dated question measures almost nothing, since a system that always answers with
+the current law passes every question about the present. **The pair is the test.**
+
+This is also the first manifest whose expectations are not ours by construction. A
+planted invariant is true because we planted it; *what section 108 said on 1 January 2011*
+is true because the primary source says so, and `external.anchors` records the URL beside
+every phrase so a reader can check it against Crown copyright material rather than
+against us.
 """
 
 import json
@@ -29,7 +43,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .jsonl import InterchangeError
-from .versions import GROUND_TRUTH_V2, assert_schema
+from .versions import GROUND_TRUTH_V3, assert_schema
 
 
 class Adjacency(BaseModel):
@@ -151,6 +165,19 @@ class Expectation(BaseModel):
     shapes: list[str] = Field(default_factory=list)
     side_effect: Optional[SideEffect] = None
     pairing: Optional[Pairing] = None
+    #: The date the question asks about, for point-in-time probes (§9.2, F27). Null means
+    #: the question is asked in the present tense. On the page beside the finding,
+    #: because *"the wrong version came back"* is unreadable without it.
+    as_at_date: Optional[str] = None
+    #: The provision a correct answer has to name, e.g. `section 108`. Used by the
+    #: `version_mismatch` counter: an answer that identifies the provision correctly and
+    #: then gives the superseded text reads as authoritative and is wrong about the only
+    #: thing that mattered, which is a different finding from getting both wrong.
+    provision: Optional[str] = None
+    #: The other half of a point-in-time pair. The pairing is the test — one dated
+    #: question measures almost nothing, because a system that always answers with the
+    #: current law passes every question about the present.
+    paired_with: Optional[str] = None
     #: The tenant the probe was issued as, for scoping leakage checks.
     queried_as: Optional[str] = None
     #: The namespace the query was scoped to, where the target supports scoping. Null
@@ -163,8 +190,8 @@ class GroundTruth(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["ground_truth.v2"] = Field(
-        default=GROUND_TRUTH_V2, alias="schema"
+    schema_: Literal["ground_truth.v3"] = Field(
+        default=GROUND_TRUTH_V3, alias="schema"
     )
     #: The seed that generated `plants`. Null only for a battery with no plants at all.
     seed: Optional[str] = None
@@ -172,6 +199,13 @@ class GroundTruth(BaseModel):
     #: this run. A report whose plants came from a published seed cannot claim they were
     #: unguessable, and this is what stops it claiming that by omission.
     seed_source: Optional[str] = None
+    #: Which of §9.1's two configurations this battery is for. `score` has no config and
+    #: no corpus, so without this the manifest could only infer it from the absence of
+    #: plants — and *"no seed"* is true of a hand-authored planted battery as well as of
+    #: an existing-corpus one. The report has to name the configuration (§6.5
+    #: `run.corpus_mode`), because a finding against documents we wrote and a finding
+    #: against the target's own index answer different objections.
+    corpus_mode: Optional[Literal["planted", "existing"]] = None
     plants: list[Plant] = Field(default_factory=list)
     guard: Optional[PlantGuard] = None
     expectations: list[Expectation]
@@ -200,7 +234,7 @@ def load_ground_truth(path: str | Path) -> GroundTruth:
     if not isinstance(obj, dict):
         raise InterchangeError(f"{p}: expected a JSON object at the top level.")
 
-    assert_schema(obj.get("schema"), GROUND_TRUTH_V2, where=str(p))
+    assert_schema(obj.get("schema"), GROUND_TRUTH_V3, where=str(p))
 
     try:
         gt = GroundTruth(**obj)
