@@ -36,8 +36,14 @@ target:
     # delete:
     #   url: "https://staging.lexcorp.example.com/api/v1/documents/{{DOCUMENT_ID}}"
     #   method: "DELETE"
+  # What the report, manifest and response file call this target. Null keeps them
+  # anonymous, which is what an aggregate claim across several products needs; `name`
+  # above never leaves your machine either way. Set it to the vendor's own name when the
+  # report is going to the vendor — naming one that should not have been named cannot be
+  # undone (§16.3), so the default sits on the recoverable side.
+  pseudonym: null
   auth:
-    type: "bearer"  # bearer | api_key | basic | none
+    type: "bearer"  # bearer | api_key | basic | cookie | none
     token_env: "TARGET_API_KEY"  # reads from env var
   response_format:
     answer_field: "response.text"  # JSONPath to the answer text

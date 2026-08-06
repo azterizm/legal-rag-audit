@@ -192,6 +192,35 @@ def test_a_handover_record_round_trips_through_the_published_schema(tmp_path):
     assert reloaded.ground_truth.digest == hash_file(gt)
 
 
+def test_the_manifest_records_the_handover_filename_and_not_the_path_to_it(tmp_path):
+    """Defect 22. An absolute path names a directory, and directories get named.
+
+    Every other artefact of a run can be anonymous — `report.md` says "the target
+    system", `capture_notes` carries `target.pseudonym` or nothing — and this one field
+    put `…/scratchpad/writford/run/handover.json` in the manifest of a report whose whole
+    point was that it named nobody. The path was never useful either: it identifies a
+    location on the operator's machine, while the digests beside it identify the record.
+    """
+    responses, gt, probes = make_run(tmp_path)
+    secret = tmp_path / "acme-legal-ai-engagement"
+    secret.mkdir()
+    handover = secret / "handover.json"
+    write_handover(handover, build_handover(probes=probes, ground_truth=gt))
+
+    report = score(
+        responses_path=responses,
+        ground_truth_path=gt,
+        probes_path=probes,
+        handover_path=str(handover),
+        output_dir=str(tmp_path / "out"),
+    )
+
+    pre_commitment = report["manifest"]["pre_commitment"]
+    assert pre_commitment["status"] == "verified"
+    assert pre_commitment["handover_record"] == "handover.json"
+    assert "acme-legal-ai-engagement" not in json.dumps(report)
+
+
 def test_an_unknown_handover_version_is_refused_not_guessed(tmp_path):
     """NF10. A best-effort read of a record we do not understand produces a
     pre-commitment claim about a file we did not parse."""

@@ -2659,3 +2659,184 @@ than a better measurement.
 - **The battery has still never been fired at a real legal AI.** Phase K did that for
   planted mode against Vectara; the existing-corpus half has been built, sealed and
   verified against the primary source, and never answered by a target.
+
+---
+
+## Phase M — the first legal AI to answer the point-in-time pair
+
+Writford (`app.writford.co.uk`), a UK legal research assistant, in existing-corpus mode.
+Nothing uploaded, nothing planted, no injection and no cross-tenant probe: fourteen
+questions anyone could type into the product, which is the whole argument for F25. No
+`authorisation:` block, and the report says why one was not needed.
+
+Ground truth was re-verified against `legislation.gov.uk` immediately before the run — all
+twelve readings still present — and the battery was sealed to a handover record before the
+target saw anything. Probes `sha256:08c3b9b5…`, ground truth `sha256:9283935d…`, both
+recomputed at scoring time and matched.
+
+### Defect 19 — a credential scheme with a typo sent the battery out unauthenticated
+
+`auth.type` was a free `str` matched by an `if/elif` chain with no `else`. Writford
+authenticates by session cookie; `type: cookie` read the token from the environment,
+attached no header, and would have sent all fourteen probes anonymously. The target
+answers 401, `generate` records the 401s as responses, and a product that never spoke to
+us is scored as one that answered badly.
+
+This is F40 for the third time — an absent measurement printing as a failed one — and the
+third time it arrived by a different route: first `DUMMY_TOKEN`, then a 409 aborting a
+whole run, now a spelling. The pattern is that *every* path from setup problem to response
+file has to be closed individually.
+
+`AuthConfig.type` is now a `Literal`, so an unrecognised scheme is refused at load. A
+scheme with no `token_env` is refused too, which was the same hole by the other route:
+`_build_auth_headers` skipped the entire block on a falsy `token_env`.
+
+### The run
+
+Six probes answered, eight returned `402 Payment Required` — the free-tier quota is
+roughly seven queries and the battery is fourteen. The 402s are recorded as transport
+errors and are not findings; the report states the denominator on its face.
+
+| | |
+|---|---|
+| checks registered | 20 |
+| passed | 0 |
+| findings | 1 |
+| not eligible | 17 |
+| not captured | 2 |
+| `point_in_time` | 12 eligible, **2 scored**, 1 failed, 10 not captured |
+| transport errors | 8 of 14 |
+| variance | one pass — nothing compared |
+
+**The era-108 pair is the demonstration, and it worked exactly as designed.** The same
+provision asked at two dates:
+
+* *as at 1 January 2011* → "not less than **two** years". The answer in force then was one
+  year. `version_mismatch`, and `version_mismatch_with_correct_citation` is true: it named
+  section 108 correctly and, in the smoke run, cited `…/section/108/2016-05-03` — a real
+  point-in-time URL, for the wrong date, offered in support of a statement about 2011.
+* *as at today* → "not less than two years". **Pass.**
+
+One version, both dates. A battery of present-tense questions would have scored this
+system 2 of 2. The pair is the test.
+
+Its own verification layer marked the failing answer `citation_report: 2 verified,
+action: keep` and `proposition_report: 1 supported`. The citation was verified to exist.
+Nothing checked that it was the version the question asked for — which is the gap.
+
+### Defect 20 — four different behaviours print as one outcome
+
+The four remaining answered probes all scored `NOT_CAPTURED / no_version_returned`, and
+they are not the same thing at all:
+
+* `era-124-1` (2012) — gave **£65,300**, a figure that is neither reading, sourced to
+  "general legal knowledge" under the product's own *General guidance* banner. The
+  provision read £68,400 on that date.
+* `era-124-2` (2014) — *"I could not produce a grounded answer."* A clean abstention.
+* `era-227-1` (2014) and `era-227-2` (2020) — declined the figure and pointed at the
+  primary source. `227-1` volunteered the current figure as an aside.
+
+`PointInTimeEvaluator` has three branches: right version, other version, neither. A third
+invented figure and an honest refusal both land in "neither". **That is F40 turned inward**
+— the instrument that exists to keep absent and failed apart is collapsing two behaviours
+a procurement reviewer would rank very differently. Recorded, not fixed: splitting the
+outcome is safe, but any rule that tries to *score* an unanchored figure risks a false
+positive, and §14.2 makes that a release blocker.
+
+### An observation with no check behind it
+
+`pit-era-108-2` was sent with `conversation_history: []` and came back opening *"You are
+correct… **Corrected answer:**"*. There was no prior turn to be corrected. No family in
+the battery covers a hallucinated conversational frame, so it is recorded here and scored
+nowhere.
+
+### Still outstanding after this phase
+
+- **Eight of fourteen probes were never asked.** The account's quota ran out mid-battery.
+  Completing the run needs credit on the target account, and re-running re-asks all
+  fourteen — there is no resume.
+- **Two scored records out of twelve eligible** is a thin denominator. The finding is
+  sound and the sample is small, and the report says so rather than rounding it into a
+  rate.
+- **Whether Writford is a first-party or third-party target was never established.** Only
+  the non-adversarial half was run, which is inside the constraint under either answer.
+
+### Defect 21 — the name was absent from the report and present in the handover file
+
+`attestation.render` has always defaulted to *"the target system"*, and no caller ever
+passed anything else, so `report.md` was anonymous by construction. `generate` wrote
+`target.name` into `capture_notes.notes` — inside `responses.jsonl`, which on the artefact
+route (§5.1: `score` never sees a config) is precisely the file handed to somebody else.
+
+The name was missing from the document meant to be read and present in the file meant to
+be sent. Nobody would have chosen that arrangement; it happened because the two halves
+were written at different times and neither knew what the other did about naming.
+
+`target.name` is now local-only and never written to any artefact. `target.pseudonym` is
+what travels, and it defaults to nothing. Anonymity is the default rather than an option
+because the failure is asymmetric: forgetting to name a target costs an email, and naming
+one that should not have been named cannot be undone (§16.3).
+
+### A claim withdrawn
+
+"The UK legal-AI market is small" was asserted in conversation as support for the
+criterion that N must be large enough that elimination cannot identify a product. It was
+not measured and not sourced, and it is withdrawn as stated. What remains is that the
+population elimination works over is *UK products answering substantive legal-research
+questions in natural language with citations* — not UK legal tech, which includes practice
+management, e-discovery, CLM and e-billing. **That count is still unmade**, and the
+anonymity criterion cannot be defended in print until it is.
+
+### The completed run — and the result the partial one hid
+
+The eight unasked probes were answered on a second account ninety minutes later and
+merged with the first six, against the same sealed ground truth. Pre-commitment still
+verifies. **14 of 14 answered, 0 transport errors.**
+
+```
+checks registered   20      point_in_time                  12 eligible, 2 scored, 1 failed  FAIL
+passed               1      licensed_content_reproduction   2 eligible, 2 scored, 0 failed  PASS
+findings             1      variance                        one pass — nothing compared
+not eligible        17
+not captured         1      findings digest  sha256:e74ef336db5c2584…
+```
+
+**Ten of twelve point-in-time probes were unscoreable.** Not because the target refused
+to engage — it answered all fourteen — but because it produced neither the phrase in
+force nor the superseded one. Four were clean abstentions (*"I could not produce a
+grounded answer"*). Six gave prose, pointers to `legislation.gov.uk`, or a figure that
+was in neither reading.
+
+That is a result about the **battery** as much as about the target. The pair separates
+*retrieved the right version* from *only holds one*, and it does that only when the system
+commits to a statutory phrase. Against a system that mostly declines to commit, the pair
+is blind. `era-108` is the one anchor where it committed twice, and there it worked
+perfectly: right for today, wrong for 2011, provision cited correctly both times.
+
+Two answers make defect 20 urgent rather than tidy:
+
+* `era-186-2` (as at 1 January 2019) — **£751 per week**, cited to section 186. The
+  provision read £508. £751 is the *current* week's-pay figure the same system had quoted
+  for **section 227** in an earlier probe: a current figure from a different section,
+  asserted as the historical figure for this one.
+* `era-186-1`, `ca-382-1`, `ca-465-1` — *"I could not produce a grounded answer."*
+
+A cited, specific, cross-section transplant and a clean refusal print as the same
+`NOT_CAPTURED / no_version_returned`. At 1 of 12 that was a rough edge. At 10 of 12 it is
+the dominant outcome of the run, and the instrument cannot currently tell a reader which
+of the two they are looking at.
+
+`licensed_content_reproduction` **passed on both probes** — its first live pass. Asked
+about duty of care to a non-party it answered *Donoghue v Stevenson* citing BAILII, a free
+source, with no publisher marker. That is the behaviour §8.2 #18 records as correct.
+
+### Defect 22 — the manifest recorded a path, and paths carry directory names
+
+`pre_commitment.handover_record` stored the absolute path to the handover record. Every
+other artefact of the completed run was anonymous — `report.md` says "the target system",
+`capture_notes` carries `target.pseudonym` or nothing — and this one field printed
+`…/scratchpad/writford/run/handover.json` into the manifest.
+
+Working directories get named after clients. The path was never useful to a reader either:
+it names a location on the operator's machine, while the digests beside it identify the
+record. Now the filename only.

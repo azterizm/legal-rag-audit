@@ -128,7 +128,13 @@ def verify_pre_commitment(
 
     return PreCommitment(
         status="verified",
-        handover_record=handover_path,
+        # The file's name, never the path to it. An absolute path is worthless to a
+        # reader — it names a directory on somebody else's laptop — and it carries
+        # whatever the operator called that directory. Working directories get named
+        # after clients, and this field put one in the report of a run whose every other
+        # artefact was anonymous (defect 22). The digests below are what identify the
+        # record; the path only ever identified the machine.
+        handover_record=Path(handover_path).name,
         created=handover.created,
         verified=sorted(verified),
         carried=sorted(carried),

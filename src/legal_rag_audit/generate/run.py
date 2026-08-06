@@ -122,8 +122,14 @@ class Generator:
             notes=" ".join(
                 part
                 for part in (
+                    # `target.pseudonym`, never `target.name`. This string is inside the
+                    # file the artefact route hands to someone else, so it is the worst
+                    # place in the tool to put a vendor's name by default — and it was
+                    # the only place the name appeared at all.
                     f"Produced by legal-rag-audit generate against "
-                    f"{self.config.target.name!r}.",
+                    f"{self.config.target.pseudonym!r}."
+                    if self.config.target.pseudonym
+                    else "Produced by legal-rag-audit generate.",
                     self.skipped_revision,
                 )
                 if part

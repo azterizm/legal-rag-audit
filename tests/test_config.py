@@ -200,6 +200,137 @@ class TestMissingCredential:
         assert client.headers == {}
 
 
+class TestTheTargetIsAnonymousUnlessTold:
+    """`target.name` is local. Artefacts carry `target.pseudonym`, or nothing.
+
+    §16.3: a wrong finding against a named company is unrecoverable. Forgetting to name a
+    target costs an email. The default has to sit on the recoverable side.
+    """
+
+    def test_a_config_that_says_nothing_produces_an_anonymous_note(self) -> None:
+        from legal_rag_audit.config import TargetConfig
+
+        assert TargetConfig(**MINIMAL["target"]).pseudonym is None
+
+    def test_the_capture_note_never_carries_the_local_name(self, tmp_path: Path) -> None:
+        """The note lives in `responses.jsonl`, which is the file that gets handed over.
+
+        `report.md` was already anonymous — `attestation.render` defaults to "the target
+        system" and no caller passes anything else. The name leaked through the artefact
+        route instead, which is the route designed to leave the building.
+        """
+        import asyncio
+
+        from legal_rag_audit.generate.run import Generator
+
+        config = load({**MINIMAL, "corpus": {"mode": "existing"}}, tmp_path)
+        config.target.name = "a-vendor-that-must-not-appear"
+
+        generator = Generator(config=config, documents=[], passes=1)
+        _responses, notes = asyncio.run(generator.run([]))
+
+        assert "a-vendor-that-must-not-appear" not in notes.notes
+        assert notes.notes == "Produced by legal-rag-audit generate."
+
+    def test_a_pseudonym_is_what_travels(self, tmp_path: Path) -> None:
+        import asyncio
+
+        from legal_rag_audit.generate.run import Generator
+
+        config = load({**MINIMAL, "corpus": {"mode": "existing"}}, tmp_path)
+        config.target.name = "a-vendor-that-must-not-appear"
+        config.target.pseudonym = "product-a"
+
+        _responses, notes = asyncio.run(Generator(config=config, documents=[], passes=1).run([]))
+
+        assert "a-vendor-that-must-not-appear" not in notes.notes
+        assert "product-a" in notes.notes
+
+
+class TestTheAuthScheme:
+    """Every accepted scheme attaches a header, and nothing else is accepted.
+
+    `type` was a free string matched against four values in an if/elif chain with no
+    else. A scheme the chain did not know fell off the end: the token was read from the
+    environment, no header was attached, and the probes went out unauthenticated. The
+    target answers 401 to all of them, `generate` records the 401s as responses, and a
+    system that never spoke to us is scored as one that answered badly — F40, from a
+    typo, in a report naming a company.
+    """
+
+    def _headers(self, monkeypatch, scheme: str) -> dict:
+        from legal_rag_audit.config import TargetConfig
+        from legal_rag_audit.transport.client import TargetClient
+
+        monkeypatch.setenv("A_CREDENTIAL", "s3cret")
+        client = TargetClient(
+            TargetConfig(
+                **{
+                    **MINIMAL["target"],
+                    "auth": {"type": scheme, "token_env": "A_CREDENTIAL"},
+                }
+            )
+        )
+        return client.headers
+
+    @pytest.mark.parametrize(
+        "scheme,header",
+        [
+            ("bearer", "Authorization"),
+            ("api_key", "x-api-key"),
+            ("basic", "Authorization"),
+            ("cookie", "Cookie"),
+        ],
+    )
+    def test_each_scheme_puts_the_credential_somewhere(
+        self, monkeypatch, scheme: str, header: str
+    ) -> None:
+        headers = self._headers(monkeypatch, scheme)
+        assert "s3cret" in headers[header], headers
+
+    def test_an_unrecognised_scheme_is_refused_at_load(self) -> None:
+        """Not at request time, and not silently. `Literal` is what holds this."""
+        from legal_rag_audit.config import TargetConfig
+
+        with pytest.raises(ValidationError):
+            TargetConfig(
+                **{**MINIMAL["target"], "auth": {"type": "cookies", "token_env": "X"}}
+            )
+
+    def test_a_scheme_with_nowhere_to_read_the_credential_from_is_refused(self) -> None:
+        """The same failure by the other route: a scheme set and no `token_env`.
+
+        `_build_auth_headers` skipped the whole block on a falsy `token_env`, so this
+        also sent the battery out unauthenticated.
+        """
+        from legal_rag_audit.config import TargetConfig
+
+        with pytest.raises(ValidationError) as excinfo:
+            TargetConfig(**{**MINIMAL["target"], "auth": {"type": "bearer"}})
+
+        assert "token_env" in str(excinfo.value)
+
+    def test_the_cookie_header_is_passed_through_whole(self, monkeypatch) -> None:
+        """A session product usually needs several cookies, and they arrive as one string.
+
+        Splitting them across config keys would put half a credential in a file that gets
+        committed; the whole header lives in the environment or nowhere.
+        """
+        from legal_rag_audit.config import TargetConfig
+        from legal_rag_audit.transport.client import TargetClient
+
+        monkeypatch.setenv("A_CREDENTIAL", "auth_token=abc; auth_check=1")
+        client = TargetClient(
+            TargetConfig(
+                **{
+                    **MINIMAL["target"],
+                    "auth": {"type": "cookie", "token_env": "A_CREDENTIAL"},
+                }
+            )
+        )
+        assert client.headers["Cookie"] == "auth_token=abc; auth_check=1"
+
+
 def test_the_docstring_example_in_the_error_is_valid_yaml(tmp_path: Path) -> None:
     """The `use_bundled` diagnosis prints a config fragment. It has to parse.
 

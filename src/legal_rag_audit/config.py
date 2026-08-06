@@ -65,10 +65,44 @@ class EndpointsConfig(BaseModel):
     delete: Optional[Union[str, EndpointConfig]] = None
 
 class AuthConfig(BaseModel):
+    """How the run authenticates to the target, and where the credential comes from.
+
+    `type` is a `Literal` rather than a free string, and that is the same argument as
+    `extra="forbid"` above. `_build_auth_headers` matched the four known values and fell
+    off the end of the chain for anything else — so `type: cookie` fetched the token,
+    attached no header, and sent every probe unauthenticated. The target answers 401, the
+    401s are recorded as responses, and a target that refused to talk to us scores as one
+    that answered badly. That is F40 again: an absent measurement printing as a failed
+    one, out of a typo.
+
+    `cookie` is here because a browser-session product has no other credential to offer.
+    It is a header like the rest — the point of naming it is that the token still lives in
+    the environment and never in the config file.
+    """
+
     model_config = STRICT
 
-    type: str = "none" # bearer | api_key | basic | none
+    type: Literal["none", "bearer", "api_key", "basic", "cookie"] = "none"
+    #: The environment variable holding the credential. Never the credential itself: a
+    #: config is committed, pasted into an issue and copied between runs, and a secret in
+    #: one of those is a secret in all of them.
     token_env: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _a_scheme_needs_somewhere_to_read_the_credential_from(self) -> "AuthConfig":
+        if self.type != "none" and not self.token_env:
+            raise ValueError(
+                f"auth.type is {self.type!r} but auth.token_env is not set.\n"
+                "  Nothing would be sent to authenticate, and the target's rejections "
+                "would be recorded\n"
+                "  as answers it gave. Name the environment variable holding the "
+                "credential:\n"
+                "    auth:\n"
+                f"      type: {self.type}\n"
+                "      token_env: TARGET_API_KEY\n"
+                "  Or set type: none if this endpoint genuinely takes no credential."
+            )
+        return self
 
 class ResponseFormatConfig(BaseModel):
     model_config = STRICT
@@ -81,9 +115,35 @@ class ResponseFormatConfig(BaseModel):
     stop_value: Optional[str] = None
 
 class TargetConfig(BaseModel):
+    """The system under test, and what the artefacts are allowed to call it.
+
+    **`name` never leaves this machine.** It is the operator's own label — which config is
+    which, on a laptop holding six of them. Everything that travels uses `pseudonym`, and
+    `pseudonym` defaults to nothing at all.
+
+    That split exists because the two halves of the tool disagreed. `attestation.render`
+    has always defaulted to *"the target system"* and no caller ever passed anything else,
+    so `report.md` was anonymous by construction. `generate` wrote the target's name into
+    `capture_notes.notes` — inside `responses.jsonl`, the one file the artefact route
+    hands to somebody else (§5.1: `score` never sees a config). The name was absent from
+    the document meant to be read and present in the file meant to be sent.
+
+    Anonymity is the default rather than an option because the failure is asymmetric.
+    Forgetting to name a target costs an email; naming one that should not have been named
+    cannot be undone, and §16.3 is explicit that a wrong finding against a named company is
+    unrecoverable. So a config that says nothing produces an artefact that says nothing,
+    and a report that names a vendor is something an operator had to type.
+    """
+
     model_config = STRICT
 
+    #: Local only. Never written to a response file, a report or a manifest.
     name: str
+    #: What the artefacts call this target. Null keeps them anonymous, which is what an
+    #: aggregate claim across several products needs. Set it to the vendor's real name
+    #: when the report is going to the vendor themselves — they know who they are, and a
+    #: named report is a courtesy rather than a disclosure.
+    pseudonym: Optional[str] = None
     endpoints: EndpointsConfig
     auth: AuthConfig = AuthConfig()
     response_format: ResponseFormatConfig = ResponseFormatConfig()

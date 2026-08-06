@@ -461,13 +461,14 @@ exists to prevent.
 
 ```yaml
 target:
-  name: "vendor-staging"
+  name: "vendor-staging"          # local only — never written to any artefact
+  pseudonym: null                 # what the report calls it. null keeps it anonymous
   endpoints:
     chat: "https://staging.example.com/api/v1/chat"
     upload: "https://staging.example.com/api/v1/documents"
     retrieval: "https://staging.example.com/api/v1/search"   # optional
   auth:
-    type: "bearer"                 # bearer | api_key | basic | none
+    type: "bearer"                 # bearer | api_key | basic | cookie | none
     token_env: "TARGET_API_KEY"    # env var only, never inline
   response_format:
     answer_field: "response.text"

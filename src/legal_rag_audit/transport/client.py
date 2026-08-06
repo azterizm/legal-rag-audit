@@ -57,6 +57,13 @@ class TargetClient:
             elif auth.type == "basic":
                 # Assuming the token is already base64 encoded or formatted appropriately
                 headers["Authorization"] = f"Basic {token}"
+            elif auth.type == "cookie":
+                # The whole cookie header, verbatim: a session product usually needs more
+                # than one cookie set, and splitting them across config keys would put
+                # half a credential in a file. `AuthConfig.type` is a Literal so an
+                # unrecognised scheme is refused at load rather than falling off the end
+                # of this chain and sending the probes unauthenticated.
+                headers["Cookie"] = token
         return headers
 
     def _inject_variables(self, template: Any, variables: Dict[str, str]) -> Any:
