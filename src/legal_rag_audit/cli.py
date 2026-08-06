@@ -77,13 +77,33 @@ def _configure_logging(verbose: bool, to_file: bool = True) -> None:
     worse one: the sentence is short because the behaviour is.
     """
     handlers: list[logging.Handler] = [logging.StreamHandler()]
+    unwritable = ""
     if to_file:
-        handlers.insert(0, logging.FileHandler(".legal_rag_audit.log", mode="a"))
+        # A read-only working directory is a supported configuration, not an error:
+        # §12.3's hardened invocation runs the container with `--read-only`, and the
+        # first thing a target would otherwise see is a traceback out of logging's
+        # internals — loud, but not a diagnosis, which is the half of NF9 that matters.
+        #
+        # So the log file is best-effort and its absence is announced. It is a
+        # convenience; the evidence is the report and the run manifest. Announced
+        # rather than dropped because a run with no log and a run whose log was
+        # written must not print the same thing (F40).
+        try:
+            handlers.insert(0, logging.FileHandler(".legal_rag_audit.log", mode="a"))
+        except OSError as e:
+            unwritable = str(e)
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=handlers,
     )
+    if unwritable:
+        logging.warning(
+            "no .legal_rag_audit.log was written — the working directory is not "
+            "writable (%s). This run is otherwise unaffected: the log is a "
+            "convenience and the evidence is the report and the manifest.",
+            unwritable,
+        )
 
 
 def _abort(message: str) -> int:
@@ -793,7 +813,31 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     _configure_logging(args.verbose, to_file=args.command != "validate")
-    sys.exit(args.func(args))
+    try:
+        sys.exit(args.func(args))
+    except OSError as e:
+        # A path that cannot be read or written is a setup problem, and NF9 says a
+        # setup problem aborts with a diagnosis rather than a traceback. This became
+        # visible with the container: §12.3's invocation runs `--read-only`, so a
+        # forgotten `-v` mount lands here, and what a target saw was fifteen frames of
+        # pathlib. `filename` is the whole diagnosis — it names the path that is wrong.
+        #
+        # Deliberately at the top rather than per command: every command that writes
+        # has the same failure and would otherwise need the same handler, and one that
+        # was forgotten would be the one a stranger hit.
+        # `filename` is also what makes this safe to catch broadly. A socket error is
+        # an OSError too, and calling a refused connection "a path problem" would be
+        # a worse diagnosis than the traceback it replaced. No filename, no rewrite.
+        if not e.filename:
+            raise
+        sys.exit(
+            _abort(
+                f"{e.strerror or e} — {e.filename}\n\n"
+                "This is a path problem, not a finding. Nothing was scored. Check the "
+                "directory exists and is writable by the user running this — in a "
+                "container, that it is mounted (docs/hardened-run.md)."
+            )
+        )
 
 
 if __name__ == "__main__":

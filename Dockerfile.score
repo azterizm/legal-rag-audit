@@ -1,0 +1,112 @@
+# The image *we* run. Everything in Dockerfile.generate, plus the two model-backed
+# checks — sentence-transformers, torch (CPU), transformers.
+#
+# It exists to be the large one. Keeping the ML stack out of the image a target installs
+# is the entire point of §5.3, and the way to keep a boundary honest is to have a second
+# artefact on the other side of it rather than an extra to remember not to install.
+# tests/test_container.py asserts torch *is* importable here and is not there.
+#
+# Nothing in this image talks to a target. `score` opens no sockets and asserts that at
+# start-up (§5.1, F18), so the ordinary invocation is `--network=none` — see
+# docs/hardened-run.md. That is only true once the model weights are local; the note
+# under BAKE_MODELS below is about which of the two ways they get there.
+#
+# Base image pinned by digest, same digest as Dockerfile.generate. Bump both together:
+#
+#     docker buildx imagetools inspect python:3.11-slim
+#
+# python:3.11-slim — 3.11.15-slim-trixie, resolved 2026-08-06.
+ARG BASE=python:3.11-slim@sha256:94c50be2dc994b873b55bc123e95e6dbade08095b3dfd790f51c34de3f08cbb7
+
+
+# ------------------------------------------------------------------------------ build
+FROM ${BASE} AS build
+
+# score.txt is generate.txt plus the ML stack — one lockfile, resolved together, so the
+# two layers cannot disagree about a shared version. scripts/check_pins.py asserts that.
+#
+# KNOWN, AND NOT FIXED HERE (V2_FULL_PLAN.md defect 13, decision §20.1 #9). 18 of this
+# lockfile's 68 packages are `nvidia-*`, `cuda-*` or `triton`, gated on
+# `sys_platform == 'linux'` — `nvidia-cublas` alone is a 543 MB wheel — on a scoring path
+# that is CPU-only by design and never touches a GPU. It arrives because the lockfile
+# resolves the default PyPI torch rather than the CPU wheel.
+#
+# It is a lockfile property, not a container one: every Linux `pip install -r
+# requirements/score.txt` has carried it. The image is what made it visible. Fixing it
+# means changing requirements/score.in and re-locking, which moves all four SBOMs,
+# check_pins.py and what every Linux user installs — a dependency decision, not a
+# Dockerfile one, and not something to slip into a container change.
+#
+# --retries/--timeout are here and not in Dockerfile.generate because this layer is
+# most of two gigabytes and pip's default 15-second socket timeout turns an ordinary
+# slow mirror into a failed build. A build that fails on network weather teaches people
+# to re-run it until it passes, which is the habit that makes a real failure invisible.
+COPY requirements/score.txt /tmp/score.txt
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
+        --retries 10 --timeout 120 \
+        --require-hashes -r /tmp/score.txt
+
+# --no-deps and --no-build-isolation for the same two reasons as the generate image: the
+# lockfile is the only source of versions, and the build backend comes from the
+# digest-pinned base rather than from the network.
+COPY pyproject.toml README.md /src/
+COPY src /src/src
+RUN /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
+        --no-deps --no-build-isolation /src
+
+RUN /opt/venv/bin/python -m compileall -q /opt/venv/lib
+
+
+# ---------------------------------------------------------------------------- runtime
+FROM ${BASE}
+
+COPY --from=build /opt/venv /opt/venv
+
+# Both variables, because sentence-transformers has moved which one it honours between
+# versions and a cache that silently lands somewhere else would look like a working
+# offline run right up to the point the network is removed.
+ENV PATH="/opt/venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/models \
+    SENTENCE_TRANSFORMERS_HOME=/models \
+    HF_HUB_OFFLINE=1
+
+RUN groupadd --gid 65532 auditor \
+    && useradd --uid 65532 --gid 65532 --no-create-home \
+        --shell /usr/sbin/nologin auditor \
+    && mkdir -p /in /out /models \
+    && chown auditor:auditor /out /models
+USER 65532:65532
+
+# Model weights: mounted, or baked. Not downloaded during a run.
+#
+# HF_HUB_OFFLINE=1 above means a missing checkpoint fails at load rather than fetching
+# one. That is deliberate: `score` claiming to run offline while quietly reaching a
+# model hub on a cache miss would be the exfiltration claim failing in the one place
+# nobody looks. Mount a populated cache at /models, or build with --build-arg
+# BAKE_MODELS=1 to put the weights in the image.
+#
+# Default off, and the reason is not image size. The two checkpoints are resolved by
+# *name* — `all-MiniLM-L6-v2` and `cross-encoder/nli-deberta-v3-base` — with no revision
+# pinned; that is a recorded manifest gap, not a solved problem. Baking makes the image
+# the pin: whatever was published on the day of the build is what that digest will
+# forever contain. For a signed release that is an improvement, and it is also a claim
+# about bytes nobody reviewed, so it is an explicit act rather than a default.
+ARG BAKE_MODELS=0
+RUN if [ "${BAKE_MODELS}" = "1" ]; then \
+        HF_HUB_OFFLINE=0 /opt/venv/bin/python -c "\
+from sentence_transformers import CrossEncoder, SentenceTransformer; \
+SentenceTransformer('all-MiniLM-L6-v2'); \
+CrossEncoder('cross-encoder/nli-deberta-v3-base')" ; \
+    fi
+
+WORKDIR /out
+
+ENTRYPOINT ["legal-rag-audit"]
+CMD ["--help"]
+
+LABEL org.opencontainers.image.title="legal-rag-audit (score)" \
+      org.opencontainers.image.description="Offline scoring, both tiers. Carries the ML stack; not the image a target is asked to run." \
+      org.opencontainers.image.source="https://github.com/azterizm/legal-audit-rag"

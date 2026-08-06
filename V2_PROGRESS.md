@@ -11,9 +11,9 @@ exists to measure in other people's systems.
 |---|---|---|---|
 | **A** | Remove the remote-scoring path; rescope README claims | 0.5 d | ✅ 2026-08-01 |
 | **A+** | Exact/hash-pinned dependencies; corpus packaging + guardrail | — | ✅ 2026-08-01 |
-| **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles deferred with Docker)* |
-| **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | ✅ 2026-08-03 *(cosign signs blobs; image signing ships with the image split)* |
-| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2; Docker deferred)* |
+| **B** | `responses.jsonl` schema + offline `score` + probe/response spec + dependency split | 3 d | ✅ 2026-08-01 *(two Dockerfiles landed with J)* |
+| **B2** | Hardened invocation, SBOM, signed tags + SLSA + cosign, CI scanning | 1 d | ✅ 2026-08-03 *(image signing and `trivy image` landed with J)* |
+| **C** | Tier tagging + report v2 + manifest/hashing + GPG-signed releases | 2.5 d | ✅ 2026-08-02 *(signed releases are Phase B2)* |
 | **D** | Seeded plant generation + collision guard; rewrite evaluators 4–14 | 4 d | ✅ 2026-08-03 |
 | **E** | N-pass execution + variance reporting | 1 d | ✅ 2026-08-04 *(profiles are response files; the live mock target is F2)* |
 | **F** | `validate` mode | 0.5 d | ✅ 2026-08-04 |
@@ -21,6 +21,7 @@ exists to measure in other people's systems.
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ✅ 2026-08-05 *(hero benchmark not run — it needs a decision about targets, §16)* |
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ✅ 2026-08-05 *(second corpus timed at 4m43s, but by an agent — a human timing is still owed)* |
 | **I** | Authorisation controls + retention position | 0.5 d | ✅ 2026-08-06 |
+| **J** | Container split, published and signed images, `trivy image`, the hardened invocation | — | ✅ 2026-08-06 *(last by instruction; closes the B and B2 remainders)* |
 
 Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
 
@@ -2216,3 +2217,204 @@ specificity still 20/20, now with the reference target declaring its own consent
   enforces that a config cannot raise them. That is correct for a client running against
   their own system and would be wrong for a free-tier run against somebody else's; the
   distinction is not currently in the code.
+
+---
+
+## Phase J — the container, last by instruction ✅ 2026-08-06
+
+Not a phase in §17.1. Docker was deferred from Phase B and again from B2, at your
+instruction, and it carried the remainders of both: the `generate`/`score` image split,
+image signing, `trivy image`, and §12.3's hardened `docker run`. They belong together
+because each of the last three needs a published image to be about.
+
+**Docker was available on this machine this time.** Every claim below was run, not
+written. The previous Dockerfile changes went in untested and said so in the progress
+record; that note can now come down.
+
+### Two images, and what makes the boundary real
+
+`Dockerfile.generate` installs `requirements/generate.txt` — five pure-Python libraries —
+and `Dockerfile.score` installs `requirements/score.txt`, which is the same set plus the
+ML stack. 279 MB against roughly two gigabytes, and the difference is the entire argument
+of §5.3.
+
+The thing worth having is not the split; it is what now tests it. `tests/test_container.py`
+imports `torch`, `transformers`, `sentence_transformers` and `numpy` **inside the built
+image** and requires each to fail. `test_dependency_pinning.py` asserts torch is absent
+from a text file; `test_dependency_boundary.py` asserts it about a virtualenv pip
+resolved. Neither is the artefact a client is handed. A security reviewer is asking what
+lands on their machine, and now something checks that.
+
+Both are multi-stage. What ships is a virtualenv and an interpreter — no pip, no build
+backend, no source tree. That is a shorter file list for a human reading the image and a
+shorter package inventory for `trivy image`, where every entry is one somebody needs a
+reason for.
+
+**Two pinning decisions inside the build.** `--no-build-isolation`, because PEP 517
+isolation *downloads* setuptools at build time, and a build that fetches its own backend
+over the network is exactly the unpinned link every other line in the file removes;
+without isolation the backend is the setuptools inside the base image, fixed by the same
+digest as the interpreter. And both files carry the **same** base digest, asserted by a
+test: two base images would mean two OS package sets and a `trivy image` finding against
+one that silently does not apply to the other.
+
+### The flag that did not exist
+
+§12.3 and the README both printed `--network=host-allowlist-only`. **There is no such
+Docker network.** It was standing in for *a network the reader has configured to permit
+one destination*, and a reader who pasted it would have got an error — from which the
+reasonable inference is that the rest of the page is decorative too.
+
+**Docker cannot express a per-container host allowlist.** It has no flag for it. What it
+can express is *no external route at all*:
+
+```
+docker network create --internal audit-net
+```
+
+Verified in both directions, and the second direction is the point: a container on
+`audit-net` gets `Network is unreachable` connecting to `1.1.1.1:443`, and the *same
+image* on the default bridge connects. A denial test that would also pass on a broken
+image establishes nothing. The allowlist is then a forward proxy of theirs on that network
+and on one that reaches their endpoint — which is the logging proxy §12.3's table already
+wanted, and their connection log rather than our claim.
+
+`docs/hardened-run.md` — named in §5.2's layout since the start and empty until now —
+carries the three invocations, what each flag answers, and the paragraph admitting the
+substitution rather than quietly correcting it. `tests/test_container.py` now fails if any
+published document prints a `--network=` value that is neither `none` nor a network the
+same document tells the reader how to create.
+
+`--user 65534:65534` also became `--user "$(id -u):$(id -g)"`. A fixed uid that does not
+own the host output directory fails on the first run, and the fix people reach for is
+`chmod 777`. A hardened invocation that makes somebody loosen permissions elsewhere has
+moved the problem rather than solved it.
+
+### Two defects the container found in the CLI
+
+Both were NF9 failures that only a read-only filesystem would surface.
+
+**The log file aborted the run.** `_configure_logging` opened `.legal_rag_audit.log` in
+the working directory unconditionally. Under `--read-only` the first thing a target saw
+was a traceback out of `logging`'s internals — loud, and not a diagnosis. The log is now
+best-effort and **its absence is announced**: a run with no log and a run whose log was
+written must not print the same thing (F40). It is a convenience; the evidence is the
+report and the manifest.
+
+**A forgotten mount was fifteen frames of `pathlib`.** Now one handler at the top of
+`main()` turns an `OSError` into a named path and a sentence saying this is a path
+problem, not a finding, and nothing was scored. It is deliberately at the top rather than
+per command — every command that writes has the same failure, and the one that got
+forgotten would be the one a stranger hit. It fires **only when the error carries a
+filename**: a socket error is an `OSError` too, and calling a refused connection a path
+problem would be a worse diagnosis than the traceback it replaced.
+
+### No `VOLUME`, on purpose
+
+Declaring `VOLUME ["/out"]` — which the old Dockerfile did — makes Docker create an
+anonymous volume when nobody mounted one. The run succeeds, writes the report into a
+directory that dies with the container, and reports nothing wrong. Without the
+declaration the write hits the read-only rootfs and aborts naming the path. NF9 applied
+to the container rather than to the code, and a test asserts neither file declares one.
+
+### Publishing, signing, scanning
+
+`release.yml` builds both images from the already-verified tag, pushes to `ghcr.io`,
+attests SLSA provenance per image, and cosign-signs **by digest**. `cosign sign
+image:v0.2.0` would sign whatever that tag resolves to at that moment — a signature over a
+name, and names can be moved afterwards by anyone with registry write access. `latest` is
+not published at all.
+
+The tag-to-digest mapping goes into a file called `IMAGES`, which is then checksummed,
+cosign-signed and attested alongside the wheel. Without it the mapping lives only in a
+registry run by the same people who published the release, and *"run this digest"* is an
+instruction a reader cannot check against anything. `verify_release.sh` gained a fifth
+section that reads `IMAGES` **after** verifying it, and fails a reference that carries no
+digest rather than verifying a tag.
+
+`trivy image` runs per image with `fail-fast: false`, on the reasoning that already made
+`pip-audit` per layer: an advisory in the generate image is a *target's* exposure, on a
+machine we do not own; one in the score image is ours. Each run also uploads a CycloneDX
+SBOM **of the image** — the one inventory `gen_sbom.py` cannot produce, because it builds
+from the lockfiles, correctly, and lockfiles describe no Debian package. The base digest
+was bumped in the same change, since introducing an image scan on a months-old base is
+introducing a red gate.
+
+### A defect the image made visible
+
+Building the score image is what surfaced it: **18 of the score lockfile's 68 packages
+are CUDA.** `nvidia-cublas`, `nvidia-cudnn-cu13`, `nccl`, `cusparselt`, `nvshmem`,
+`triton` — all gated on `sys_platform == 'linux'`, all arriving behind `torch`, on a
+scoring path §5.3 describes as CPU and §5.4 as CPU-only, which never touches a GPU.
+`nvidia-cublas` alone is a 543 MB wheel.
+
+This is a **lockfile** property, not a container one. Every Linux `pip install -r
+requirements/score.txt` has carried it since the lockfiles were written, and neither
+`check_pins.py` nor `pip-audit` nor the SBOM would ever have said so — they all check
+that the set is pinned and consistent, and this set is both. The image is what made it
+visible, because the cost of installing something shows up in a layer.
+
+**Not fixed here, deliberately.** The fix is a CPU wheel index in
+`requirements/score.in` and a re-lock, which moves all four SBOMs, `check_pins.py` and
+what every Linux user gets from a plain `pip install`. That is a dependency decision with
+its own question attached — whether the CPU wheel still resolves universally across macOS
+arm64 and Linux x86_64, because a lockfile that silently disagrees per platform is worse
+than a large image. Slipping it into a container change would be the wrong place for it.
+Recorded as defect 13 and open decision §20.1 #9.
+
+### Model weights are mounted, not baked
+
+The score image ships without checkpoints and with `HF_HUB_OFFLINE=1`, so a cache miss
+**fails at load rather than fetching**. Scoring that claimed to run offline while quietly
+reaching a model hub on a cache miss would be the one place the local-path claim failed,
+in the one place nobody looks.
+
+`--build-arg BAKE_MODELS=1` exists and is not the default, and the reason is not image
+size. The two checkpoints resolve by *name*, with no revision pinned — a recorded manifest
+gap, not a solved problem. Baking makes the image the pin: whatever was published that day
+is what that digest contains forever. For a signed release that is an improvement and it
+is also a signature over bytes nobody reviewed, so it is an explicit act.
+
+### Acceptance
+
+| Claim | How it was checked |
+|---|---|
+| NF3 — two images, `generate` slim, both non-root | **Generate: fully verified.** Built at 279 MB, `id` reports uid 65532, and `torch`, `transformers`, `sentence_transformers` and `numpy` each fail to import in it. **Score: built to the point that made defect 13 visible, then left downloading.** The CUDA wheels are gigabytes and this machine's link is not; `security.yml` builds it on every push with a layer cache, and `LEGAL_RAG_AUDIT_DOCKER_SCORE=1` runs the local test. The far side of the boundary is asserted by a test that has not yet had a chance to run here, and that is the weaker claim |
+| §12.3's invocation is runnable | Every flag run: `--read-only --cap-drop=ALL --security-opt no-new-privileges --user --tmpfs`, with `plant`, `hash` and the artefact route |
+| §5.1.1 in a container | `plant → hash → their harness → score` end to end inside the **generate** image under `--network=none`, pre-commitment verified, 19 of 19 probes put verbatim |
+| Egress denial is enforced by the network | `--internal` network: `Network is unreachable`. Default bridge, same image: connects |
+| Images signed and verifiable by a stranger | `verify_release.sh` section 5 — cosign against a certificate identity plus `gh attestation verify`, both by digest. Not yet exercised against a real tag: no release has been cut since the workflow changed |
+| `trivy image` | In `security.yml`, per image, `fail-fast: false`, plus an image SBOM artefact. Not yet run — it runs on push |
+
+**814 tests, the whole suite, 4 skipped.** Seven gates clean;
+`check_readme_claims.py` now covers eight documents.
+
+### Recorded deviations
+
+- **`--network=host-allowlist-only` and `--user 65534:65534` were both changed**, with the
+  reasons written into §12.3 rather than silently corrected. The first does not exist; the
+  second produces a permission error whose usual fix is worse than the problem.
+- **Published images are `linux/amd64` only.** An arm64 image is one `docker build` away
+  and that is how everything above was checked, on Apple Silicon. Publishing an emulated
+  build nobody ran, to save a reader one command, is shipping an untested artefact.
+- **`--retries 10 --timeout 120` on the score layer's pip install.** It is two gigabytes,
+  and pip's 15-second default turned a slow mirror into a failed build — twice, here. A
+  build that fails on network weather teaches people to re-run until it passes, which is
+  the habit that makes a real failure invisible.
+
+### Still outstanding after this phase
+
+- **Nothing has been published.** The workflow, the signing and the verifier are written
+  and unit-checked; none of it has run against a real tag, because no tag has been cut.
+  The first release is what turns section 5 of `verify_release.sh` from tested code into
+  a verified claim.
+- **The score image has not been built to completion on this machine.** Its lockfile
+  pulls roughly three gigabytes of CUDA (defect 13) over a 1.5 MB/s link. What that
+  build did establish is defect 13 itself. The image is built on every push in
+  `security.yml`, and `LEGAL_RAG_AUDIT_DOCKER_SCORE=1` runs the local test — but until
+  one of those goes green, "the ML stack is importable in the score image" is asserted
+  by a test rather than by a run, and the two are not the same thing. The generate
+  image — the one that matters to a target — is built and exercised on every slow run.
+- **Defect 13, the CUDA stack in the score layer.** Recorded, not fixed: the fix is a
+  lockfile decision (§20.1 #9), and it is the thing to settle before a score image is
+  published rather than before this phase closes.

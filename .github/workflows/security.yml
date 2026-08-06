@@ -104,10 +104,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # `fs`, not `image`. There is no image yet — the container work is deliberately
-      # last, and scanning an image we have not built would be a workflow that passes by
-      # having nothing to do. The image scan is added in the same change as the
-      # Dockerfile, not before it.
+      # `fs` scans the repository: the lockfiles, and anything checked in. The image
+      # scan below is a different question — it covers the base image's OS packages,
+      # which no lockfile of ours describes and which are most of what a CVE feed is
+      # about. Both, because neither one sees the other's surface.
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -116,6 +116,69 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+
+  image-scan:
+    name: image scan (trivy)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Separately, and `fail-fast: false` so one result never hides the other. Same
+        # reason pip-audit runs per layer: an advisory in the generate image is a
+        # *target's* exposure, on a machine we do not own and did not ask permission to
+        # put software on; an advisory in the score image is ours. Merging them into
+        # one pass/fail would erase the distinction the whole architecture exists to
+        # make — and it is the generate result a client will ask about.
+        include:
+          - image: generate
+            whose: what a target installs on their own machine
+          - image: score
+            whose: what runs on ours
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      # Built here rather than pulled from the registry, so the scan describes this
+      # commit. Pulling the last published image would report on whatever was released
+      # weeks ago and pass a pull request that introduced the problem.
+      - name: Build the ${{ matrix.image }} image — ${{ matrix.whose }}
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}
+          platforms: linux/amd64
+          load: true
+          tags: legal-rag-audit-${{ matrix.image }}:scan
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Trivy image scan — ${{ matrix.image }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: legal-rag-audit-${{ matrix.image }}:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # The inventory, not only the verdict — and the one inventory the committed SBOMs
+      # cannot provide. `scripts/gen_sbom.py` builds ours from the lockfiles, which is
+      # the right source for Python dependencies and describes no OS package at all.
+      # Most of what a CVE feed is about lives in the base image. This is where a
+      # reader finds out what is actually in the thing they were handed.
+      - name: SBOM of the image, including its OS packages
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: legal-rag-audit-${{ matrix.image }}:scan
+          format: cyclonedx
+          output: image-${{ matrix.image }}.cdx.json
+          exit-code: "0"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-sbom-${{ matrix.image }}
+          path: image-${{ matrix.image }}.cdx.json
 
   sbom:
     name: SBOM is valid CycloneDX

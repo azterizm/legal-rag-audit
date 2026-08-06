@@ -167,7 +167,7 @@ again). Both absences are recorded inside each document rather than left to be n
 | `pip-audit` | Each of the four lockfiles, audited separately |
 | Bandit | `src/legal_rag_audit` |
 | Semgrep | `p/python`, `p/security-audit` |
-| Trivy | Filesystem scan |
+| Trivy | Filesystem scan, **and both container images**, scanned separately |
 
 Scheduled weekly as well as on push. A dependency set that was clean when it was pinned
 does not stay clean, and because the pins are exact by design, a new advisory is
@@ -217,17 +217,30 @@ call eventually and it fails whenever it fires.
 | Non-root, read-only filesystem, all capabilities dropped, no new privileges | What a security engineer actually looks for |
 | One read-only input mount, one write-only output directory, exits when done | Nothing persists — nowhere for "queued" to live |
 
-**What exists and what does not.** There is a `Dockerfile`, it runs as UID 65532, and it
-installs its dependencies under `--require-hashes` from a base image pinned by digest
-rather than by tag. What is **not** done yet: it is a single image carrying the scoring
-stack, so it is not the small image a target should be asked to run; no image is
-published, so none is cosign-signed and none is scanned by `trivy image`. That work is
-last by decision, not oversight, and it lands as one change — the
-`generate`/`score` split, publication, signing and image scanning together.
+**Two images, and only one of them is for you.**
+`legal-rag-audit-generate` carries five pure-Python libraries and is the only one that
+talks to your system; `legal-rag-audit-score` adds the ML stack and opens no sockets at
+all. Both run as UID 65532, install under `--require-hashes` from a base image pinned by
+digest, and are cosign-signed **by digest** with SLSA provenance attached — verify before
+you pull with `./scripts/verify_release.sh <tag>`. `trivy image` scans each one on every
+push and uploads a CycloneDX SBOM of it, including the OS packages that no lockfile of
+ours describes.
 
-Until then the honest answer to *"can I run your container with egress denied"* is that
-you would be building it yourself from this repository, and the stronger answer is the
-artefact route above, where the question does not arise because nothing of ours runs.
+The dependency boundary is checked inside the image rather than in a lockfile:
+`tests/test_container.py` imports `torch`, `transformers`, `sentence_transformers` and
+`numpy` in the built generate image and requires each to fail.
+
+**One correction worth making explicitly.** An earlier version of this page and of the
+README printed `--network=host-allowlist-only`. There is no such Docker network, and
+**Docker cannot express a per-container host allowlist at all.** What it can express is
+no external route: `docker network create --internal audit-net`. Your forward proxy on
+that network is then the only way out, and the allowlist and its log are yours.
+[`docs/hardened-run.md`](docs/hardened-run.md) has the invocations, each flag's purpose,
+and what none of them establishes.
+
+`plant`, `hash` and Tier 1 `score` all run in the *generate* image with `--network=none`,
+which is the artefact route above, in a container — and it remains the stronger answer,
+because there the question of what our code might do on your machine does not arise.
 
 **No credentials are needed and none should be given.** The harness talks to one endpoint
 you nominate. It has no account system, no telemetry, and no remote scoring path; scoring

@@ -80,7 +80,7 @@ they are being built against a written spec, not discovered.
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
 | JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
 | Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
-| Non-root container, base image pinned by digest, deps under `--require-hashes` | **Shipped** — single image; the split, publication and image signing are pending |
+| Non-root containers, base pinned by digest, deps under `--require-hashes` | **Shipped** — two images along the dependency boundary, signed by digest, `trivy image` per image |
 | `validate` / `generate` / `score` mode split; scoring offline and enforced | **Shipped** |
 | `responses.jsonl` interchange format + published schema | **Shipped** |
 | Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 17 Tier 1, 2 Tier 2 |
@@ -328,25 +328,39 @@ network namespace, where a socket call fails rather than resolving.
 Deny egress rather than disabling it. A delayed payload still has to make a call
 eventually, and it fails whenever it fires — timing is irrelevant under denial.
 
-The shipped `Dockerfile` runs as UID 65532 and installs from the hash-pinned lockfile on
-a base image pinned by digest. What it is **not** yet: split into a small `generate`
-image and a `score` image, published, or signed. So the invocation below is the target,
-not something you can run today — building it yourself from this repository is the
-current path, and the artefact route below is the better one.
+Two images, split along §5.3's dependency boundary.
+`legal-rag-audit-generate` carries five pure-Python libraries and is the only one that
+ever talks to your system; `legal-rag-audit-score` adds the ML stack and opens no
+sockets at all. Both run non-root from a base image pinned by digest, install every
+dependency under `--require-hashes`, and are cosign-signed and attested by digest —
+`scripts/verify_release.sh <tag>` checks that before you pull anything.
 
 ```bash
-docker run --rm --network=host-allowlist-only \
+docker run --rm --network=audit-net \
   --read-only --cap-drop=ALL --security-opt no-new-privileges \
-  --user 65534:65534 \
+  --user "$(id -u):$(id -g)" \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   -v "$PWD/in:/in:ro" -v "$PWD/out:/out" \
-  ghcr.io/…/legal-rag-audit-generate@sha256:… \
+  ghcr.io/azterizm/legal-audit-rag-generate@sha256:… \
   generate -c /in/config.yaml -o /out/responses.jsonl
 ```
 
-Put a logging proxy in front of it if you want proof rather than a claim — the connection
-log is yours, not ours. One read-only input mount, one write-only output directory, no
-volumes, no daemon, exits when done. Nothing persists, so there is nowhere for "queued"
-to live.
+One read-only input mount, one output directory, no volumes, no daemon, exits when done.
+Nothing persists, so there is nowhere for "queued" to live — and forgetting the output
+mount aborts against the read-only filesystem rather than writing into a volume that
+disappears.
+
+`audit-net` is a network you create: `docker network create --internal audit-net` gives
+the container no external route at all, and a forward proxy of yours on that network is
+what decides which single host it may reach. Docker has no per-container host allowlist
+flag, so put a logging proxy there if you want proof rather than a claim — the connection
+log is yours, not ours. **[docs/hardened-run.md](docs/hardened-run.md)** has the three
+invocations, what each flag answers, and what none of them establishes.
+
+Scoring is the same picture with the network removed entirely: `--network=none`, model
+weights mounted read-only, `HF_HUB_OFFLINE=1` in the image so a cache miss fails instead
+of fetching. And `plant`, `hash` and Tier 1 `score` all run in the *generate* image with
+no network and no model — which is the artefact route below, in a container.
 
 ---
 
@@ -410,10 +424,11 @@ The full position, with the command next to every claim, is in
 |---|---|---|
 | What is in it? | CycloneDX 1.6 SBOM per layer, in [`sbom/`](sbom/) | `python3 scripts/gen_sbom.py --check` |
 | Are the bytes fixed? | Every entry `==` and hashed | `python3 scripts/check_pins.py` |
-| Is it scanned? | `pip-audit`, Bandit, Semgrep, Trivy — weekly and on push | [the runs](https://github.com/azterizm/legal-audit-rag/actions/workflows/security.yml) |
+| Is it scanned? | `pip-audit`, Bandit, Semgrep, Trivy — weekly and on push, with `trivy image` run separately per image | [the runs](https://github.com/azterizm/legal-audit-rag/actions/workflows/security.yml) |
 | Who published this release? | GPG-signed tag, verified before the build starts | `./scripts/verify_release.sh <tag>` |
 | Was it built from that commit? | SLSA provenance from a public workflow | same script |
 | Is this the same file? | Cosign signature in the public Rekor log | same script |
+| And the containers? | Both images signed and attested **by digest**; no `latest` is published | same script, section 5 |
 
 Two decisions worth stating rather than leaving to be discovered.
 

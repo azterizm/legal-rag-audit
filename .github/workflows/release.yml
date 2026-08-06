@@ -17,10 +17,12 @@
 # changes, that script has to change with it, or the instructions stop describing the
 # artefacts.
 #
-# NOT in this workflow, and deliberately: container images. There is no Dockerfile yet —
-# the container work is last by decision, not oversight — so cosign signs the wheel, the
-# sdist and the SBOMs. Image signing and `trivy image` arrive in the same change as the
-# Dockerfile, and §12.3's hardened `docker run` invocation with it.
+# Two container images are published here as well, and they get the same four answers:
+# built from the verified tag, attested, cosign-signed by digest, and inventoried by
+# `trivy image` in security.yml. They are published by digest and referenced by digest —
+# the version tag exists for humans, and `latest` is not published at all. A mutable
+# pointer to "the current image" would undo, in one line, what pinning every dependency
+# to its bytes was for.
 
 name: release
 
@@ -75,9 +77,108 @@ jobs:
           git verify-commit --raw "$TAG^{commit}" 2>&1 | tee /tmp/commit.txt
           grep -q 'GOODSIG' /tmp/commit.txt
 
+  images:
+    name: build, attest and sign the images
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # OIDC, for both the SLSA attestation and keyless cosign
+      attestations: write
+    outputs:
+      generate: ${{ steps.generate.outputs.digest }}
+      score: ${{ steps.score.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Two images, not a matrix, because each one needs its digest as a named job
+      # output and a matrix has one set of outputs between all its legs. The
+      # duplication is four lines; the alternative is passing digests through an
+      # artefact, which is more machinery hiding the thing this job exists to produce.
+      #
+      # `latest` is not among the tags and never will be. The version tag is here so a
+      # human can find the image; the digest below is what anybody should actually run,
+      # and it is what the signature and the provenance are made over. Publishing a
+      # mutable pointer to "the current image" would undo, in one line, everything
+      # --require-hashes and the base-image digest are for.
+      #
+      # linux/amd64 only. An arm64 image is one build command away from the repository
+      # (`docker build -f Dockerfile.generate .`, verified on Apple Silicon), and
+      # publishing an emulated build we have not run would be shipping an artefact
+      # nobody tested to save a reader one command.
+      - name: generate image
+        id: generate
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.generate
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}-generate:${{ inputs.tag || github.ref_name }}
+          provenance: false # SLSA provenance comes from attest-build-provenance below
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.tag || github.ref_name }}
+
+      # The score image ships without model weights (see Dockerfile.score). Baking them
+      # would put checkpoints resolved by name, with no revision pinned, inside a signed
+      # artefact — a signature over bytes nobody chose. The weights are mounted instead,
+      # and docs/hardened-run.md says how.
+      - name: score image
+        id: score
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.score
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository }}-score:${{ inputs.tag || github.ref_name }}
+          provenance: false
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.tag || github.ref_name }}
+
+      - name: Attest build provenance — generate
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}-generate
+          subject-digest: ${{ steps.generate.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest build provenance — score
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}-score
+          subject-digest: ${{ steps.score.outputs.digest }}
+          push-to-registry: true
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Signed by digest, never by tag. `cosign sign image:v0.2.0` signs whatever that
+      # tag resolves to at the moment of signing, which is a signature over a name
+      # rather than over bytes — and the name can be moved afterwards.
+      - name: Sign both images
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          REPO="ghcr.io/${{ github.repository }}"
+          cosign sign "${REPO}-generate@${{ steps.generate.outputs.digest }}"
+          cosign sign "${REPO}-score@${{ steps.score.outputs.digest }}"
+
   build:
     name: build, attest and sign
-    needs: verify-tag
+    needs: [verify-tag, images]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload assets
@@ -124,6 +225,27 @@ jobs:
 
       - name: Collect the SBOMs
         run: cp sbom/*.cdx.json dist/
+
+      # The tag → digest mapping, written down and then treated like every other
+      # artefact: checksummed, cosign-signed, attested. Without it the mapping lives
+      # only in a registry that the same people who publish the release control, and
+      # "run this digest" would be an instruction a reader has no way to check against
+      # anything. With it, the mapping is covered by the release's own provenance.
+      - name: Record the image digests
+        env:
+          GENERATE: ${{ needs.images.outputs.generate }}
+          SCORE: ${{ needs.images.outputs.score }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          REPO="ghcr.io/${{ github.repository }}"
+          cat > dist/IMAGES <<EOF
+          # Container images published for ${TAG}. Run the digest, not the tag.
+          # Verify: ./scripts/verify_release.sh ${TAG}
+          ${REPO}-generate@${GENERATE}
+          ${REPO}-score@${SCORE}
+          EOF
+          cat dist/IMAGES
 
       # SLSA build provenance: a signed statement that these exact bytes came out of
       # this workflow, at this commit, in this repository. Issued against GitHub's OIDC
@@ -182,6 +304,12 @@ jobs:
           The `*.cdx.json` files are CycloneDX 1.6 SBOMs, one per dependency layer.
           `legal-rag-audit-generate.cdx.json` is the only one that describes what a
           target installs on their own machine.
+
+          `IMAGES` lists the two container images and their digests. Run the digest,
+          not the tag — the tag is for finding the image, the digest is what is
+          signed. `legal-rag-audit-generate` is the one to hand a target: it carries
+          five pure-Python dependencies and no ML stack. See docs/hardened-run.md for
+          the invocation, which denies egress rather than asking anyone to disable it.
           NOTES
           )"
 

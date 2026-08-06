@@ -1,0 +1,105 @@
+# The image a *target* runs. Five pure-Python libraries and nothing else.
+#
+# This is the small half of §5.3's boundary, and the boundary is the security claim:
+# `score` pulls sentence-transformers, which pulls torch and transformers — several
+# hundred transitive packages that are fine on our machine and unacceptable on someone
+# else's. One image carrying both would make "read the dependency set in an afternoon"
+# a slogan again. tests/test_container.py asserts torch is not importable in here.
+#
+# What this image can do without a model and without a network: plant, hash, score
+# (Tier 1), schema. Only the two model-backed checks need Dockerfile.score. That is why
+# §5.1.1's artefact route runs end to end in this image under `--network=none`, which is
+# the strongest thing we can show a client who does not want to run our code at all.
+#
+# ---------------------------------------------------------------------------- pinning
+#
+# The base image is pinned by digest, not by tag. `python:3.11-slim` is a mutable
+# pointer — the same defect as `actions/checkout@v7` in a workflow, and the same one
+# `--require-hashes` exists to prevent one layer down. Pinning every Python dependency
+# to its bytes and then building on whatever `3.11-slim` resolved to that morning would
+# leave the whole chain resting on its weakest link, and on the layer that carries the
+# interpreter, the OS packages and the TLS store.
+#
+# The comment records which tag the digest was, so a bump is reviewable. Update the
+# digest in both Dockerfiles together:
+#
+#     docker buildx imagetools inspect python:3.11-slim
+#
+# python:3.11-slim — 3.11.15-slim-trixie, resolved 2026-08-06.
+ARG BASE=python:3.11-slim@sha256:94c50be2dc994b873b55bc123e95e6dbade08095b3dfd790f51c34de3f08cbb7
+
+
+# ------------------------------------------------------------------------------ build
+#
+# A separate stage, so pip, the build backend, the compiler toolchain and the source
+# tree stay out of the published image. What ships is a virtualenv and an interpreter.
+# That is a smaller review surface for a human and a smaller package inventory for
+# `trivy image` — every package in the runtime layer is one somebody has to have a
+# reason for.
+FROM ${BASE} AS build
+
+# Deps first, from the hash-pinned lockfile, so a source change does not invalidate this
+# layer. --require-hashes means a substituted or tampered artefact fails the build
+# rather than reaching a run: the version is fixed, and so are the bytes.
+# Regenerate with scripts/lock.sh.
+COPY requirements/generate.txt /tmp/generate.txt
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
+        --require-hashes -r /tmp/generate.txt
+
+# The package itself.
+#
+# --no-deps: the lockfile above is the single source of installed versions. Without it
+# pip re-resolves from pyproject.toml and could quietly install something else.
+#
+# --no-build-isolation: PEP 517 isolation would *download* setuptools at build time, and
+# a build that fetches its own backend over the network is precisely the unpinned link
+# every other line in this file exists to remove. Without isolation the backend is the
+# setuptools already inside the base image — which is fixed by the digest above, so the
+# build tooling is pinned by the same mechanism as the interpreter.
+COPY pyproject.toml README.md /src/
+COPY src /src/src
+RUN /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
+        --no-deps --no-build-isolation /src
+
+# Bytecode at build time, not at first import. The runtime rootfs is read-only, so a
+# missed .pyc is not written — it is recompiled on every single run, forever.
+RUN /opt/venv/bin/python -m compileall -q /opt/venv/lib
+
+
+# ---------------------------------------------------------------------------- runtime
+FROM ${BASE}
+
+COPY --from=build /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Non-root by default, so an invocation that forgets `--user` is still not root. The
+# hardened invocation in docs/hardened-run.md passes `--user "$(id -u):$(id -g)"` on top
+# of this, so output lands owned by the person who ran it; both are non-root and the
+# image does not depend on which one is used.
+RUN groupadd --gid 65532 auditor \
+    && useradd --uid 65532 --gid 65532 --no-create-home \
+        --shell /usr/sbin/nologin auditor \
+    && mkdir -p /in /out \
+    && chown auditor:auditor /out
+USER 65532:65532
+
+# /out is a mount point, deliberately not a VOLUME. Declaring it would make Docker
+# create an anonymous volume when nobody mounted one — the run would succeed, write the
+# report into a directory that disappears with the container, and report nothing wrong.
+# Without the declaration a forgotten mount hits the read-only rootfs and fails loudly,
+# which is NF9 applied to the container rather than to the code.
+WORKDIR /out
+
+ENTRYPOINT ["legal-rag-audit"]
+CMD ["--help"]
+
+# `image.source` is what lets a reader go from a digest they were handed to the source
+# it was built from. Without it a signature proves only that *somebody* signed these
+# bytes, which is the weaker half of what §12.5 is for.
+LABEL org.opencontainers.image.title="legal-rag-audit (generate)" \
+      org.opencontainers.image.description="Probe generation and Tier 1 scoring. No ML stack: five pure-Python dependencies — the set a target installs." \
+      org.opencontainers.image.source="https://github.com/azterizm/legal-audit-rag"

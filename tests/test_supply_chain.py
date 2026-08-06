@@ -320,24 +320,34 @@ def test_the_sboms_match_the_lockfiles_on_disk():
 # -------------------------------------------------------------------------- base image
 
 
-def test_the_base_image_is_pinned_by_digest():
+def test_every_dockerfile_pins_its_base_image_by_digest():
     """`FROM python:3.11-slim` is a mutable pointer, exactly like `@v7` on an action.
 
     Pinning every Python dependency to its bytes and then building on whatever the tag
     resolved to that morning leaves the chain resting on its weakest link — and on the
     layer that carries the interpreter, the OS packages and the TLS store.
-    """
-    dockerfile = REPO_ROOT / "Dockerfile"
-    if not dockerfile.exists():
-        pytest.skip("no Dockerfile in this tree")
 
-    froms = re.findall(r"^FROM\s+(\S+)", dockerfile.read_text(encoding="utf-8"), re.M)
-    assert froms, "Dockerfile has no FROM line"
-    for image in froms:
-        assert re.search(r"@sha256:[0-9a-f]{64}$", image), (
-            f"base image {image!r} is pinned by tag, not digest. Resolve it with:\n"
-            f"    docker buildx imagetools inspect {image}"
-        )
+    Discovered by glob rather than named, because the failure this guards against is a
+    *third* Dockerfile arriving and nobody adding it here. tests/test_container.py
+    checks the same property per file, along with the rest of the image posture; this
+    one is the sweep that notices a new file.
+    """
+    dockerfiles = sorted(REPO_ROOT.glob("Dockerfile*"))
+    assert dockerfiles, "no Dockerfile in this tree"
+
+    for dockerfile in dockerfiles:
+        text = dockerfile.read_text(encoding="utf-8")
+        refs = re.findall(r"^(?:FROM|ARG BASE=)\s*(\S+)", text, re.M)
+        # `FROM ${BASE}` resolves to the pinned ARG above it, which this same sweep
+        # checks. Only the concrete references are claims about bytes.
+        concrete = [r for r in refs if not r.startswith("${")]
+        assert concrete, f"{dockerfile.name} pins no base image"
+        for image in concrete:
+            assert re.search(r"@sha256:[0-9a-f]{64}$", image), (
+                f"{dockerfile.name}: base image {image!r} is pinned by tag, not "
+                f"digest. Resolve it with:\n"
+                f"    docker buildx imagetools inspect {image}"
+            )
 
 
 # ------------------------------------------------------------------ the release posture

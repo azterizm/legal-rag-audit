@@ -1,4 +1,10 @@
-# Nothing here reaches the image.
+# Nothing here reaches the build context.
+#
+# Both Dockerfiles now copy four named paths — requirements/, pyproject.toml, README.md,
+# src/ — and build in a stage whose output is a virtualenv, so nothing in this file can
+# reach a published layer even if the exclusion were removed. That makes this list a
+# second mechanism rather than the only one, which is the right relationship for the
+# entry below: an exclusion that matters should not depend on one file being correct.
 
 # Excluded from the image by policy, not by accident.
 # See internal_experiments/README.md and V2_FULL_PLAN.md §4.2.

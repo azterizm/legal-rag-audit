@@ -15,14 +15,21 @@
 #      log, made by this repository's release workflow.
 #   4. Each file carries SLSA build provenance issued by GitHub's OIDC identity — a
 #      signed statement that these bytes came out of that workflow at that commit.
+#   5. Each container image named in IMAGES carries both, by digest.
+#
+# Step 5 depends on the four above rather than standing beside them: IMAGES is the file
+# that maps this tag to two image digests, and it is checksummed, signed and attested
+# with everything else. So by the time it is read, the mapping itself has been verified
+# — which is the part a registry lookup alone cannot give you, because the registry is
+# run by the same people who published the release.
 #
 # What none of this establishes: that the software does what the README says. It
 # establishes only that what you downloaded is what the public workflow built from the
 # public commit. That is the question signing can answer; the rest is what the tests,
 # the gates and the report's own limits section are for.
 #
-# Requires: git, gpg, sha256sum (or shasum), and — for 3 and 4 — cosign and gh.
-# Steps 3 and 4 are skipped with a warning if their tool is absent, never silently.
+# Requires: git, gpg, sha256sum (or shasum), and — for 3, 4 and 5 — cosign and gh.
+# Those steps are skipped with a warning if their tool is absent, never silently.
 
 set -euo pipefail
 
@@ -196,6 +203,49 @@ else
             fail "${name} — no valid SLSA provenance attestation"
         fi
     done
+fi
+
+# --------------------------------------------------------------------- 5. the images
+
+echo
+echo "5. Container images — signed and attested by digest"
+echo
+
+if [ ! -f "${WORKDIR}/IMAGES" ]; then
+    skip "this release published no IMAGES file, so it published no container images"
+elif ! command -v cosign >/dev/null 2>&1; then
+    skip "cosign is not installed — https://github.com/sigstore/cosign"
+else
+    IDENTITY="https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}"
+    while read -r ref; do
+        case "${ref}" in ''|\#*) continue ;; esac
+
+        # A reference without a digest is not something to verify — it is a name, and
+        # a name can be moved to point at other bytes after this file was written. If
+        # one appears here, the release is malformed and saying so is the answer.
+        case "${ref}" in
+            *@sha256:*) ;;
+            *) fail "${ref} is a tag, not a digest — nothing signed can be checked against it"
+               continue ;;
+        esac
+
+        if cosign verify "${ref}" \
+            --certificate-identity "${IDENTITY}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            >/dev/null 2>&1; then
+            pass "cosign  ${ref}"
+        else
+            fail "cosign  ${ref} — no signature for ${IDENTITY}"
+        fi
+
+        if ! command -v gh >/dev/null 2>&1; then
+            skip "provenance ${ref} — gh is not installed"
+        elif gh attestation verify "oci://${ref}" --repo "${REPO}" >/dev/null 2>&1; then
+            pass "provenance  ${ref}"
+        else
+            fail "provenance  ${ref} — no valid SLSA attestation"
+        fi
+    done < "${WORKDIR}/IMAGES"
 fi
 
 # ----------------------------------------------------------------------------- verdict
