@@ -36,7 +36,7 @@ from legal_rag_audit.interchange.versions import (  # noqa: E402
     HANDOVER_V1,
     PROBES_V2,
     REPORT_V2,
-    RESPONSES_V2,
+    RESPONSES_V3,
     RUN_MANIFEST_V1,
 )
 
@@ -44,7 +44,7 @@ OUT_DIR = REPO_ROOT / "src" / "legal_rag_audit" / "interchange" / "jsonschema"
 
 VERSIONS = (
     PROBES_V2,
-    RESPONSES_V2,
+    RESPONSES_V3,
     GROUND_TRUTH_V4,
     HANDOVER_V1,
     RUN_MANIFEST_V1,
@@ -53,7 +53,7 @@ VERSIONS = (
 
 TITLES = {
     PROBES_V2: "Probe file (JSONL) — one probe per line",
-    RESPONSES_V2: "Response file (JSONL) — one record per line",
+    RESPONSES_V3: "Response file (JSONL) — one record per line",
     GROUND_TRUTH_V4: "Ground-truth manifest (JSON) — withheld, hashed at handover",
     HANDOVER_V1: "Handover record (JSON) — the pre-commitment, published before the run",
     RUN_MANIFEST_V1: "Run manifest (JSON) — the provenance block of a report",
@@ -79,7 +79,7 @@ def require_schema_field(node: dict) -> dict:
 def build(version: str) -> dict:
     if version == PROBES_V2:
         schema = require_schema_field(Probe.model_json_schema(by_alias=True))
-    elif version == RESPONSES_V2:
+    elif version == RESPONSES_V3:
         # A response file holds two record shapes: an optional capture_notes header and
         # the responses themselves. The schema validates one *line*, so it is the union.
         response = require_schema_field(Response.model_json_schema(by_alias=True))

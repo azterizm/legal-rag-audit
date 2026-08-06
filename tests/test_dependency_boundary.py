@@ -107,7 +107,7 @@ def test_the_cli_runs_there(generate_env):
     )
     # main() calls sys.exit(0) on success.
     assert result.returncode == 0, result.stderr
-    assert "responses.v2" in result.stdout
+    assert "responses.v3" in result.stdout
 
 
 @pytest.mark.slow

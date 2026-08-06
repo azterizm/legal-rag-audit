@@ -87,7 +87,7 @@ they are being built against a written spec, not discovered.
 | Run manifest: hashes, commit SHA, model versions, seed, corpus mode, battery composition | **Shipped** |
 | `hash` handover record; `score` refuses a ground truth that moved | **Shipped** |
 | `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | **Shipped** |
-| Authorisation gating on injection / canary families | Specified — v0.2.0 |
+| Authorisation gating on injection / canary families | **Shipped** — `generate` aborts before sending anything; production needs a second, typed act |
 | Seeded plant generation with collision guard | **Shipped** — `plant`, 29 invariants across 15 documents |
 | Two-phase corpus upload for index freshness | **Shipped** |
 | N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
@@ -659,7 +659,7 @@ The digests are recomputed, and **a ground truth that changed since handover abo
 run** — no report, exit 2. That constraint is on us, not on you.
 
 ```bash
-legal-rag-audit schema --print responses.v2
+legal-rag-audit schema --print responses.v3
 ```
 
 Prints the published contract, so implementing against it needs no clone.
@@ -667,8 +667,6 @@ Prints the published contract, so implementing against it needs no clone.
 Exit codes are a contract: **0** ran clean, **1** ran with findings, **2** did not run —
 a setup problem, with a diagnosis. A run that could not start never exits the way a clean
 one does.
-
-Still to come: authorisation gating on the injection and canary families (v0.2.0).
 
 ### If you would rather we never touched your endpoint
 
@@ -1066,13 +1064,38 @@ exposure in the UK. *"I signed up for a trial"* is not authorisation.
 | Checking answers for publisher-proprietary markers | Index or corpus enumeration |
 | Asking the same question three times and diffing | Index-freshness re-upload |
 
-v0.2.0 enforces this in software rather than promising it in prose: a battery containing
-any right-column family aborts unless the config carries a populated `authorisation`
-block, `environment: production` additionally requires an explicit command-line flag, and
-the authorisation block is reproduced verbatim in the report manifest so the artefact
-carries its own provenance of consent. Default rate limits (2 concurrent, 1 rps,
-exponential backoff on 429) are set so an ordinary run resembles a user rather than a
-scanner.
+**This is enforced in software rather than promised in prose.** `generate` refuses to
+send a single request until the condition is met, and the refusal names every reason.
+
+Two independent things make a run need authorisation. **The families it asks** — every
+probe family is classed by what running one actually does to somebody else's system, as
+data rather than as a comment, and a family nobody has classified is treated as needing
+authorisation. **Whether it uploads** — a planted corpus puts our documents into your
+index and one of them carries an injection payload by construction, which is *uploading
+adversarial documents* whatever is then asked.
+
+`environment: production` needs a second, separate act: `--i-have-written-authorisation-for-production`
+typed on the command line. A config is copied between runs; a command line is typed for
+one. There is no config-only path.
+
+The block is reproduced **verbatim** in the run manifest and printed in the attestation,
+so the artefact carries its own provenance of consent. It is not evidence that anybody was
+actually authorised — a name can be typed into a YAML file, and the report says so rather
+than letting the block imply more than it establishes. What the control does is make the
+crossing deliberate and recorded.
+
+Two paths need no authorisation at all, and that is the design rather than a gap.
+`validate` fires three neutral throwaway probes and has no import path to the battery.
+The existing-corpus battery uploads nothing and asks only ordinary-use families — which is
+why it is the half that runs before anybody has signed anything.
+
+Default rate limits (2 concurrent, 1 rps, exponential backoff on 429) are set so an
+ordinary run resembles a user rather than a scanner.
+
+[`docs/authorisation-and-retention.md`](docs/authorisation-and-retention.md) has the full
+position, including what happens to your responses afterwards: **held 90 days from report
+delivery, then deleted**; excerpts quoted in the report retained with it; no publication
+without written consent; and configurations named in any published result, never products.
 
 ---
 

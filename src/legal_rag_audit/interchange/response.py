@@ -1,4 +1,4 @@
-"""`responses.v2` — the interchange format (V2_FULL_PLAN.md §6.3, F19, F35).
+"""`responses.v3` — the interchange format (V2_FULL_PLAN.md §6.3, F19, F35).
 
 The whole low-friction engagement rests on this file. A target may produce it with our
 `generate` mode, with their own evaluation harness, or with thirty lines of curl and
@@ -23,7 +23,8 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .jsonl import InterchangeError, read_records, write_records
-from .versions import RESPONSES_V2, assert_schema
+from ..authorisation import Authorisation
+from .versions import RESPONSES_V3, assert_schema
 
 
 class RetrievedChunk(BaseModel):
@@ -51,7 +52,7 @@ class CaptureNotes(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["responses.v2"] = Field(default=RESPONSES_V2, alias="schema")
+    schema_: Literal["responses.v3"] = Field(default=RESPONSES_V3, alias="schema")
     record: Literal["capture_notes"]
     citations_captured: bool
     retrieved_chunks_captured: bool
@@ -71,6 +72,14 @@ class CaptureNotes(BaseModel):
     #: different findings with different severity, and only the elapsed time separates
     #: them (§8.2 #4). Null where the run had no revision phase.
     revision_wait_seconds: Optional[int] = None
+    #: §13, verbatim — who authorised what, on what date, in which environment.
+    #:
+    #: It travels in the response file because `score` sees no config, and on the
+    #: artefact route (§5.1.1) the config never exists on our machine at all. Null on an
+    #: ordinary-use battery, which needs none: asking questions and reading answers is
+    #: the use a trial exists for, and that is what makes the existing-corpus half of
+    #: §9.1 and `validate` free to run.
+    authorisation: Optional[Authorisation] = None
     #: Free text. Goes into the run manifest verbatim.
     notes: Optional[str] = None
 
@@ -83,7 +92,7 @@ class Response(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_: Literal["responses.v2"] = Field(default=RESPONSES_V2, alias="schema")
+    schema_: Literal["responses.v3"] = Field(default=RESPONSES_V3, alias="schema")
     #: Opaque. Ties a file to a run manifest; we never parse it.
     run_id: str
     probe_id: str
@@ -159,7 +168,7 @@ def load_responses(path: str | Path) -> ResponseFile:
 
     for index, (lineno, obj) in enumerate(read_records(path)):
         where = f"{path}:{lineno}"
-        assert_schema(obj.get("schema"), RESPONSES_V2, where=where)
+        assert_schema(obj.get("schema"), RESPONSES_V3, where=where)
 
         # `record` is a discriminator, not data. Response lines omit it (§6.3), so the
         # default is "response" and an explicit one is accepted and dropped.

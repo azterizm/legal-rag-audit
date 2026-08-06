@@ -246,7 +246,12 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
         ["Plants", run.get("plants", 0)],
         ["Remote scoring", "false — enforced, not asserted"],
     ]
+
+    # §13 rule 3 — verbatim, so the artefact carries its own provenance of consent. Its
+    # own block rather than a manifest row, because a reader deciding whether this run
+    # should have happened is asking a different question from the one the hashes answer.
     out = _table(["Field", "Value"], rows)
+    out.extend(_authorisation(manifest))
 
     gaps = manifest.get("not_recorded") or {}
     if gaps:
@@ -258,6 +263,36 @@ def _manifest_table(manifest: dict[str, Any]) -> list[str]:
                 [[f"`{field}`", reason] for field, reason in sorted(gaps.items())],
             )
         )
+    return out
+
+
+def _authorisation(manifest: dict[str, Any]) -> list[str]:
+    """Who authorised what, on what date, in which environment."""
+    block = manifest.get("authorisation")
+    if not block:
+        # Silence here would read as *no authorisation was needed*, which is sometimes
+        # true and sometimes the opposite. `not_recorded` says which, and the manifest
+        # table above already prints it — so this section only appears when there is a
+        # consent to reproduce.
+        return []
+
+    rows = [
+        ["Authorised by", block.get("authorised_by") or "—"],
+        ["Authorised on", block.get("authorised_on") or "—"],
+        ["Environment", block.get("environment") or "—"],
+        ["Scope acknowledged", block.get("scope_ack") or "—"],
+    ]
+    if block.get("reference"):
+        rows.append(["Reference", block["reference"]])
+
+    out = ["", "### Authorisation", ""]
+    out.extend(_table(["Field", "Value"], rows))
+    out.append(
+        "Reproduced verbatim from the response file. It records what the operator "
+        "declared; it is not itself evidence that the declaration was true, and a "
+        "reader who needs that should ask for the written authorisation it references."
+    )
+    out.append("")
     return out
 
 
@@ -696,6 +731,16 @@ def _limits(report: dict[str, Any], capture: dict[str, Any]) -> list[str]:
             "answer. A finding suppressed by an output filter is indistinguishable "
             "from one that did not occur."
         )
+    # §13. A report about an authorised-testing battery that cannot say who consented to
+    # it is missing something a reader needs, and the gap has to be visible where they
+    # are already looking for what the run does not establish.
+    if manifest.get("not_recorded", {}).get("authorisation") and not manifest.get(
+        "authorisation"
+    ):
+        limits.append(
+            f"Authorisation: {manifest['not_recorded']['authorisation']}"
+        )
+
     # §9.5 — corpora go stale because law moves. Printed as a limit rather than as a
     # footnote: it is the sentence that says when this report stops being current, and it
     # is the re-run trigger built into the artefact rather than chased by email.

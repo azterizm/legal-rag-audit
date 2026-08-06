@@ -33,6 +33,7 @@ import ast
 import os
 import re
 from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -95,6 +96,28 @@ def _config(work: Path, endpoints: dict[str, str], passes: int, mode: str) -> Pa
         "  response_format:",
         "    answer_field: response.text",
         "    citations_field: response.sources",
+    ]
+    # §13, and the reference target is not exempt from it. The planted battery plants
+    # instructions in documents and probes tenant isolation; that it does so against a
+    # mock we wrote does not change which families it asks, and a gate our own harness
+    # routed around would be a gate that holds until it matters.
+    #
+    # The existing-corpus battery deliberately declares none, because it needs none —
+    # every family on it is ordinary use and it uploads nothing. That asymmetry is the
+    # assertion: the two batteries differ here for the same reason they differ on
+    # `endpoints.upload`.
+    if mode == "planted":
+        lines += [
+            "authorisation:",
+            "  authorised_by: Reference target, owned by this repository",
+            f"  authorised_on: '{date.today().isoformat()}'",
+            "  environment: sandbox",
+            "  scope_ack: >-",
+            "    injection, cross-tenant and upload probes against a mock target that",
+            "    exists only inside this test suite and holds no real data",
+            "  reference: tests/mock_target/",
+        ]
+    lines += [
         "corpus:",
         f"  mode: {mode}",
         # Zero, and the report says so beside the freshness finding. A mock invalidates

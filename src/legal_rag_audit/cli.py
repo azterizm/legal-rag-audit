@@ -13,7 +13,7 @@ Five modes, and which side of the engagement runs each one is the whole design:
     legal-rag-audit score --responses responses.jsonl \
                           --ground-truth run/ground_truth.json \
                           --handover run/handover.json -o out/
-    legal-rag-audit schema --print responses.v2
+    legal-rag-audit schema --print responses.v3
 
 `plant` and `hash` run first and are ours: one mints the invariants and writes the corpus,
 the other seals it before any response exists. `validate` and `generate` are theirs, and
@@ -58,6 +58,7 @@ import json
 import logging
 import sys
 
+from .authorisation import PRODUCTION_ACK, AuthorisationError
 from .config import AuditConfig
 from .corpus_loader import CorpusError
 from .interchange import InterchangeError, SchemaVersionError
@@ -112,7 +113,10 @@ def cmd_generate(args: argparse.Namespace) -> int:
             skip_upload=args.skip_upload,
             corpus_dir=args.corpus,
             probes_in=args.probes_in,
+            production_ack=args.production_ack,
         )
+    except AuthorisationError as e:
+        return _abort(f"Refusing to run, and nothing was sent:\n{e}")
     except CorpusError as e:
         return _abort(f"Corpus setup failed, aborting before any request was sent:\n{e}")
     except GenerationError as e:
@@ -599,6 +603,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--probes-in",
         default=None,
         help="ask the questions in this probe file rather than building the battery",
+    )
+    gen.add_argument(
+        PRODUCTION_ACK,
+        action="store_true",
+        dest="production_ack",
+        help=(
+            "required in addition to the config when `authorisation.environment` is "
+            "`production`. There is no config-only path to a production run (§13 rule "
+            "2): a config is copied between runs and a command line is typed for one"
+        ),
     )
     gen.set_defaults(func=cmd_generate)
 

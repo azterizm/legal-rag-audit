@@ -4,6 +4,8 @@ from typing import Any, Dict, Literal, Optional, Union
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
+from .authorisation import Authorisation
+
 
 class EndpointConfig(BaseModel):
     url: str
@@ -145,6 +147,15 @@ class AuditConfig(BaseModel):
     battery: BatteryConfig = BatteryConfig()
     multi_tenant: Optional[Dict[str, TenantConfig]] = None
     thresholds: ThresholdsConfig = ThresholdsConfig()
+    #: §13 — who authorised what, on what date, in which environment. Optional in the
+    #: schema and required by `generate` for any run that uploads or asks an
+    #: authorised-testing family, which is the check that matters: a required key would
+    #: be filled in with something to make the error go away, and a run that aborts
+    #: naming the families it would have asked is a decision somebody has to make.
+    #:
+    #: Reproduced verbatim in the report manifest, so the artefact carries its own
+    #: provenance of consent.
+    authorisation: Optional[Authorisation] = None
 
     @classmethod
     def load_from_yaml(cls, path: str) -> "AuditConfig":

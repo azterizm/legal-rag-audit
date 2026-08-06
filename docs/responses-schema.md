@@ -1,4 +1,4 @@
-# `responses.v2` — producing the response file yourself
+# `responses.v3` — producing the response file yourself
 
 You do not have to run our code.
 
@@ -26,20 +26,20 @@ several lines is the most common way this file comes back malformed, so pipe thr
 `jq -c` rather than `jq`.
 
 ```json
-{"schema":"responses.v2","run_id":"b4f1","probe_id":"cit-014","pass_index":1,"query":"What is the indemnity cap in the Northbrook services agreement?","tenant":"tenant_a","answer":"The indemnity is capped at £4,471,203.17 under clause 9.2 …","citations":["doc_7781","doc_7783"],"retrieved_chunks":[{"doc_id":"doc_7781","text":"…"}],"ttfb_ms":812,"total_ms":4310,"http_status":200,"error":null,"started_at":"2026-08-04T09:03:11Z"}
+{"schema":"responses.v3","run_id":"b4f1","probe_id":"cit-014","pass_index":1,"query":"What is the indemnity cap in the Northbrook services agreement?","tenant":"tenant_a","answer":"The indemnity is capped at £4,471,203.17 under clause 9.2 …","citations":["doc_7781","doc_7783"],"retrieved_chunks":[{"doc_id":"doc_7781","text":"…"}],"ttfb_ms":812,"total_ms":4310,"http_status":200,"error":null,"started_at":"2026-08-04T09:03:11Z"}
 ```
 
 Print the authoritative JSON Schema with:
 
 ```bash
-legal-rag-audit schema --print responses.v2
+legal-rag-audit schema --print responses.v3
 ```
 
 ### Fields
 
 | Field | Required | Notes |
 |---|---|---|
-| `schema` | yes | Exactly `"responses.v2"`. A file that does not declare its contract is refused, not guessed at. |
+| `schema` | yes | Exactly `"responses.v3"`. A file that does not declare its contract is refused, not guessed at. |
 | `run_id` | yes | Any opaque string, the same on every line of one run. We never parse it. |
 | `probe_id` | yes | From the probe file. Must match exactly. |
 | `pass_index` | no | 1-based, defaults to 1. Increment it when you ask the same probe again. |
@@ -86,7 +86,7 @@ surface chunks at all, leave the field out entirely and say so in the header bel
 If a probe timed out, was rate-limited, or returned a 500, record it:
 
 ```json
-{"schema":"responses.v2","run_id":"b4f1","probe_id":"cit-014","query":"…","answer":"","error":"ReadTimeout after 60s","http_status":null}
+{"schema":"responses.v3","run_id":"b4f1","probe_id":"cit-014","query":"…","answer":"","error":"ReadTimeout after 60s","http_status":null}
 ```
 
 Every check reads a record with `error` set as `NOT_CAPTURED`. None reads it as a
@@ -100,7 +100,7 @@ asked and returned nothing — so do not use it for transport problems.
 Optional, and if present it must be the first line of the file:
 
 ```json
-{"schema":"responses.v2","record":"capture_notes","citations_captured":true,"retrieved_chunks_captured":false,"document_ids":["doc_7781","doc_7783"],"notes":"chunks not exposed by our API"}
+{"schema":"responses.v3","record":"capture_notes","citations_captured":true,"retrieved_chunks_captured":false,"document_ids":["doc_7781","doc_7783"],"notes":"chunks not exposed by our API"}
 ```
 
 It resolves an ambiguity nothing else can. Without it, a file where every record has
@@ -112,6 +112,17 @@ Citation integrity is set membership — *is each identifier the system returned
 actually issued?* — so with no set there is nothing to test against and the check reports
 `NOT_CAPTURED`. If your upload endpoint returns no identifiers, that is worth knowing
 before the run rather than after it.
+
+`authorisation` is who authorised the run, on what date, in which environment — §13's
+block, reproduced verbatim in the report so the artefact carries its own provenance of
+consent. Include it if you were given written authorisation for a battery that needs one:
+injection, cross-tenant probes, index-freshness re-upload, or any run that uploads a
+corpus. Omit it for a battery of ordinary questions against your own system; the report
+then records that none was needed rather than treating the absence as a gap.
+
+```json
+{"authorised_by":"A. Person, Head of Engineering","authorised_on":"2026-08-04","environment":"staging","scope_ack":"injection, canary and upload probes authorised in writing","reference":"engagement letter 2026-03, clause 4"}
+```
 
 `revision_wait_seconds` is how long you waited between replacing the documents in
 `corpus/revision/` and asking the second-phase probes again. It matters because a
@@ -146,7 +157,7 @@ RUN_ID=$(date +%s)
 
 # Header: state what this script can and cannot capture.
 jq -nc --argjson ids "$(cat document_ids.json)" \
-  '{schema:"responses.v2",record:"capture_notes",
+  '{schema:"responses.v3",record:"capture_notes",
     citations_captured:true,retrieved_chunks_captured:false,
     document_ids:$ids,notes:"curl+jq; retrieval not exposed"}' > responses.jsonl
 
@@ -165,7 +176,7 @@ while read -r probe; do
 
   jq -nc --arg id "$id" --arg q "$text" --arg run "$RUN_ID" \
          --argjson ms "$((now - start))" --argjson body "$body" \
-    '{schema:"responses.v2",run_id:$run,probe_id:$id,pass_index:1,query:$q,
+    '{schema:"responses.v3",run_id:$run,probe_id:$id,pass_index:1,query:$q,
       answer:($body.answer // ""),
       citations:($body.sources // null),
       total_ms:$ms,http_status:200}' >> responses.jsonl

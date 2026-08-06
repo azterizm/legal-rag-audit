@@ -20,7 +20,7 @@ exists to measure in other people's systems.
 | **F2** | Pathological reference target + sensitivity/specificity gates | 1.5 d | ✅ 2026-08-04 |
 | **G** | Existing-corpus mode + point-in-time pairs + licensed-content reproduction | 4–5 d | ✅ 2026-08-05 *(hero benchmark not run — it needs a decision about targets, §16)* |
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ✅ 2026-08-05 *(second corpus timed at 4m43s, but by an agent — a human timing is still owed)* |
-| **I** | Authorisation controls + retention position | 0.5 d | ⬜ |
+| **I** | Authorisation controls + retention position | 0.5 d | ✅ 2026-08-06 |
 
 Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
 
@@ -2112,3 +2112,107 @@ but the test that exists to catch exactly this was building the wrong thing.
 
 The habit that hid both: verifying a phase with `-m "not slow"` and reporting the number.
 The full suite is 754 tests and takes eighty seconds.
+
+---
+
+## Phase I — the boundary, enforced ✅
+
+**Shipped 2026-08-06.** §16 tells a reader in prose that signing up for a product
+authorises use and not testing. This phase is where that stops being a promise about our
+conduct and becomes a property of the software: `generate` refuses to send a single
+request until the condition is satisfied, and the refusal names every reason.
+
+### Two triggers, not one
+
+§13 classes probe families by authorisation requirement. Implementing only that would have
+been wrong, because it misses the act that actually needs consent most obviously.
+
+**The families a battery asks.** `authorisation.py` classes *every* family both batteries
+ask — not just §13's five — as data, each with a one-line account of what running it does
+to somebody else's system. Written for the person reading an abort message at nine at
+night: *"tests injection resistance"* explains nothing, and *"plants an instruction inside
+a document and tests whether the retriever obeys it"* explains everything. An unrecognised
+family is treated as needing authorisation, because the safe reading of *nobody has
+decided* is not *this is ordinary use*; a test asserts every family in either battery is
+classified, so the fail-closed default stays a backstop rather than becoming the mechanism.
+
+**Whether it uploads.** §16.1 puts *uploading adversarial documents* in the column headed
+never on a self-signed-up account, and the planted corpus carries an injection payload by
+construction. So the upload needs consent whatever families ride on it — and the abort
+message names the way out, because the configuration that needs no upload and no
+authorisation is the thing an operator most needs to be told about at that moment.
+
+`require()` collects every reason rather than the first. An operator who fixes one and
+re-runs into the next has been told the truth twice instead of once.
+
+### Where the gate is, and where it is not
+
+**In `generate`, before the first request.** Asserted against an endpoint with nothing
+listening on it: a run that got as far as sending would fail with a connection error and
+write a response file, and this one exits 2 with a diagnosis and writes nothing. That is
+the difference between a control and a log entry.
+
+**Not in `score`.** The first implementation refused to score a response file that
+recorded an authorised-testing battery with no block, and it was wrong twice over. By the
+time a response file exists the requests have been sent, and refusing to read it does not
+un-send them — it only means nobody gets a report about what happened. It also breaks the
+artefact route (§5.1.1), where a file produced by the target's own harness against their
+own system legitimately carries no block, and that route is the whole low-friction
+premise. So `score` records the absence under *Limits*, and **no block and none needed**
+prints differently from **no block and one was needed** — opposite facts about a run, and
+F40 says they may never read the same.
+
+### Production needs two acts
+
+`environment: production` in the config is refused without
+`--i-have-written-authorisation-for-production` on the command line. A config is copied
+between runs; a command line is typed for one. The flag alone authorises nothing, and
+both directions are tested.
+
+### What the report carries, and what it does not claim
+
+The block is verbatim in the run manifest and in its own attestation section. Printed
+beside it, in the same block: *it records what the operator declared; it is not itself
+evidence that the declaration was true.* A determined operator can type a name into a YAML
+file, and a page that let the block imply otherwise would be doing the thing this project
+measures in other people's reports.
+
+**No expiry is enforced.** The manifest records how old the authorisation was on the day of
+the run and leaves the reader to decide whether a scope from two years ago still covers it.
+Any number we chose would be the `0.85` mistake again (F24) — ours, presented as a
+standard.
+
+### The reference target is not exempt
+
+Its planted battery now declares an authorisation block naming the mock it runs against.
+That it probes a target we wrote does not change which families it asks, and a gate our own
+harness routed around would be a gate that holds until it matters. The existing-corpus
+battery deliberately declares none — that asymmetry is the assertion, and it is the same
+one already made about `endpoints.upload`.
+
+### The two free paths stayed free
+
+`validate` needs no authorisation: three neutral throwaway probes, in a package with no
+import path to the battery, carrying no family for the gate to classify. The
+existing-corpus battery needs none either: it uploads nothing and every family on it is
+ordinary use. Neither is an exemption written into the gate — both fall out of the rule,
+and a gate that had caught either would have been written to the wrong one.
+
+### Recorded deviations
+
+Three, all above: `responses.v3` carries the block in the capture notes because `score`
+sees no config; `score` records rather than refuses; no expiry is enforced.
+
+**781 tests, the whole suite.** Seven gates clean —
+`check_readme_claims.py` now covers `docs/authorisation-and-retention.md`. Sensitivity and
+specificity still 20/20, now with the reference target declaring its own consent.
+
+### Still outstanding after this phase
+
+- **`/trust` and the engagement terms.** §15.7's retention position is drafted in
+  `docs/authorisation-and-retention.md`. Both destinations are outside this repository.
+- **Rate limits are defaults, not a control.** §13 rule 5 says they are set so an ordinary
+  run is indistinguishable from a user rather than a scanner. They are, and nothing
+  enforces that a config cannot raise them. That is correct for a client running against
+  their own system and would be wrong for a free-tier run against somebody else's; the
+  distinction is not currently in the code.

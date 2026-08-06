@@ -1,5 +1,54 @@
 {
   "$defs": {
+    "Authorisation": {
+      "additionalProperties": false,
+      "description": "Who authorised what, on what date, in which environment.\n\nTravels with the run and is reproduced **verbatim** in the report manifest, so the\nartefact carries its own provenance of consent (\u00a713 rule 3). A report that names a\ncross-tenant leak and cannot say who authorised the test for it is a report nobody\nshould have produced.",
+      "properties": {
+        "authorised_by": {
+          "title": "Authorised By",
+          "type": "string"
+        },
+        "authorised_on": {
+          "format": "date",
+          "title": "Authorised On",
+          "type": "string"
+        },
+        "environment": {
+          "enum": [
+            "dev",
+            "sandbox",
+            "staging",
+            "production"
+          ],
+          "title": "Environment",
+          "type": "string"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference"
+        },
+        "scope_ack": {
+          "title": "Scope Ack",
+          "type": "string"
+        }
+      },
+      "required": [
+        "authorised_by",
+        "authorised_on",
+        "environment",
+        "scope_ack"
+      ],
+      "title": "Authorisation",
+      "type": "object"
+    },
     "RetrievedChunk": {
       "additionalProperties": true,
       "description": "One chunk the target's retriever returned for this query.\n\nExtra keys are allowed: chunk metadata is the target's shape, not ours, and\ndiscarding their scores or offsets would make the evidence bundle less useful than\nthe raw file they already have.",
@@ -28,7 +77,7 @@
       "type": "object"
     }
   },
-  "$id": "https://github.com/legal-rag-audit/schemas/responses.v2.schema.json",
+  "$id": "https://github.com/legal-rag-audit/schemas/responses.v3.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "oneOf": [
     {
@@ -122,8 +171,8 @@
           "type": "string"
         },
         "schema": {
-          "const": "responses.v2",
-          "default": "responses.v2",
+          "const": "responses.v3",
+          "default": "responses.v3",
           "title": "Schema",
           "type": "string"
         },
@@ -190,6 +239,17 @@
       "additionalProperties": false,
       "description": "Optional first line of the file, declaring what the producer could capture.\n\nWithout it, an absent field is ambiguous \u2014 we cannot tell \"the target emits no\ncitations\" from \"our script did not record them\". With it, that ambiguity is\nresolved by the person who actually knows. Every check it disables is named in the\nreport rather than quietly dropped.",
       "properties": {
+        "authorisation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Authorisation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "citations_captured": {
           "title": "Citations Captured",
           "type": "boolean"
@@ -243,8 +303,8 @@
           "title": "Revision Wait Seconds"
         },
         "schema": {
-          "const": "responses.v2",
-          "default": "responses.v2",
+          "const": "responses.v3",
+          "default": "responses.v3",
           "title": "Schema",
           "type": "string"
         }

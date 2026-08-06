@@ -13,6 +13,7 @@ record is more than a number in a covering email.
 from pathlib import Path
 from typing import Any, Optional
 
+from ..authorisation import reasons
 from ..config import ThresholdsConfig
 from ..instruments import describe
 from ..interchange import (
@@ -273,11 +274,48 @@ def build_run_manifest(
         )
 
     instruments = [InstrumentRecord(**row) for row in describe(thresholds)]
-    not_recorded["authorisation"] = (
-        "the §13 authorisation block is not yet part of the config (Phase I). A "
-        "battery containing an authorised-testing family will abort without it once "
-        "the gate lands (F37); until then this run asserts nothing about consent."
-    )
+
+    # §13 rule 3 — verbatim, from the response file rather than from a config. `score`
+    # sees no config, and on the artefact route (§5.1.1) the config never exists on our
+    # machine at all; the producer of the responses is the party who holds the consent.
+    notes = response_file.capture_notes
+    authorisation = notes.authorisation if notes else None
+    if authorisation is None:
+        needed = reasons(
+            (p.family for p in probes),
+            uploads=bool(notes and notes.document_ids),
+        )
+        if needed:
+            # Recorded, not refused. The gate that stops an unauthorised run is in
+            # `generate`, before the first request goes out; by the time a response file
+            # exists the requests have been sent, and refusing to score it would not
+            # un-send them — it would only mean nobody got a report about what happened.
+            #
+            # It also has to stay scoreable because of the artefact route (§5.1.1): a
+            # response file produced by the target's own harness against their own system
+            # legitimately carries no block, and that is the whole low-friction premise.
+            #
+            # So the report says so, on the page, under Limits. An absent record of
+            # consent and a recorded one must never read the same (F40).
+            not_recorded["authorisation"] = (
+                "this battery contains families that need written authorisation under "
+                "§13 ("
+                + ", ".join(
+                    r.what.replace("the `", "").replace("` family", "")
+                    for r in needed
+                    if r.what != "uploading a corpus"
+                )
+                + "), and the response file carries no record of consent. This report "
+                "cannot say who authorised the run that produced it. A file from the "
+                "target's own harness against their own system is the ordinary reason "
+                "for this; a run of ours would have aborted before sending anything."
+            )
+        else:
+            not_recorded["authorisation"] = (
+                "no authorisation block, and none was needed: every family in this "
+                "battery is ordinary use under §13 and nothing was uploaded. Asking "
+                "questions and reading the answers is the use a trial exists for."
+            )
 
     return RunManifest(
         tool=ToolProvenance(
@@ -329,6 +367,6 @@ def build_run_manifest(
         ),
         battery=_battery(probes),
         capture=_capture(response_file, checks, asked),
-        authorisation=None,
+        authorisation=authorisation.to_record() if authorisation else None,
         not_recorded=dict(sorted(not_recorded.items())),
     )

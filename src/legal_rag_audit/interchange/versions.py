@@ -18,6 +18,7 @@ PROBES_V1: Final = "probes.v1"
 PROBES_V2: Final = "probes.v2"
 RESPONSES_V1: Final = "responses.v1"
 RESPONSES_V2: Final = "responses.v2"
+RESPONSES_V3: Final = "responses.v3"
 GROUND_TRUTH_V1: Final = "ground_truth.v1"
 GROUND_TRUTH_V2: Final = "ground_truth.v2"
 GROUND_TRUTH_V3: Final = "ground_truth.v3"
@@ -34,7 +35,7 @@ REPORT_V2: Final = "report.v2"
 #: in the file; values are what the identifier is for, used in error messages.
 SUPPORTED: Final[dict[str, str]] = {
     PROBES_V2: "probe file",
-    RESPONSES_V2: "response file",
+    RESPONSES_V3: "response file",
     GROUND_TRUTH_V4: "ground-truth manifest",
     HANDOVER_V1: "pre-commitment record",
     RUN_MANIFEST_V1: "run manifest",
@@ -56,6 +57,13 @@ SUPERSEDED: Final[dict[str, str]] = {
         f"superseded value returned two seconds after a document was replaced means "
         f"something different from the same value ten minutes later, and index "
         f"freshness cannot separate the two without the elapsed time (§8.2 #4)"
+    ),
+    RESPONSES_V2: (
+        f"{RESPONSES_V3} — Phase I added `authorisation` to the capture notes. §13 "
+        f"reproduces the authorisation block verbatim in the report, and `score` sees no "
+        f"config to read it from — on the artefact route the config never exists on our "
+        f"machine at all. A report that names a cross-tenant leak and cannot say who "
+        f"authorised the test for it is a report nobody should have produced"
     ),
     GROUND_TRUTH_V1: (
         f"{GROUND_TRUTH_V2} — Phase D folded `legacy_params` away. The evaluators now "

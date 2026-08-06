@@ -26,6 +26,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ..authorisation import Authorisation, require
 from ..config import AuditConfig
 from ..corpus_loader import load_corpus, load_planted
 from ..interchange import (
@@ -63,10 +64,15 @@ class Generator:
         revisions: Optional[list[dict[str, Any]]] = None,
         passes: int = 1,
         skip_upload: bool = False,
+        authorisation: Optional[Authorisation] = None,
     ):
         if passes < 1:
             raise GenerationError(f"passes must be at least 1, got {passes}")
         self.config = config
+        #: Passed in already checked. The gate lives in `generate()` because it has to
+        #: fire before a corpus is uploaded, and by the time this class exists the
+        #: decision has been made — this only carries it into the response file.
+        self.authorisation = authorisation
         self.documents = documents
         self.revisions = revisions or []
         self.passes = passes
@@ -102,6 +108,11 @@ class Generator:
             retrieved_chunks_captured=self.saw_chunks,
             document_ids=self.document_ids or None,
             revision_wait_seconds=self.revision_wait,
+            # §13 rule 3. It travels here rather than in the config hash because `score`
+            # sees no config — on the artefact route it never even exists on our machine.
+            # A report that names a cross-tenant leak and cannot say who authorised the
+            # test for it is a report nobody should have produced.
+            authorisation=self.authorisation,
             notes=" ".join(
                 part
                 for part in (
@@ -426,6 +437,7 @@ def generate(
     skip_upload: bool = False,
     corpus_dir: Optional[str] = None,
     probes_in: Optional[str] = None,
+    production_ack: bool = False,
 ) -> int:
     """Run the battery and write the response file. Returns the record count.
 
@@ -458,12 +470,29 @@ def generate(
         write_probes(probes_path, probes)
         logger.info(f"Probe file written to {probes_path} ({len(probes)} probes).")
 
+    # §13, before the first request rather than after it. The gate reads the probe file's
+    # own families, so it holds on the artefact route too: a battery handed over as
+    # probes.jsonl is classified from what it asks, not from what a config claims it is.
+    authorisation = require(
+        config.authorisation,
+        (p.family for p in probes),
+        uploads=bool(documents) and not skip_upload,
+        production_ack=production_ack,
+    )
+    if authorisation is not None:
+        logger.info(
+            f"Authorised by {authorisation.authorised_by} on "
+            f"{authorisation.authorised_on.isoformat()} "
+            f"({authorisation.environment}); recorded in the report verbatim."
+        )
+
     generator = Generator(
         config,
         documents=documents,
         revisions=revisions,
         passes=passes,
         skip_upload=skip_upload,
+        authorisation=authorisation,
     )
     responses, notes = asyncio.run(generator.run(probes))
     write_responses(responses_path, responses, capture_notes=notes)
