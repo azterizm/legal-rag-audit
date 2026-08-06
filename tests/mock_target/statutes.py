@@ -28,7 +28,11 @@ SOURCE: Final = "legislation.gov.uk"
 LICENCE: Final = (
     "Contains public sector information licensed under the Open Government Licence v3.0"
 )
-CAPTURED: Final = "2026-08-05"
+#: The first four excerpts were captured on 2026-08-05 and the eight added with the
+#: Companies Act anchors on 2026-08-06. One constant rather than two: `ingest` re-checks
+#: every reading against the live source on every run, so the capture date says when this
+#: file was last written by hand, not how far its contents can be trusted.
+CAPTURED: Final = "2026-08-06"
 
 #: probe_id -> (source URL, the provision as it stood on the date that probe asks about).
 #:
@@ -58,6 +62,64 @@ PROVISIONS: Final[dict[str, tuple[str, str]]] = {
         "is the lower of— (a) £74,200, and (b) 52 multiplied by a week's pay of the "
         "person concerned.",
     ),
+    "pit-era-227-1": (
+        "https://www.legislation.gov.uk/ukpga/1996/18/section/227/2014-06-01",
+        "Maximum amount of a week's pay. 227(1) For the purpose of calculating a basic "
+        "award of compensation for unfair dismissal, an additional award of compensation "
+        "for unfair dismissal, an award under section 112(5), or a redundancy payment, "
+        "the amount of a week's pay shall not exceed £464.",
+    ),
+    "pit-era-227-2": (
+        "https://www.legislation.gov.uk/ukpga/1996/18/section/227/2020-06-01",
+        "Maximum amount of a week's pay. 227(1) For the purpose of calculating a basic "
+        "award of compensation for unfair dismissal, an additional award of compensation "
+        "for unfair dismissal, an award under section 112(5), or a redundancy payment, "
+        "the amount of a week's pay shall not exceed £538.",
+    ),
+    "pit-era-186-1": (
+        "https://www.legislation.gov.uk/ukpga/1996/18/section/186/2014-01-01",
+        "Limit on amount payable under section 182. 186(1) The total amount payable to "
+        "an employee in respect of any debt to which this Part applies, where the amount "
+        "of the debt is referable to a period of time, shall not exceed— (a) £450 in "
+        "respect of any one week, or (b) in respect of a shorter period, an amount "
+        "bearing the same proportion to £450 as that period bears to a week.",
+    ),
+    "pit-era-186-2": (
+        "https://www.legislation.gov.uk/ukpga/1996/18/section/186/2019-01-01",
+        "Limit on amount payable under section 182. 186(1) The total amount payable to "
+        "an employee in respect of any debt to which this Part applies, where the amount "
+        "of the debt is referable to a period of time, shall not exceed— (a) £508 in "
+        "respect of any one week, or (b) in respect of a shorter period, an amount "
+        "bearing the same proportion to £508 as that period bears to a week.",
+    ),
+    "pit-ca-382-1": (
+        "https://www.legislation.gov.uk/ukpga/2006/46/section/382/2014-01-01",
+        "Companies qualifying as small: general. 382(3) A company qualifies as small in "
+        "a year in which it satisfies two or more of the following requirements— "
+        "1. Turnover Not more than £6.5 million 2. Balance sheet total Not more than "
+        "£3.26 million 3. Number of employees Not more than 50.",
+    ),
+    "pit-ca-382-2": (
+        "https://www.legislation.gov.uk/ukpga/2006/46/section/382/2019-01-01",
+        "Companies qualifying as small: general. 382(3) A company qualifies as small in "
+        "a year in which it satisfies two or more of the following requirements— "
+        "1. Turnover Not more than £10.2 million 2. Balance sheet total Not more than "
+        "£5.1 million 3. Number of employees Not more than 50.",
+    ),
+    "pit-ca-465-1": (
+        "https://www.legislation.gov.uk/ukpga/2006/46/section/465/2014-01-01",
+        "Companies qualifying as medium-sized. 465(3) A company qualifies as "
+        "medium-sized in a year in which it satisfies two or more of the following "
+        "requirements— 1. Turnover Not more than £25.9 million 2. Balance sheet total "
+        "Not more than £12.9 million 3. Number of employees Not more than 250.",
+    ),
+    "pit-ca-465-2": (
+        "https://www.legislation.gov.uk/ukpga/2006/46/section/465/2019-01-01",
+        "Companies qualifying as medium-sized. 465(3) A company qualifies as "
+        "medium-sized in a year in which it satisfies two or more of the following "
+        "requirements— 1. Turnover Not more than £36 million 2. Balance sheet total "
+        "Not more than £18 million 3. Number of employees Not more than 250.",
+    ),
 }
 
 #: Which provision each probe is about, for the answer's own prose. Separate from the
@@ -67,6 +129,14 @@ PROVISION_NAMES: Final[dict[str, str]] = {
     "pit-era-108-2": "section 108 of the Employment Rights Act 1996",
     "pit-era-124-1": "section 124 of the Employment Rights Act 1996",
     "pit-era-124-2": "section 124 of the Employment Rights Act 1996",
+    "pit-era-227-1": "section 227 of the Employment Rights Act 1996",
+    "pit-era-227-2": "section 227 of the Employment Rights Act 1996",
+    "pit-era-186-1": "section 186 of the Employment Rights Act 1996",
+    "pit-era-186-2": "section 186 of the Employment Rights Act 1996",
+    "pit-ca-382-1": "section 382 of the Companies Act 2006",
+    "pit-ca-382-2": "section 382 of the Companies Act 2006",
+    "pit-ca-465-1": "section 465 of the Companies Act 2006",
+    "pit-ca-465-2": "section 465 of the Companies Act 2006",
 }
 
 #: The other reading of the same provision, for `answer_current_law`. A system that only
@@ -76,6 +146,14 @@ OTHER_READING: Final[dict[str, str]] = {
     "pit-era-108-2": "pit-era-108-1",
     "pit-era-124-1": "pit-era-124-2",
     "pit-era-124-2": "pit-era-124-1",
+    "pit-era-227-1": "pit-era-227-2",
+    "pit-era-227-2": "pit-era-227-1",
+    "pit-era-186-1": "pit-era-186-2",
+    "pit-era-186-2": "pit-era-186-1",
+    "pit-ca-382-1": "pit-ca-382-2",
+    "pit-ca-382-2": "pit-ca-382-1",
+    "pit-ca-465-1": "pit-ca-465-2",
+    "pit-ca-465-2": "pit-ca-465-1",
 }
 
 

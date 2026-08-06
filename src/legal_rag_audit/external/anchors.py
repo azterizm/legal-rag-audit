@@ -19,9 +19,10 @@ candidate that fails one is left out rather than weakened:
 
 1. *Discriminating.* It must appear in this version and in no other version of the same
    provision. `30-day period` is in both the pre- and post-2015 forms of the Late Payment
-   of Commercial Debts (Interest) Act 1998 s.4, so that instrument is absent here despite
-   being the obvious commercial-contracts anchor — §20.1 item 3 asks for one and this
-   file does not yet have one that meets rule 1.
+   of Commercial Debts (Interest) Act 1998 s.4, which is why that instrument — the obvious
+   commercial-contracts candidate — is not here. §20.1 item 3's commercial anchors are
+   instead the Companies Act 2006 accounting thresholds, where every version states a
+   different figure and rule 1 is satisfied by construction.
 2. *Not reachable by paraphrase of the other version.* A system correctly describing the
    2014 form of a provision must not emit the 2015 form's phrase by accident. This is the
    rule that rejects most candidates: `agreed payment day` is the post-2015 defined term,
@@ -32,8 +33,32 @@ candidate that fails one is left out rather than weakened:
    never change again. `era-124` is that pattern deliberately: both readings sit in closed
    validity ranges, so the anchor needs no maintenance ever. `era-108`'s second reading is
    the law as it stands, which is the more natural question and the one that can go stale —
-   `ingest --verify` is what catches it, and the two anchors together are the argument for
-   why that command exists.
+   `ingest` is what catches it, and the two anchors together are the argument for why that
+   command exists. Every anchor added after those two is fully frozen, so exactly one
+   reading in this file can ever move.
+
+**A fourth rule, learned by rejecting candidates.** *The figure must have one written
+form.* A phrase is scored by exact containment, so an invariant a correct system would
+naturally write differently is a false positive waiting to happen — and §14.2 makes a
+false positive a release blocker. Rejected on this ground:
+
+* **ERA 1996 s.31** (guarantee payment daily limit), whose readings are `£24.20` and
+  `£28.00`. A system that answers *£28* is right, and would be recorded as having
+  returned the superseded version. Trailing zeros are not a phrase.
+* **Insolvency Act 1986 s.123**, where the £750 statutory-demand threshold is the same at
+  every date checked — no pair, so nothing to discriminate (rule 1).
+* **Companies Act 2006 s.477**, whose operative text carries no figure at all; the
+  thresholds it turns on live in s.382.
+
+The Companies Act anchors below carry `£6.5` rather than `£6.5 million` for the same
+reason: a system writing *£6.5m* or *£6.5 million* satisfies the shorter phrase and both
+are correct answers. The figure alone is still discriminating — no other version of that
+provision states it.
+
+**Why the set is employment- and company-law heavy.** These are the provisions whose
+amendments are *numeric*. A qualitative amendment gives no phrase that survives rule 2,
+which is the constraint that rejects most of the statute book rather than a judgement
+about which law matters.
 
 > [!IMPORTANT]
 > Nothing here is planted, and nothing here is uploaded. This is the half of §9.1 that
@@ -170,6 +195,142 @@ ANCHORS: Final[tuple[Anchor, ...]] = (
                 invariant="£74,200",
                 in_force_from="2013-07-29",
                 in_force_to="2014-04-06",
+            ),
+        ),
+    ),
+    # ---------------------------------------------------------------- employment
+    Anchor(
+        anchor_id="era-227",
+        instrument="ukpga/1996/18",
+        title="Employment Rights Act 1996",
+        section="227",
+        provision="section 227",
+        topic="employment",
+        # Uprated every April by an Employment Rights (Increase of Limits) Order, so this
+        # provision alone supplies a decade of closed ranges. Two are used; the rest are
+        # there if the set ever needs to grow without a new instrument.
+        readings=(
+            Reading(
+                as_at="2014-06-01",
+                question=(
+                    "As at 1 June 2014, what was the maximum amount of a week's pay for "
+                    "calculating a redundancy payment or a basic award under section 227 "
+                    "of the Employment Rights Act 1996?"
+                ),
+                invariant="£464",
+                in_force_from="2014-04-06",
+                in_force_to="2016-04-06",
+            ),
+            Reading(
+                as_at="2020-06-01",
+                question=(
+                    "As at 1 June 2020, what was the maximum amount of a week's pay for "
+                    "calculating a redundancy payment or a basic award under section 227 "
+                    "of the Employment Rights Act 1996?"
+                ),
+                invariant="£538",
+                in_force_from="2020-04-06",
+                in_force_to="2021-04-06",
+            ),
+        ),
+    ),
+    Anchor(
+        anchor_id="era-186",
+        instrument="ukpga/1996/18",
+        title="Employment Rights Act 1996",
+        section="186",
+        provision="section 186",
+        topic="employment",
+        readings=(
+            Reading(
+                as_at="2014-01-01",
+                question=(
+                    "As at 1 January 2014, what was the weekly limit on a debt payable "
+                    "by the Secretary of State to an employee of an insolvent employer "
+                    "under section 186 of the Employment Rights Act 1996?"
+                ),
+                invariant="£450",
+                in_force_from="2013-02-01",
+                in_force_to="2014-04-06",
+            ),
+            Reading(
+                as_at="2019-01-01",
+                question=(
+                    "As at 1 January 2019, what was the weekly limit on a debt payable "
+                    "by the Secretary of State to an employee of an insolvent employer "
+                    "under section 186 of the Employment Rights Act 1996?"
+                ),
+                invariant="£508",
+                in_force_from="2018-04-06",
+                in_force_to="2019-04-06",
+            ),
+        ),
+    ),
+    # ------------------------------------------------------- commercial / company
+    #
+    # §20.1 item 3, finally answered. Both anchors below are company-law accounting
+    # thresholds, chosen because every version of them states a different set of figures:
+    # rule 1 holds by construction, and rule 2 cannot fail because a paraphrase of one
+    # threshold cannot produce another threshold's number.
+    Anchor(
+        anchor_id="ca-382",
+        instrument="ukpga/2006/46",
+        title="Companies Act 2006",
+        section="382",
+        provision="section 382",
+        topic="commercial",
+        readings=(
+            Reading(
+                as_at="2014-01-01",
+                question=(
+                    "As at 1 January 2014, what was the maximum turnover a company could "
+                    "have and still qualify as a small company under section 382 of the "
+                    "Companies Act 2006?"
+                ),
+                invariant="£6.5",
+                in_force_from="2008-04-06",
+                in_force_to="2016-01-01",
+            ),
+            Reading(
+                as_at="2019-01-01",
+                question=(
+                    "As at 1 January 2019, what was the maximum turnover a company could "
+                    "have and still qualify as a small company under section 382 of the "
+                    "Companies Act 2006?"
+                ),
+                invariant="£10.2",
+                in_force_from="2016-01-01",
+                in_force_to="2025-04-06",
+            ),
+        ),
+    ),
+    Anchor(
+        anchor_id="ca-465",
+        instrument="ukpga/2006/46",
+        title="Companies Act 2006",
+        section="465",
+        provision="section 465",
+        topic="commercial",
+        readings=(
+            Reading(
+                as_at="2014-01-01",
+                question=(
+                    "As at 1 January 2014, what was the maximum turnover for a company to "
+                    "qualify as medium-sized under section 465 of the Companies Act 2006?"
+                ),
+                invariant="£25.9",
+                in_force_from="2008-04-06",
+                in_force_to="2016-01-01",
+            ),
+            Reading(
+                as_at="2019-01-01",
+                question=(
+                    "As at 1 January 2019, what was the maximum turnover for a company to "
+                    "qualify as medium-sized under section 465 of the Companies Act 2006?"
+                ),
+                invariant="£36",
+                in_force_from="2016-01-01",
+                in_force_to="2025-04-06",
             ),
         ),
     ),

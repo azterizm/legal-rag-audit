@@ -45,6 +45,11 @@ from typing import Callable, Optional
 from legal_rag_audit.interchange.probe import Probe
 from legal_rag_audit.plants.templates import SLOT, Template
 
+#: Imported from the submodule rather than through the package, because `__init__` is
+#: importing this module and is not finished. Only the key set is needed here — the
+#: bodies are still read lazily inside each handler.
+from .statutes import PROVISIONS as _PROVISIONS
+
 #: The corpus the reference target is built against. One corpus, deliberately: §14 is
 #: about verifying the harness, and running the same nineteen probes against a second set
 #: of prose would re-verify the mock rather than the instrument.
@@ -572,10 +577,11 @@ _ANSWERS: dict[str, Callable[[Oracle], Reply]] = {
     "fresh-002": _retainer("fresh-002"),
     # The existing-corpus battery (§9.1, F25). Nothing was uploaded for these: they are
     # answered from the target's own index, which for a mock is a table of provisions.
-    "pit-era-108-1": _point_in_time("pit-era-108-1"),
-    "pit-era-108-2": _point_in_time("pit-era-108-2"),
-    "pit-era-124-1": _point_in_time("pit-era-124-1"),
-    "pit-era-124-2": _point_in_time("pit-era-124-2"),
+    # Every point-in-time probe, derived from the provisions rather than listed: the
+    # anchor set grows, and a handler map that had to be edited alongside it would fail
+    # as a missing answer — which scores as the target declining to answer, not as the
+    # mock being out of date.
+    **{probe_id: _point_in_time(probe_id) for probe_id in _PROVISIONS},
     "lic-001": _licensed("lic-001"),
     "lic-002": _licensed("lic-002"),
 }

@@ -23,6 +23,7 @@ exists to measure in other people's systems.
 | **I** | Authorisation controls + retention position | 0.5 d | ✅ 2026-08-06 |
 | **J** | Container split, published and signed images, `trivy image`, the hardened invocation | — | ✅ 2026-08-06 *(last by instruction; closes the B and B2 remainders)* |
 | **K** | `rag-probes-uk` corpus, config hardening, and the first run against a live commercial target | — | ✅ 2026-08-06 *(Vectara dry run; 4 defects found and fixed)* |
+| **L** | Anchor set to six anchors and twelve readings, commercial anchors, NFC matching | — | ✅ 2026-08-06 |
 
 Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
 
@@ -2547,3 +2548,114 @@ endpoint and that the four defects above are fixed.
 - **`rag-probes-uk` is exempted from the staleness assertion by name**, in
   `tests/test_corpora.py`, because nothing in the manifest schema expresses "states no
   legal position". A third synthetic corpus is the point at which that becomes a field.
+
+---
+
+## Phase L — the denominator
+
+The existing-corpus battery worked from the day it shipped and was too small to publish a
+number from. Two anchors, four point-in-time probes. *"X of 4"* is not a figure that
+survives a sceptical reader, and it was the binding constraint on §16.7's hero claim —
+not the target list, which is a decision, but this, which is work.
+
+**Six anchors now, twelve readings.** Every one verified against `legislation.gov.uk`
+live, not asserted:
+
+```
+ok  era-108 @ 2011-01-01  'not less than one year'     ok  era-186 @ 2014-01-01  '£450'
+ok  era-108 @ current     'not less than two years'    ok  era-186 @ 2019-01-01  '£508'
+ok  era-124 @ 2012-01-01  '£68,400'                    ok  ca-382  @ 2014-01-01  '£6.5'
+ok  era-124 @ 2014-01-01  '£74,200'                    ok  ca-382  @ 2019-01-01  '£10.2'
+ok  era-227 @ 2014-06-01  '£464'                       ok  ca-465  @ 2014-01-01  '£25.9'
+ok  era-227 @ 2020-06-01  '£538'                       ok  ca-465  @ 2019-01-01  '£36'
+```
+
+The battery goes from **6 probes to 14**. Point-in-time goes from 4 to 12 — a threefold
+denominator on the check the hero number is about.
+
+### §20.1 item 3, answered
+
+Employment anchors shipped in Phase G and commercial ones did not, because the obvious
+candidate — Late Payment of Commercial Debts (Interest) Act 1998 s.4 — has no phrase that
+survives rule 2. The Companies Act 2006 accounting thresholds do, and by construction:
+every version states a different set of figures, so rule 1 holds automatically and a
+paraphrase of one threshold cannot produce another threshold's number.
+
+### A fourth rule, learned by rejecting things
+
+Anchors were chosen **from the primary source**, by fetching each provision at several
+dates and reading what actually differs. A figure remembered wrongly becomes a false
+positive against a correct system, and that is the one output this tool must never
+produce. Three candidates were rejected, and the reasons are now in `anchors.py` beside
+the three original rules:
+
+- **ERA 1996 s.31** (guarantee payment daily limit), whose readings are `£24.20` and
+  `£28.00`. A system answering *£28* is right and would have been recorded as returning
+  the superseded version. **Trailing zeros are not a phrase**, and that is the fourth
+  rule: the figure must have one written form.
+- **Insolvency Act 1986 s.123** — £750 at every date checked. No pair, nothing to
+  discriminate.
+- **Companies Act 2006 s.477** — no figure in the operative text at all.
+
+The same rule is why the Companies Act anchors carry `£6.5` rather than `£6.5 million`:
+a system writing *£6.5m* or *£6.5 million* satisfies the shorter phrase, and both are
+correct answers. The figure alone is still discriminating.
+
+### Defect 18 — the matcher could not see accents twice
+
+`present()` collapsed whitespace and lowercased, and did nothing else. `é` has two
+encodings — one codepoint, or `e` plus a combining acute — and they are different strings
+to `in`. Nothing in an English anchor notices.
+
+Found while answering whether the tool could run against Spanish or French targets, and
+it is worse there than it looks: the phrase is typed into a file by a person, the answer
+arrives from an API that may have decomposed it, and the two fail to match **while looking
+identical on every screen either of them was ever read on**. The report would then say a
+named product returned a superseded statement of the law, about a product that returned
+the correct one.
+
+`unicodedata.normalize("NFC", …)` fixes it, and `MATCH_RULE` — printed beside every Tier 1
+result — now says so. `lower()` was kept over `casefold()` deliberately: casefold maps ß to
+ss, which changes a word rather than its case, and the rule is published as one that never
+alters what was written.
+
+### Maintenance is now almost nil
+
+Eleven of the twelve readings sit in closed validity ranges. A closed range cannot be
+amended again, so those anchors need no refresh ever. **One reading in the whole set can
+move** — `era-108`'s second, which asks for the law as it stands — and a test asserts that
+it is the only one. One live reading is enough to justify `ingest`; more would be
+maintenance without additional argument.
+
+### On other jurisdictions
+
+Asked whether Spain or France could be targets. The answer is that the *method* is
+jurisdiction-neutral — the evaluators are exact containment with no language assumption,
+and the pair design has nothing English in it — but three things are UK-bound and were
+found by looking rather than guessed:
+
+1. `anchors.py` builds `{BASE}/{instrument}/section/{section}/{date}`, which is
+   `legislation.gov.uk`'s path shape.
+2. `ingest` asks for `data.xml` (CLML). The parser is structure-blind flattening and would
+   work on any XML; the URL construction is the real dependency.
+3. `markers.py` ships Westlaw, LEXIS and West Key Number patterns — Anglo-American
+   publisher identifiers. **Two of the fourteen probes measure nothing outside the UK and
+   US** until Aranzadi, La Ley or Dalloz classes are written.
+
+Recommendation recorded and not acted on: deepen the UK set before widening, because
+adding a jurisdiction costs new anchors in that language, an ingest adapter and new marker
+classes — and doing it first buys more products measured on the same four probes rather
+than a better measurement.
+
+### Still outstanding after this phase
+
+- **The set is employment- and company-law heavy**, and that is a constraint rather than a
+  preference: these are the provisions whose amendments are *numeric*. A qualitative
+  amendment gives no phrase that survives rule 2.
+- **The `in_force_to` boundaries for `ca-382` and `ca-465`** are the 2015 Regulations and
+  the 2024 Regulations, taken from the amendment annotations and the regime dates rather
+  than from a fetch of the boundary date itself. The `in_force_from` values *are* from the
+  documents. Nothing scores on either field.
+- **The battery has still never been fired at a real legal AI.** Phase K did that for
+  planted mode against Vectara; the existing-corpus half has been built, sealed and
+  verified against the primary source, and never answered by a target.

@@ -831,11 +831,21 @@ Two checks live only here:
 
 **Point-in-time pairs ask the same provision at two moments, and the pair is the test.** A
 single dated question measures almost nothing: a system that always answers with the
-current law passes every question about the present. Two anchors ship — the unfair
-dismissal qualifying period under ERA 1996 s.108, and the compensatory award cap under
-s.124 — chosen so each phrase appears in one version and no other, and so neither can be
-reached by a paraphrase of the other. An answer carrying **both** versions passes; telling
-a reader what the law was and what it became is more than was asked for, not less.
+current law passes every question about the present. **Six anchors ship, twelve readings**
+— four Employment Rights Act 1996 provisions (the unfair dismissal qualifying period under
+s.108, the compensatory award cap under s.124, the week's-pay maximum under s.227, and the
+insolvency weekly limit under s.186) and two Companies Act 2006 accounting thresholds
+(small companies under s.382, medium-sized under s.465).
+
+Each phrase is chosen so it appears in one version of that provision and no other, so it
+cannot be reached by a paraphrase of the other version, and so it has one written form —
+a correct system that writes *£28* where the statute says *£28.00* must not be recorded as
+having returned the superseded law. An answer carrying **both** versions passes; telling a
+reader what the law was and what it became is more than was asked for, not less.
+
+Eleven of the twelve readings sit in closed validity ranges and can never change again.
+The twelfth asks for the law as it stands, which is the more natural question and the only
+one that can go stale.
 
 **Refreshing them is a command, not a diary note:**
 
@@ -847,7 +857,7 @@ It fetches each anchored provision as it stood on its date and confirms the phra
 still there. Scoring never touches it — the anchors are committed and the battery runs
 offline — so what this catches is an anchor going stale, which would otherwise mean
 scoring answers against a version of the law that no longer exists. **Storage footprint:
-1.4 kB kept of 810 kB fetched** across the four snapshots, because the store keeps a
+4.0 kB kept of 1.6 MB fetched** across the twelve snapshots, because the store keeps a
 window around each phrase rather than the statute.
 
 **Licensed content is the question procurement already asks**, and the check is built so

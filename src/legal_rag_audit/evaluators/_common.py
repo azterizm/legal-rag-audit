@@ -30,6 +30,7 @@ reason, never a guess.
 """
 
 import re
+import unicodedata
 from typing import Any, Final, Optional
 
 PASS: Final = "PASS"
@@ -39,13 +40,28 @@ NOT_CAPTURED: Final = "NOT_CAPTURED"
 #: Printed in the report next to every Tier 1 result, so the rule is on the page rather
 #: than in this file.
 MATCH_RULE: Final = (
-    "case-insensitive containment after collapsing runs of whitespace to a single "
-    "space; no stemming, no synonyms, no model"
+    "case-insensitive containment after Unicode NFC normalisation and collapsing runs "
+    "of whitespace to a single space; no stemming, no synonyms, no model"
 )
 
 
 def normalise(text: str) -> str:
-    return re.sub(r"\s+", " ", text or "").lower()
+    """The published matching rule, in three steps that never change a word.
+
+    **NFC first, and it is not cosmetic.** `é` has two encodings — one codepoint, or `e`
+    followed by a combining acute — and they are different strings to `in`. Nothing in an
+    English corpus notices; a French or Spanish anchor does, because the phrase is typed
+    into a file by a person and the answer arrives from an API that may have decomposed
+    it. The two would then fail to match while looking identical on every screen either
+    of them was ever read on, and the finding would be *the system returned the wrong
+    version of the law* against a system that returned the right one. §14.2 makes a false
+    positive a release blocker, and this is the cheapest one in the codebase to remove.
+
+    Case folding via `lower()` rather than `casefold()`, deliberately: `casefold()` maps
+    the German ß to `ss`, which is a substantive change to a word rather than a change of
+    case, and this rule is published as one that never alters what was written.
+    """
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", text or "")).lower()
 
 
 def present(haystack: str, token: str) -> bool:
