@@ -391,6 +391,7 @@ def _check_section(
     if check.get("partial"):
         out.append(f"**Partial:** {check['partial']}")
         out.append("")
+    out.extend(_unscoreable(check))
 
     instances = report.get("evidence", {}).get(check["check"])
     if instances:
@@ -653,14 +654,91 @@ def _not_run(report: dict[str, Any]) -> list[str]:
                     check.get("reason", check.get("partial", "—")),
                 ]
             )
-    if not rows:
-        return ["Every registered check ran.", ""]
-    return [
-        "Neither of these is a pass. A check absent from a report is "
-        "indistinguishable from one that passed, which is why they are here.",
+    out = (
+        ["Every registered check ran.", ""]
+        if not rows
+        else [
+            "Neither of these is a pass. A check absent from a report is "
+            "indistinguishable from one that passed, which is why they are here.",
+            "",
+            *_table(["Check", "Status", "Why"], rows),
+        ]
+    )
+
+    # Checks that ran and could not score part of their denominator. The ones that
+    # produced a finding carry this inline in §2; the rest would carry it nowhere, and
+    # a check that scored two records out of twelve is not the same claim as one that
+    # scored twelve (F40).
+    rendered_in_full = {
+        name for name in report.get("tier1", []) if report["checks"][name]["status"] == FAIL
+    }
+    for name, check in report["checks"].items():
+        # NOT_ELIGIBLE checks have no records to split. A check whose *status* is
+        # NOT_CAPTURED does: it is in the table above with a single reason, and that
+        # reason is exactly the one this breakdown exists to take apart.
+        if name in rendered_in_full or check["status"] == NOT_ELIGIBLE:
+            continue
+        breakdown = _unscoreable(check)
+        if breakdown:
+            out.append("")
+            out.append(f"#### `{name}` — records that could not be scored")
+            out.append("")
+            out.extend(breakdown)
+    return out
+
+
+def _unscoreable(check: dict[str, Any]) -> list[str]:
+    """The unscoreable half of a check's denominator, split by what the answers did.
+
+    Defect 20. `not_captured` as a bare count is the place where a system that said *"I
+    could not produce a grounded answer"* and one that asserted a figure from the wrong
+    section of the same Act become one number. Both are outside the denominator and
+    neither is a finding — but only one of them is a system behaving well, and a reader
+    triaging the run has to be able to tell which records are which without opening the
+    response file.
+    """
+    groups = (check.get("detail") or {}).get("not_captured_by_outcome") or []
+    if not groups:
+        return []
+
+    total = sum(g["records"] for g in groups)
+    out = [
+        f"**{total} of {total + check['scored']} "
+        f"{_plural(total + check['scored'], 'record')} could not be scored.** Not passes "
+        f"and not failures: the answer never reached the value the check turns on. They "
+        f"are split by what the answer did instead, because those are different events.",
         "",
-        *_table(["Check", "Status", "Why"], rows),
     ]
+    rows = [
+        [
+            f"`{group['outcome']}`",
+            group["records"],
+            ", ".join(f"`{p}`" for p in group["probes"]),
+        ]
+        for group in groups
+    ]
+    out.extend(_table(["Outcome", "Records", "Probes"], rows))
+    for group in groups:
+        if group.get("reason"):
+            out.append(f"- `{group['outcome']}` — {group['reason']}.")
+    out.append("")
+
+    # Per probe, never pooled. What each of these answers said instead is the whole
+    # reason the split exists, and attributing one record's figure to another would be a
+    # worse error than not printing it at all.
+    asserted = [
+        (probe, claims)
+        for group in groups
+        for probe, claims in (group.get("claims_by_probe") or {}).items()
+    ]
+    if asserted:
+        out.append("**What those answers asserted instead.** Quoted from the response "
+                   "file, excluding anything the question itself said:")
+        out.append("")
+        for probe, claims in asserted:
+            out.append(f"- `{probe}` — {', '.join(f'`{c}`' for c in claims)}")
+        out.append("")
+    return out
 
 
 def _reproduction(manifest: dict[str, Any]) -> list[str]:

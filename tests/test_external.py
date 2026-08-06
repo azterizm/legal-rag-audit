@@ -216,6 +216,191 @@ def test_neither_version_is_not_captured():
     assert "Not a pass" in result["reason"]
 
 
+# ----------------------------------------------------- neither version, three ways
+#
+# Defect 20. The first live run of this battery put ten of twelve probes in the neither
+# branch, and they were not the same event: four answers declined, one asserted £751 per
+# week cited to a section that read £508 on the date asked. Both printed
+# `no_version_returned`, which is F40 — an absent measurement and a failed one reading
+# the same on the page.
+
+
+def _figures(answer, question=""):
+    """A money anchor, which is what five of the six shipped anchors are."""
+    return PointInTimeEvaluator().evaluate(
+        answer=answer,
+        in_force=["£450"],
+        superseded=["£508"],
+        provision="section 186",
+        as_at="2014-01-01",
+        question=question,
+    )
+
+
+def test_an_answer_that_asserts_nothing_of_the_kind_asked_for_is_a_declination():
+    result = _figures("I could not produce a grounded answer for that date.")
+    assert result["status"] == "NOT_CAPTURED"
+    assert result["outcome"] == "declined_to_state_a_version"
+    assert result["claims_offered"] == []
+
+
+def test_an_answer_that_asserts_a_third_figure_is_recorded_apart_from_a_declination():
+    """The £751 case, verbatim in shape. Still not a finding — which version was
+    retrieved was not observable — but a reader triaging ten unscoreable records has to
+    be able to see which of them said a number."""
+    result = _figures(
+        "The weekly limit under section 186 was £751 per week at that time."
+    )
+    assert result["status"] == "NOT_CAPTURED"
+    assert result["outcome"] == "answered_in_neither_version"
+    assert result["claims_offered"] == ["£751"]
+
+
+def test_the_split_is_made_on_the_presence_of_a_claim_not_on_refusal_wording():
+    """Enumerating refusal phrasings is the trap §8.2 #8 names by hand, and the reason
+    `abstention` was rewritten. Two answers that decline in unrelated words land in the
+    same place; an answer that declines politely and then states a figure does not."""
+    plain = _figures("I could not produce a grounded answer.")
+    ornate = _figures(
+        "Regrettably the retrieved material does not settle the position as it stood "
+        "then, and I would rather not guess at it."
+    )
+    hedged = _figures("I am not certain, but I believe it was around £751.")
+    assert plain["outcome"] == ornate["outcome"] == "declined_to_state_a_version"
+    assert hedged["outcome"] == "answered_in_neither_version"
+
+
+def test_a_figure_the_question_itself_named_is_not_an_assertion():
+    """The echo rule, inherited from `abstention`. A system that restates the figure it
+    was asked about and then declines has repeated the prompt, not answered it."""
+    result = _figures(
+        "You ask whether the limit was £751. I cannot confirm the figure for that date.",
+        question="As at 1 January 2014, was the weekly limit £751?",
+    )
+    assert result["outcome"] == "declined_to_state_a_version"
+    assert result["claims_offered"] == []
+
+
+def test_readings_the_shape_rule_cannot_see_keep_the_old_outcome_and_say_so():
+    """`not less than one year` is a duration written in words, and the shared shape
+    vocabulary requires a digit. Widening it was rejected: the same vocabulary is what
+    `abstention` produces findings from, and §14.2 makes a false positive a blocker. So
+    the split is declined out loud rather than guessed."""
+    result = _pit("The qualifying period depends on the circumstances of the dismissal.")
+    assert result["outcome"] == "no_version_returned"
+    assert "cannot see" in result["reason"]
+
+
+def _external_run(tmp_path, answers):
+    """Score the shipped external battery against a dictionary of answers."""
+    from legal_rag_audit.interchange import (
+        Response,
+        write_ground_truth,
+        write_probes,
+        write_responses,
+    )
+    from legal_rag_audit.score import score
+
+    probes = build_external_probes()
+    write_probes(tmp_path / "probes.jsonl", probes)
+    write_ground_truth(tmp_path / "gt.json", build_external_ground_truth())
+    write_responses(
+        tmp_path / "responses.jsonl",
+        [
+            Response(
+                run_id="r",
+                probe_id=p.probe_id,
+                query=p.text,
+                answer=answers.get(p.probe_id, "It depends on the circumstances."),
+                citations=[],
+                total_ms=100,
+                http_status=200,
+            )
+            for p in probes
+        ],
+    )
+    return score(
+        str(tmp_path / "responses.jsonl"),
+        str(tmp_path / "gt.json"),
+        str(tmp_path / "probes.jsonl"),
+        skip_tier2=True,
+        output_dir=str(tmp_path / "out"),
+    )
+
+
+def test_the_report_splits_the_unscoreable_records_by_what_the_answer_did(tmp_path):
+    """Defect 20, end to end. The run this was written from scored two of twelve
+    point-in-time records; `report.md` printed one number for the other ten and said
+    nothing about them, because `partial` is only populated when *nothing* scores."""
+    money = [
+        e
+        for e in build_external_ground_truth().expectations
+        if e.check == "point_in_time" and any("£" in v for v in e.must_contain)
+    ]
+    assert len(money) >= 3, "this test needs a scored record beside two unscoreable ones"
+    declined, asserted, correct = money[0], money[1], money[2]
+
+    report = _external_run(
+        tmp_path,
+        {
+            declined.probe_id: "I could not produce a grounded answer.",
+            asserted.probe_id: "The limit was £751 per week at that date.",
+            # One record that scores, which is the case the hole was in: `partial` is
+            # populated only when nothing scores, so a run with a partial denominator
+            # printed the count and no account of it.
+            correct.probe_id: f"The limit was {correct.must_contain[0]} at that date.",
+        },
+    )
+    assert report["checks"]["point_in_time"]["scored"] == 1
+    groups = {
+        g["outcome"]: g
+        for g in report["checks"]["point_in_time"]["detail"]["not_captured_by_outcome"]
+    }
+    assert declined.probe_id in groups["declined_to_state_a_version"]["probes"]
+    assert asserted.probe_id in groups["answered_in_neither_version"]["probes"]
+    # Attributed to the probe that said it. Pooling the group's figures into one list
+    # would read as though any record in it might have said any of them.
+    by_probe = groups["answered_in_neither_version"]["claims_by_probe"]
+    assert by_probe == {asserted.probe_id: ["£751"]}
+
+    markdown = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
+    assert "records that could not be scored" in markdown
+    assert "declined_to_state_a_version" in markdown
+    assert "answered_in_neither_version" in markdown
+    # The figure itself, on the page. A reader triaging the run should not have to open
+    # the response file to find out which record said a number.
+    assert "£751" in markdown
+
+
+def test_an_unscoreable_record_is_still_outside_the_denominator(tmp_path):
+    """The split changes what the reader is told, never what was counted. Both new
+    outcomes stay out of `scored` and out of `failed`."""
+    money = [
+        e
+        for e in build_external_ground_truth().expectations
+        if e.check == "point_in_time" and any("£" in v for v in e.must_contain)
+    ]
+    report = _external_run(
+        tmp_path, {money[0].probe_id: "The limit was £751 per week at that date."}
+    )
+    check = report["checks"]["point_in_time"]
+    assert check["failed"] == 0
+    assert check["not_captured"] == check["eligible"]
+    assert check["scored"] == 0
+
+
+def test_no_neither_version_outcome_is_ever_a_finding():
+    """All three say the same thing about the target: which version it retrieved was not
+    observable. Turning our own inability to observe into a failure is what §14.2 makes
+    a release blocker."""
+    answers = [
+        "I could not produce a grounded answer.",
+        "The limit was £751 per week.",
+        "It depends on the circumstances.",
+    ]
+    assert {_figures(a)["status"] for a in answers} == {"NOT_CAPTURED"}
+
+
 def test_the_right_provision_with_the_wrong_text_is_counted_apart():
     """§9.2's sharper form: it reads as authoritative and is wrong about the only thing
     that mattered. A reader triaging findings needs to know which of the two they have."""

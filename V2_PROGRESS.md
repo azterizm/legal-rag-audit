@@ -2840,3 +2840,92 @@ other artefact of the completed run was anonymous — `report.md` says "the targ
 Working directories get named after clients. The path was never useful to a reader either:
 it names a location on the operator's machine, while the digests beside it identify the
 record. Now the filename only.
+
+---
+
+## Phase N — defect 20: three ways to return neither version
+
+Phase M ends with defect 20 as the dominant outcome of the only live run this tool has:
+ten of twelve point-in-time records unscoreable, printing one string. This phase splits
+it. Nothing about what was *counted* changes — all three outcomes stay outside the
+denominator, none is a finding — and everything about what the reader is told does.
+
+### The split, and why it is made the way it is
+
+`PointInTimeEvaluator` had three branches: right version, other version, neither. The
+third now resolves to one of three:
+
+| Outcome | The answer |
+|---|---|
+| `declined_to_state_a_version` | asserted no value of the kind the question asked for |
+| `answered_in_neither_version` | asserted such a value, and it was neither reading |
+| `no_version_returned` | as before — the readings are of a shape the rule cannot see |
+
+Made **by the presence of a claim, never by the absence of refusal language**, which is
+the same inversion `AbstentionEvaluator` was rewritten around and for the same reason:
+enumerating refusal phrasings is the trap §8.2 #8 names by hand, and a system that
+declines in an unusual way would score as one that answered. The shapes come from the
+anchor's own readings — an anchor reading `£450` is asking for a figure, so a figure in
+the answer that is neither reading is an answer in neither version, and no figure at all
+is a declination. Read off the ground truth rather than declared beside it, so a new
+anchor cannot arrive with the two out of step.
+
+Where the readings match no shape the split is **declined out loud**. `not less than one
+year` is a duration written in words and `_common.SHAPES` requires a digit. Widening the
+shared vocabulary to reach it was considered and rejected: those same shapes are what
+`abstention` produces *findings* from, and a looser rule there fails compliant systems —
+§14.2 makes a false positive a release blocker. So `era-108` keeps the old outcome, with
+a reason that says the distinction was not attempted rather than implying it was made.
+
+### The reporting hole underneath it
+
+The evaluator was only half of it. `report.md` printed nothing at all about ten
+unscoreable records, because `partial` — the field that carries an evaluator's reason up
+to the check — is populated **only when nothing scores**. A run where two of twelve
+records scored is exactly the run where the reader most needs the account of the other
+ten, and it was the one run that got none.
+
+`per_probe` now groups every NOT_CAPTURED record by its outcome, for every check rather
+than this one, since each already names an outcome and each has the same hole. The
+attestation prints the grouping inline for a failing check and in §8 for the rest.
+
+Claims are attributed **per probe, never pooled into the group**. Three answers in one
+group asserting `£65,300`, `£72,300` and `£751` pooled together read as though any of
+them might have said any of them, which is a worse error than not printing them.
+
+### What it says about the run already recorded
+
+Re-scoring `reports/writford-2026-08-06/complete/` unchanged, on the fixed tool:
+
+```
+declined_to_state_a_version   7   era-124-2, era-227-2, era-186-1, ca-382-1, ca-382-2, ca-465-1, ca-465-2
+answered_in_neither_version   3   era-124-1 (£65,300, £72,300), era-227-1 (£751), era-186-2 (£751)
+```
+
+Seven declinations and three assertions, where the report previously said *ten*. And the
+transplant is now legible on the face of the report rather than by reading the response
+file: `era-227-1` says **£751** is the current week's-pay figure under section 227, and
+`era-186-2` asserts **£751** as the January 2019 weekly limit under section 186, which
+read £508. The same figure, carried across sections and across a decade, by the same
+system in the same battery.
+
+`era-124-1` is the other one worth the ink: asked for the January 2012 compensatory-award
+cap it gave `£65,300` (the provision read £68,400) and volunteered `£72,300` as what the
+cap became. Two figures, neither reading, flagged by the product itself as *general
+guidance* sourced to "general legal knowledge".
+
+The findings digest moves — `sha256:e74ef336…` → `sha256:8c7e8e05…` — because the
+findings document genuinely changed. The recorded bundle is **not** rewritten: its digest
+is correct for the tool commit its own manifest names. The re-scored report is added
+beside it as `complete/report-defect20/`.
+
+### Still outstanding after this phase
+
+* **Targets.** The next legal-AI products to run this against, and accounts for them.
+  Still the blocking decision.
+* **The population count.** Criterion 3 cannot be defended in print until UK products
+  answering substantive legal questions with citations have been counted.
+* **Three passes.** Every live run so far is single-pass, so reproducibility is
+  `NOT_CAPTURED` and no answer's stability has been observed.
+* **A `propose` command** to mine anchor candidates and apply the four rules
+  mechanically, so the anchor set can grow without hand-verification of each one.

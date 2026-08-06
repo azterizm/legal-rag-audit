@@ -206,11 +206,58 @@ def per_probe(
             scored=len(results) - not_captured,
             failed=failed,
             not_captured=not_captured,
-            detail={"per_probe": results},
+            detail={
+                "per_probe": results,
+                "not_captured_by_outcome": _not_captured_by_outcome(results),
+            },
             partial=partial,
         )
 
     return scorer
+
+
+def _not_captured_by_outcome(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The unscoreable records grouped by what the evaluator called them (defect 20).
+
+    A check that scores two of twelve records prints one number for the other ten, and
+    that number is where an honest abstention and a confidently wrong answer become the
+    same event. `partial` cannot carry the difference: it is only populated when *nothing*
+    scored, so the run where the split matters most is exactly the run where the reader
+    is told nothing.
+
+    Grouped here rather than in one evaluator because the shape is general — every
+    evaluator already names its outcome, and every check with a partial denominator has
+    the same reporting hole.
+    """
+    groups: dict[str, dict[str, Any]] = {}
+    for record in results:
+        if record.get("status") != NOT_CAPTURED:
+            continue
+        group = groups.setdefault(
+            record.get("outcome") or "unspecified",
+            {
+                "outcome": record.get("outcome") or "unspecified",
+                "records": 0,
+                "probes": [],
+                "reason": record.get("reason"),
+                # Kept per probe, never pooled into one list for the group. Three
+                # answers in one group asserting £65,300, £72,300 and £751 pooled
+                # together read as though any of them might have said any of them, and
+                # the whole point of the split is to tell records apart.
+                "claims_by_probe": {},
+            },
+        )
+        group["records"] += 1
+        probe_id = record.get("probe_id")
+        if probe_id not in group["probes"]:
+            group["probes"].append(probe_id)
+        for claim in record.get("claims_offered") or []:
+            # A probe asked more than once can assert a different value each pass, and
+            # that difference is itself worth seeing, so they accumulate.
+            seen = group["claims_by_probe"].setdefault(probe_id, [])
+            if claim not in seen:
+                seen.append(claim)
+    return sorted(groups.values(), key=lambda g: (-g["records"], g["outcome"]))
 
 
 #: Tier 2 evaluators load a model on construction. Built once per process and reused,
@@ -444,6 +491,9 @@ def _score_point_in_time_record(probe, response, expectation, data):
         superseded=(expectation.must_not_contain if expectation else []),
         provision=(expectation.provision if expectation else None),
         as_at=(expectation.as_at_date if expectation else None),
+        # For the echo rule in the neither-version split: a system that repeats the
+        # figure the question named and then declines has not asserted anything.
+        question=probe.text,
     )
 
 
