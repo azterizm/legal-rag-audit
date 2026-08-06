@@ -1,0 +1,10 @@
+ACMECLOUD LTD — UK SaaS SUBSCRIPTION AGREEMENT (AS AMENDED)
+
+Contract reference AC-SaaS-2026-041. Governed by the laws of England and Wales.
+
+Clause 8. Limitation of liability.
+
+    The Provider's aggregate liability under this Agreement shall not exceed
+    @@contra-v2@@.
+
+No other clause of the Agreement as executed is varied by this amendment.

@@ -1,0 +1,19 @@
+ACMECLOUD LTD — UK SaaS SUBSCRIPTION AGREEMENT (AS EXECUTED)
+
+Contract reference AC-SaaS-2026-041. Governed by the laws of England and Wales.
+
+Clause 4. Service credits.
+
+    Where monthly platform availability falls below the guaranteed level, the
+    Provider shall pay the Customer a service credit of @@syn-obligation@@ for
+    the month in question.
+
+Clause 4.4. Excluded periods.
+
+    The obligation in clause 4 does not arise in respect of any period
+    classified as @@syn-exclusion@@.
+
+Clause 8. Limitation of liability.
+
+    The Provider's aggregate liability under this Agreement shall not exceed
+    @@contra-v1@@.

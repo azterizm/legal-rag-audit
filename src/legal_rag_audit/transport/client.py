@@ -9,6 +9,11 @@ from ..config import TargetConfig
 
 logger = logging.getLogger(__name__)
 
+
+class AuthTokenMissing(Exception):
+    """The configured credential is not in the environment. A setup problem (NF9)."""
+
+
 class TargetClient:
     def __init__(self, target_config: TargetConfig):
         self.config = target_config
@@ -25,9 +30,26 @@ class TargetClient:
         if auth.type != "none" and auth.token_env:
             token = os.environ.get(auth.token_env)
             if not token:
-                logger.warning(f"Auth token env var {auth.token_env} is not set!")
-                token = "DUMMY_TOKEN" # Fallback for dummy tests
-            
+                # NF9. This used to warn and substitute "DUMMY_TOKEN", which is the worst
+                # of the three available behaviours: the run continues, every request is
+                # rejected, and rejections are recorded as responses. A target that
+                # answered nothing then scores as a target that answered wrongly — an
+                # unset environment variable arriving in the report as a finding about
+                # somebody's product. An absent measurement and a failed one must never
+                # print the same thing (F40), and here the absent one was printing worse.
+                raise AuthTokenMissing(
+                    f"${auth.token_env} is not set, and target.auth.type is "
+                    f"{auth.type!r}.\n\n"
+                    f"  Nothing was sent. This is a setup problem, not a finding: with "
+                    f"no credential every\n"
+                    f"  request would be rejected, and rejections recorded against the "
+                    f"target read as answers\n"
+                    f"  it got wrong.\n\n"
+                    f"    export {auth.token_env}=...\n\n"
+                    f"  Or set target.auth.type to \"none\" if this endpoint genuinely "
+                    f"takes no credential."
+                )
+
             if auth.type == "bearer":
                 headers["Authorization"] = f"Bearer {token}"
             elif auth.type == "api_key":
@@ -109,6 +131,59 @@ class TargetClient:
             
         response.raise_for_status()
         return response.json()
+
+    async def delete_document(self, document_id: str) -> None:
+        """Remove one document the run uploaded, by identifier.
+
+        The only destructive call in this client, and it exists for one caller: the
+        revision phase, replacing a document on a target whose ingest API refuses
+        duplicate identifiers. `endpoints.delete` is absent unless a config sets it, so a
+        target is never at risk from a default.
+
+        Method defaults to DELETE rather than the client-wide POST. An endpoint named
+        `delete` that issued a POST because a default said so is the kind of surprise
+        this call cannot afford.
+        """
+        endpoint_config = self.config.endpoints.delete
+        if endpoint_config is None:
+            raise ValueError(
+                "delete_document called with no `endpoints.delete` configured. "
+                "The caller is required to check first — a delete that guesses at a "
+                "URL is worse than one that does not happen."
+            )
+
+        variables = {"DOCUMENT_ID": document_id}
+        if isinstance(endpoint_config, str):
+            # Not routed through `_prepare_request`, which substitutes nothing in the
+            # string form and attaches a JSON body. Both are wrong here: the identifier
+            # is almost always in the path, and a DELETE carrying a body is rejected by
+            # enough servers that it cannot be the default for the one destructive call.
+            url = self._inject_variables(endpoint_config, variables)
+            method, headers, kwargs = "DELETE", self.headers, {}
+        else:
+            url, method, headers, kwargs = self._prepare_request(
+                endpoint_config,
+                default_payload={"document_id": document_id},
+                variables=variables,
+            )
+            if not endpoint_config.body:
+                kwargs.pop("json", None)
+                kwargs.pop("content", None)
+            # `EndpointConfig.method` defaults to POST, which is right for every other
+            # endpoint and wrong for this one. `model_fields_set` distinguishes an author
+            # who wrote `method: POST` from one who wrote nothing — so a deliberate
+            # POST-based delete API still works, and silence means DELETE.
+            if "method" not in endpoint_config.model_fields_set:
+                method = "DELETE"
+
+        logger.debug(f"Deleting document {document_id} at {url}")
+        response = await self.client.request(method, url, headers=headers, **kwargs)
+        # 404 is success for this caller's purpose: the point is that the identifier is
+        # free, and an identifier that was never there is free. Treating it as an error
+        # would abort a revision phase over a target that had already expired the
+        # document, which is not a failure of anything.
+        if response.status_code != 404:
+            response.raise_for_status()
 
     def _extract_json_from_string(self, text: str) -> Optional[str]:
         if not isinstance(text, str):

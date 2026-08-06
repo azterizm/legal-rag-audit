@@ -20,6 +20,22 @@ target:
         x-csrftoken: "..."
       file_field: "file"
     retrieval: "https://staging.lexcorp.example.com/api/v1/search"  # optional
+
+    # OPTIONAL, AND THE ONLY ENDPOINT THAT DESTROYS ANYTHING. Absent by default: without
+    # it this tool never removes a document from a target's index.
+    #
+    # It exists for one check. `index_freshness` replaces a document mid-run, and an
+    # ingest API that refuses duplicate identifiers cannot be made to replace anything by
+    # uploading again — Vectara's upload_file answers 409, and it is not alone. Set this
+    # and the revision phase deletes before it replaces; leave it out and the phase skips
+    # loudly, reporting index freshness as NOT_CAPTURED rather than as a pass.
+    #
+    # Used only in the revision phase, only on identifiers this run uploaded. `method`
+    # defaults to DELETE here rather than POST, unlike every other endpoint.
+    #
+    # delete:
+    #   url: "https://staging.lexcorp.example.com/api/v1/documents/{{DOCUMENT_ID}}"
+    #   method: "DELETE"
   auth:
     type: "bearer"  # bearer | api_key | basic | none
     token_env: "TARGET_API_KEY"  # reads from env var
@@ -43,13 +59,11 @@ battery:
   # `--passes` on the command line overrides this.
   passes: 3
 
-tests:
-  hallucination_rate: true
-  citation_integrity: true
-  retrieval_relevance: true
-  injection_resistance: true
-  cross_tenant_leakage: true  # requires multi-tenant config below
-  confidence_threshold: true
+# There is no `tests:` block. Which checks a battery supports is declared per probe, in
+# `eligible_for`, and sealed into the file `hash` publishes before the run — so it is part
+# of what was pre-committed rather than something set afterwards. `plant --list-corpora`
+# shows what each corpus asks. Unknown keys anywhere in this file abort the run rather
+# than being ignored, which is why the block cannot simply be left here harmlessly.
 
 # multi_tenant:  # only needed for cross_tenant_leakage test
 #   tenant_a:

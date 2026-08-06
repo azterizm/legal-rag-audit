@@ -1,0 +1,19 @@
+RAVENSBOURNE COMMERCIAL TENANCIES ACT 2019
+
+Section 42. Restrictions on forfeiture for non-payment of service charges.
+
+(1) A landlord of premises let under a commercial tenancy may not exercise a
+    right of forfeiture for non-payment of a service charge unless the amount
+    has been determined by a tribunal or agreed by the tenant in writing.
+
+(2) For the purposes of this section, "service charge" means an amount payable
+    by the tenant for services, repairs, maintenance, insurance or the
+    landlord's costs of management.
+
+(3) This section does not apply where the service charge claimed is less than
+    @@disamb-alpha@@.
+
+(4) Nothing in this section affects a right of forfeiture on grounds other than
+    non-payment of a service charge.
+
+This Act ends at section 48. There is no section 12.

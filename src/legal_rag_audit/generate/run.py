@@ -80,6 +80,12 @@ class Generator:
         self.run_id = uuid.uuid4().hex[:16]
         self.client = TargetClient(config.target)
         self.document_ids: list[str] = []
+        #: Corpus document id -> the identifier the *target* answered with at upload.
+        #: Kept beside `document_ids` rather than derived from it, because a replacement
+        #: has to be addressed by the name the target chose: our `integration_fee_notice`
+        #: is Vectara's `integration_fee_notice.txt`, and deleting the wrong string
+        #: silently succeeds on an API that treats a miss as a no-op.
+        self.issued_ids: dict[str, str] = {}
         #: Set once we know whether the target emits these at all, rather than guessed
         #: per record.
         self.saw_citations = False
@@ -157,7 +163,27 @@ class Generator:
             logger.warning(self.skipped_revision)
             return []
 
-        await self._upload(self.revisions, "revision")
+        try:
+            await self._clear_for_replacement(self.revisions)
+            await self._upload(self.revisions, "revision")
+        except GenerationError as e:
+            # A failed *revision* upload is not a failed run. The base corpus is in the
+            # index and the first-phase probes have already been answered against it, so
+            # aborting here would throw away complete evidence to report the absence of
+            # one check — and the absence is reportable on its own (F40). The two
+            # branches above skip loudly for the same reason; this is the third way the
+            # phase can not happen, and it was the only one that discarded the run.
+            #
+            # Base-upload failures still abort, and that asymmetry is the point: without
+            # the base corpus every check is scored against documents the target may not
+            # hold, which is not partial evidence but wrong evidence.
+            self.skipped_revision = (
+                f"No revision phase: the revised documents could not be uploaded, so "
+                f"the second-phase probes were not asked and index freshness is "
+                f"NOT_CAPTURED rather than passing or failing.\n{e}"
+            )
+            logger.warning(self.skipped_revision)
+            return []
 
         wait = self.config.corpus.revision_wait_seconds
         logger.info(
@@ -169,6 +195,54 @@ class Generator:
         self.revision_wait = wait
 
         return await self._ask_all(probes)
+
+    async def _clear_for_replacement(self, documents: list[dict[str, Any]]) -> None:
+        """Free the identifiers a revision is about to reuse, where the config allows it.
+
+        **This deletes documents from the target's index**, which nothing else in this
+        tool does, so read the three conditions rather than the summary:
+
+        1. `endpoints.delete` is configured. Absent by default; without it this is a
+           no-op and the revision phase proceeds exactly as it did before, failing loudly
+           on a create-only API instead of silently destroying anything.
+        2. Uploads are enabled. `--skip-upload` means the target's copy of the corpus is
+           theirs and not ours to replace, and the revision phase is already skipped in
+           that case.
+        3. The identifier belongs to a document *this run uploaded*. `self.revisions`
+           comes from the planted corpus we wrote, and the deletion is by that identifier
+           alone — there is no query, no pattern and no way for this to reach a document
+           the run did not put there.
+
+        Why it exists: §8.2 #4 tells "not yet indexed" from "never invalidated" by
+        replacing a document mid-run and asking again. An ingest API that refuses
+        duplicate identifiers cannot be made to replace anything by uploading twice — it
+        answers 409 — so on those targets the check is not awkward but impossible.
+
+        A failure here is not fatal and deliberately not caught: it propagates to the
+        caller, which turns the whole revision phase into a loud skip. A target that
+        would not let us free the identifier is a target where index freshness is
+        NOT_CAPTURED, and that is a true statement about the run.
+        """
+        if not documents or self.skip_upload:
+            return
+        if self.config.target.endpoints.delete is None:
+            logger.info(
+                "No `endpoints.delete`: the revision will be uploaded over the original. "
+                "On a target whose ingest API refuses duplicate identifiers this fails, "
+                "and index freshness is then reported as NOT_CAPTURED rather than passing."
+            )
+            return
+
+        for doc in documents:
+            # The identifier the target answered with at upload, not ours. Falling back
+            # to the filename rather than to `doc["id"]`: a file-upload API almost always
+            # keys on the filename, and our id is that with the extension stripped.
+            identifier = self.issued_ids.get(doc["id"], doc["filename"])
+            logger.info(
+                f"Deleting {identifier} before replacing it — the identifier is reused "
+                f"by the revised document, and this target's ingest is create-only."
+            )
+            await self.client.delete_document(identifier)
 
     async def _upload(self, documents: list[dict[str, Any]], label: str) -> None:
         if not documents:
@@ -230,6 +304,7 @@ class Generator:
 
             issued = resp.get("id") if isinstance(resp, dict) else None
             identifier = str(issued) if issued else doc["id"]
+            self.issued_ids[doc["id"]] = identifier
             # A revised document replaces its original, so its identifier is already in
             # the manifest. Appending it again would put the same document into the set
             # citation integrity tests membership against twice.

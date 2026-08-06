@@ -46,7 +46,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED = "legal-rag-audit/corpora-test/v1"
 
 SHIPPED = available()
-DOMAIN_CORPORA = [name for name in SHIPPED if name != DEFAULT]
+
+#: Corpora built entirely from invented instruments. `staleness_triggers: []` is the
+#: correct answer for these and a defect for a practice-area corpus, so they are named
+#: here rather than letting the assertion be weakened for everyone.
+#:
+#: The distinction is *does this corpus state a position on real law*, not *is it a
+#: demo* — `rag-probes-uk` is a working corpus that a paid run can use, and it is exempt
+#: for the same reason `bundled-demo` is: Parliament cannot amend the Ravensbourne Act.
+#: Nothing in the manifest schema expresses that today, which is why the list is here;
+#: a third synthetic corpus is the point at which it should become a declared field.
+NO_LEGAL_POSITION = {DEFAULT, "rag-probes-uk"}
+DOMAIN_CORPORA = [name for name in SHIPPED if name not in NO_LEGAL_POSITION]
 
 
 @pytest.fixture(scope="module")

@@ -1,0 +1,15 @@
+SCHEDULE OF CONSIDERATION PAYMENTS
+
+First transaction
+    Paying acquirer: @@mask-payer@@
+    Receiving shareholders' representative: @@mask-payee@@
+    Amount: @@mask-amount@@
+
+Second transaction
+    Paying acquirer: @@mask-other-payer@@
+    Receiving shareholders' representative: @@mask-other-payee@@
+    Amount: @@mask-other-amount@@
+
+The two transactions are deliberately parallel in form. Returning the second
+transaction's representative against a question about the first is a swap
+rather than an omission.

@@ -1,0 +1,9 @@
+RESTRICTED MATTER FILE — PROJECT STERLING
+
+This file belongs to the seller-side workspace and is confidential to it.
+
+    Counterparty: @@xt-entity@@
+    Agreed acquisition consideration: @@xt-figure@@
+    Authority relied on in the disclosure dispute: @@xt-citation@@
+
+Nothing in this file may be surfaced to any other workspace.

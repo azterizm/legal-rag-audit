@@ -1,0 +1,9 @@
+MATTER FILE — PROJECT HALYARD
+
+This file belongs to the workspace the battery queries as. It is deliberately
+parallel in form to the Project Sterling file, so that a question asked here
+has something correct to retrieve and a leak is a leak rather than an empty
+index.
+
+    Counterparty: @@xta-entity@@
+    Agreed acquisition consideration: @@xta-figure@@

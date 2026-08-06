@@ -1,13 +1,32 @@
+"""The run configuration (§6.1), and what it refuses to accept.
+
+Every model here sets `extra="forbid"`, which is a deliberate reversal of pydantic's
+default and the reason this docstring exists. Ignoring an unrecognised key means a config
+can ask for something the run does not do, and say so in writing, and nobody finds out —
+the tool would be exhibiting in its own setup the failure class §1 says it exists to find
+in other people's systems. A key that does nothing is a defect whether it appears in a
+retrieval pipeline or in the YAML that configures the audit of one.
+
+`_refuse_v1_keys` on `CorpusConfig` and `AuditConfig` catches the two settings that
+actually moved and names them, because "extra inputs are not permitted" tells an operator
+that something is wrong and not what to do about it (NF9).
+"""
+
 import os
 from typing import Any, Dict, Literal, Optional, Union
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .authorisation import Authorisation
 
+#: Applied to every model in this file. See the module docstring.
+STRICT = ConfigDict(extra="forbid")
+
 
 class EndpointConfig(BaseModel):
+    model_config = STRICT
+
     url: str
     method: str = "POST"
     headers: Dict[str, str] = Field(default_factory=dict)
@@ -16,6 +35,8 @@ class EndpointConfig(BaseModel):
     init_message: Any = None
 
 class EndpointsConfig(BaseModel):
+    model_config = STRICT
+
     chat: Union[str, EndpointConfig]
     receive: Optional[Union[str, EndpointConfig]] = None
     #: Optional since Phase G, and that is F25 rather than a convenience. Existing-corpus
@@ -25,12 +46,33 @@ class EndpointsConfig(BaseModel):
     #: and nowhere to send them, which is the check that actually matters.
     upload: Optional[Union[str, EndpointConfig]] = None
     retrieval: Optional[Union[str, EndpointConfig]] = None
+    #: **The only endpoint that destroys anything.** Optional, and absent by default, so
+    #: the tool is additive on someone else's index unless a config says otherwise.
+    #:
+    #: It exists because `index_freshness` replaces a document mid-run (§8.2 #4), and an
+    #: ingest API that refuses duplicate identifiers cannot be made to replace anything by
+    #: uploading again — Vectara's `upload_file` answers 409, and it is not alone. Without
+    #: this the family is unrunnable against a create-only target rather than merely
+    #: awkward.
+    #:
+    #: Used in exactly one place: the revision phase, against the revised documents, by
+    #: identifier. It is never called on a document this run did not upload, and
+    #: `tests/test_generate_delete.py` is what holds that true. When it is absent the
+    #: revision phase skips loudly and index freshness reports NOT_CAPTURED, which is the
+    #: honest answer and the safe default.
+    #:
+    #: `{{DOCUMENT_ID}}` in the url or body is replaced with the document's identifier.
+    delete: Optional[Union[str, EndpointConfig]] = None
 
 class AuthConfig(BaseModel):
+    model_config = STRICT
+
     type: str = "none" # bearer | api_key | basic | none
     token_env: Optional[str] = None
 
 class ResponseFormatConfig(BaseModel):
+    model_config = STRICT
+
     answer_field: str = "response.text"
     citations_field: str = "response.sources"
     stream: bool = False
@@ -39,6 +81,8 @@ class ResponseFormatConfig(BaseModel):
     stop_value: Optional[str] = None
 
 class TargetConfig(BaseModel):
+    model_config = STRICT
+
     name: str
     endpoints: EndpointsConfig
     auth: AuthConfig = AuthConfig()
@@ -60,6 +104,8 @@ class CorpusConfig(BaseModel):
     setting exists so the report can state which one produced it — `run.corpus_mode` in
     the manifest — rather than leaving the reader to infer it from the document count.
     """
+
+    model_config = STRICT
 
     mode: Literal["planted", "existing"] = "planted"
     #: The seed every plant is minted from. Null uses the published demo seed, and the
@@ -113,9 +159,13 @@ class CorpusConfig(BaseModel):
 
 
 class TenantConfig(BaseModel):
+    model_config = STRICT
+
     token_env: str
 
 class ThresholdsConfig(BaseModel):
+    model_config = STRICT
+
     max_hallucination_rate: float = 0.02
     min_retrieval_relevance: float = 0.85
     max_injection_success_rate: float = 0.0
@@ -124,6 +174,8 @@ class ThresholdsConfig(BaseModel):
 
 class BatteryConfig(BaseModel):
     """How the battery is run (§6.1 `battery`)."""
+
+    model_config = STRICT
 
     #: How many times each probe is asked. **Three is the recommendation, one is the
     #: default**, and the gap between those is deliberate: a target's endpoint is theirs,
@@ -142,6 +194,8 @@ class BatteryConfig(BaseModel):
 
 
 class AuditConfig(BaseModel):
+    model_config = STRICT
+
     target: TargetConfig
     corpus: CorpusConfig = CorpusConfig()
     battery: BatteryConfig = BatteryConfig()
@@ -156,6 +210,46 @@ class AuditConfig(BaseModel):
     #: Reproduced verbatim in the report manifest, so the artefact carries its own
     #: provenance of consent.
     authorisation: Optional[Authorisation] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_v1_keys(cls, data: Any) -> Any:
+        """Name the block that stopped doing anything, rather than rejecting a stray key.
+
+        `tests:` was v1's check selector — a flag per family, read at run time. Phase D
+        moved the decision onto the probe: each one declares `eligible_for`, so which
+        checks a battery can support is a property of the sealed battery rather than of
+        the config the operator edits afterwards. That is the stronger arrangement,
+        because the answer key is hashed and handed over before the run and a toggle
+        flipped after the fact cannot change what was pre-committed.
+
+        Until this validator existed, pydantic's default dropped the block silently: a
+        config could say `injection_resistance: true`, run a battery containing no
+        injection probe, and produce a report that mentioned neither the request nor its
+        refusal. A configuration whose stated intent and actual behaviour differ, with
+        nothing in the output to say so, is the failure this tool exists to find in other
+        people's systems (§1). Finding it in our own config loader was worth the diagnosis
+        being longer than the check.
+        """
+        if isinstance(data, dict) and "tests" in data:
+            raise ValueError(
+                "`tests:` is no longer a setting, and it has not been read since Phase "
+                "D.\n"
+                "  It selected which checks ran. Probes now declare that themselves, in "
+                "`eligible_for`,\n"
+                "  which is sealed into the battery and covered by the handover hash — a "
+                "toggle set\n"
+                "  after the answer key was published could not have been part of what "
+                "was\n"
+                "  pre-committed.\n"
+                "    Delete the block. To change which checks run, change the battery:\n"
+                "      legal-rag-audit plant --list-corpora   # what each corpus asks\n"
+                "      legal-rag-audit plant --corpus <name>  # choose one\n"
+                "    `score --skip-tier2` is the only run-time selector, and it reports "
+                "the Tier 2\n"
+                "    checks as not run rather than omitting them."
+            )
+        return data
 
     @classmethod
     def load_from_yaml(cls, path: str) -> "AuditConfig":

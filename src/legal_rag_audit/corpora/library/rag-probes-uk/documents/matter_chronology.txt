@@ -1,0 +1,9 @@
+MATTER CHRONOLOGY — APPOINTED LEAD ADVISERS
+
+Transaction one. The lead adviser was @@mem-first@@.
+Transaction two. The lead adviser was @@mem-second@@.
+Transaction three. The lead adviser was @@mem-third@@.
+
+The three transactions are unrelated and each has exactly one lead adviser. A
+question about one of them has a single correct answer, and naming either of
+the others is a resolution failure rather than a turn of phrase.

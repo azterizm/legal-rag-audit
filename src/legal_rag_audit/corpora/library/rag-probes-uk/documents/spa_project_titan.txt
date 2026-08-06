@@ -1,0 +1,27 @@
+SHARE PURCHASE AGREEMENT — PROJECT TITAN
+
+Section 12. General warranties.
+
+    The Sellers warrant to the Buyer that general warranty claims must be
+    brought within 18 months of Completion. The aggregate cap on general
+    warranty claims is stated in Schedule 2 and is not affected by Schedule 4.
+
+SCHEDULE 4 — INDEMNITY BANDS AND CLAIM LIMITS
+
+Indemnity band: @@struct-band@@
+
+    Claims and notification
+        Environmental indemnity
+            Notification: written notice to the Sellers within 30 days
+            Aggregate claim limit: @@struct-leaf@@
+
+Indemnity band: Standard
+
+    Claims and notification
+        Environmental indemnity
+            Notification: written notice to the Sellers within 30 days
+            Aggregate claim limit: @@struct-decoy@@
+
+The two bands are identical in structure and differ only in the limit at the
+leaf position, so an answer that reaches the wrong band has reached the wrong
+document position rather than misread the figure.

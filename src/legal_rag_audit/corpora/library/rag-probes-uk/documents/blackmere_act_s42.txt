@@ -1,0 +1,15 @@
+BLACKMERE FINANCIAL OVERSIGHT ACT 2021
+
+Section 42. Duty to report material discrepancies.
+
+(1) A regulated person who identifies a material discrepancy in a financial
+    return submitted to the Authority must report the discrepancy in writing.
+
+(2) A report under subsection (1) relating to the current reporting year must
+    be delivered to the Authority on or before @@disamb-beta@@.
+
+(3) The report must specify the nature of the discrepancy, the return in which
+    it appears, and the steps taken to rectify it.
+
+(4) A regulated person who fails to comply with subsection (1) commits a
+    regulatory offence.

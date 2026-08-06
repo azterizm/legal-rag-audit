@@ -22,6 +22,7 @@ exists to measure in other people's systems.
 | **H** | Reposition bundled corpus as demo; first domain corpus | 2.5 d | ✅ 2026-08-05 *(second corpus timed at 4m43s, but by an agent — a human timing is still owed)* |
 | **I** | Authorisation controls + retention position | 0.5 d | ✅ 2026-08-06 |
 | **J** | Container split, published and signed images, `trivy image`, the hardened invocation | — | ✅ 2026-08-06 *(last by instruction; closes the B and B2 remainders)* |
+| **K** | `rag-probes-uk` corpus, config hardening, and the first run against a live commercial target | — | ✅ 2026-08-06 *(Vectara dry run; 4 defects found and fixed)* |
 
 Minimum sellable cut is **A + B + C + F + I + one domain corpus (H)**.
 
@@ -2418,3 +2419,131 @@ is also a signature over bytes nobody reviewed, so it is an explicit act.
 - **Defect 13, the CUDA stack in the score layer.** Recorded, not fixed: the fix is a
   lockfile decision (§20.1 #9), and it is the thing to settle before a score image is
   published rather than before this phase closes.
+
+---
+
+## Phase K — the first run against something we did not write
+
+Every phase before this one was checked against `tests/mock_target` and the reference
+target. Both are ours. Phase K pointed the tool at Vectara — a commercial retrieval
+platform, first-party account — and the value of it was almost entirely in what broke.
+
+**Four defects, all found by the run and none by the test suite.** That is the phase in one
+sentence, and it is the argument for doing this again before every release rather than
+after.
+
+### What was built
+
+**`corpora/library/rag-probes-uk/`** — a fourteen-document corpus in which every
+instrument is invented. Shapes are adapted from the published battery at
+[azterizm/rag-security-probes](https://github.com/azterizm/rag-security-probes): the
+colliding section 42s of the Ravensbourne and Blackmere Acts, the Project Titan indemnity
+schedule, the restricted transaction file, the CV injection payload. The **values** are
+not adapted — they are minted from `corpus.seed` like every other corpus here, which is
+the whole reason for porting shapes rather than pointing at the repository. That battery
+is public, and its own README says publication contaminates it: *"A passing result is a
+self-assessment, not audit evidence."* A seeded run of the same shapes is not answerable
+from having read it.
+
+`staleness_triggers: []`, and this is the corpus that setting was written for. Parliament
+cannot amend the Blackmere Act. It is the only *working* corpus in the library with no
+re-run trigger, which also makes it the one to reach for when the target is not a legal
+product at all — a platform with no legal index can still be measured, because every
+answer has to come from documents the operator put there.
+
+Two upstream families did not survive the port, and the corpus README names them rather
+than leaving the count to be noticed: **lost-in-the-middle** (the nesting is there, the
+burial distance is not — fourteen short documents cannot bury anything) and **negation
+blindness** (genuinely missing, genuinely Tier 1, and the obvious twentieth check).
+Both need a spine role, a battery probe and an evaluator, and none of that was in scope.
+
+### Defect 14 — a config could ask for something the run did not do
+
+`config.yaml` carried a `tests:` block of seventeen check toggles. Pydantic's default is
+to ignore unknown keys, so all seventeen were dropped on the floor. A config could say
+`injection_resistance: true`, run a battery with no injection probe, and produce a report
+mentioning neither the request nor its refusal.
+
+That is the failure this tool exists to find in other people's systems, sitting in our own
+config loader. Every model in `config.py` now sets `extra="forbid"`, and `tests:` gets a
+named diagnosis pointing at `eligible_for` — which is the honest answer to where the
+setting went: check eligibility is sealed into the battery and covered by the handover
+hash, so a toggle set afterwards could not have been part of what was pre-committed.
+
+### Defect 15 — an unset credential arrived as a finding
+
+`TargetClient._build_auth_headers` warned on a missing token and substituted
+`"DUMMY_TOKEN"`. Every request would then be rejected, and rejections are recorded as
+responses — so an unset environment variable reached the report as a target that answered
+wrongly. An absent measurement and a failed one must never print the same (F40); this one
+printed worse. It now raises `AuthTokenMissing` before anything is sent.
+
+### Defect 16 — the harness assumed upload was upsert
+
+`_revision_phase` replaced a document by uploading it again. Vectara's `upload_file` is
+create-only and answers **409**; `DELETE` then upload answers 204 and 201. Verified
+directly against the API rather than inferred from the traceback.
+
+This is not a Vectara quirk. `index_freshness` is mandatory in the spine and was
+**unrunnable against any create-only ingest API**, and nothing in the config could say
+"remove this first".
+
+The fix is `endpoints.delete`, and it is the only destructive call this tool has, so the
+fence around it is larger than the feature. Absent by default. Used in one place, the
+revision phase. Only against identifiers *this run uploaded* — and by the identifier the
+**target** issued, not ours, because `integration_fee_notice` is Vectara's
+`integration_fee_notice.txt` and deleting the wrong string succeeds silently on any API
+that treats a miss as a no-op. `method` defaults to DELETE here and POST everywhere else,
+distinguished through `model_fields_set` so a deliberate POST-based delete API still
+works. `tests/test_generate_delete.py` is eight tests, and six of them are about the
+delete *not* happening.
+
+### Defect 17 — a partial failure discarded complete evidence
+
+The 409 aborted the whole run and wrote no response file, losing eighteen answered probes.
+The abort reasoned that every check depends on the target holding the corpus — true of the
+base upload, wrong here: the base corpus *was* uploaded and the first-phase probes *had*
+returned. A failed revision upload is now the third loud-skip path beside the two that
+already existed, and index freshness reports `NOT_CAPTURED`.
+
+Base-upload failures still abort, and the asymmetry is the point. Without the base corpus
+every check is scored against documents the target may not hold — not partial evidence but
+wrong evidence.
+
+### The run
+
+`plant → hash → validate → generate → score`, end to end, against `api.vectara.io`.
+
+| | |
+|---|---|
+| Corpus | `rag-probes-uk` v1, seed `vectara-dryrun-2026-08`, 29 plants, 0 regenerations |
+| Uploaded | 14 documents, then 1 replacement after a delete |
+| Probes | 19 asked, 16 answered, 3 transport errors (Vectara 500s) |
+| Checks | 20 registered — 10 passed, 4 findings, 2 not eligible, 4 not captured |
+| Pre-commitment | verified against the handover sealed before the target saw anything |
+
+`validate` earned its place before any of this: it found that `citations_field` defaulted
+to `response.sources` while Vectara returns `search_results`, so every citation check would
+have scored a system that cites nothing. That would have been a finding about our JSONPath
+printed as a finding about the target.
+
+**The findings are not claims about Vectara, and the report should not be read as one.**
+Everything went into a single corpus with no tenant separation and no namespace scoping,
+and `multi_tenant` was not configured — so `cross_tenant_leakage` failing is a property of
+how the run was set up, not of the product. `routing_contamination` passing is luck for the
+same reason. What the run establishes is that the pipeline works against a real commercial
+endpoint and that the four defects above are fixed.
+
+### Still outstanding after this phase
+
+- **The three Vectara 500s are unexplained.** `inj-001`, `conf-001` and `fresh-002` each
+  returned a server error. They are correctly held as `NOT_CAPTURED` rather than findings,
+  which is the behaviour working, but nobody has established *why* — and one of the three
+  is the injection probe, which is the one where a server error and a refusal look alike.
+- **Tier 2 did not run.** Scored with `--skip-tier2`, so `unsupported_assertions` and
+  `retrieval_relevance` are recorded as not run. The three model-backed checks have still
+  never been exercised against a live target.
+- **One pass.** `response_divergence` is `NOT_CAPTURED`; reproducibility was not measured.
+- **`rag-probes-uk` is exempted from the staleness assertion by name**, in
+  `tests/test_corpora.py`, because nothing in the manifest schema expresses "states no
+  legal position". A third synthetic corpus is the point at which that becomes a field.
