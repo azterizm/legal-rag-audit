@@ -37,9 +37,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: subject is how well our own instrument works, so a claim in it that outran its
 #: evidence would be the most damaging kind available — and it is exactly the document a
 #: reader who distrusts the rest will turn to first.
+#: Phase U added the three documents the README was split into, and CONTRIBUTING.md.
+#: Moving a claim out of a gated file and into an ungated one would defeat the gate
+#: silently — the split was a restructure, and a restructure must not be a way to launder
+#: an unqualified sentence into a document nobody checks.
 DOCUMENTS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "SECURITY.md",
+    REPO_ROOT / "CONTRIBUTING.md",
+    REPO_ROOT / "docs" / "configuration.md",
+    REPO_ROOT / "docs" / "corpora.md",
+    REPO_ROOT / "docs" / "design.md",
     REPO_ROOT / "docs" / "threat-model.md",
     REPO_ROOT / "docs" / "responses-schema.md",
     REPO_ROOT / "docs" / "harness-verification.md",

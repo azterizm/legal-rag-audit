@@ -3518,3 +3518,68 @@ than the three-pass one beside it, in both directions: A and B look more consist
 they are, C looks better than it is.
 
 911 tests passing.
+
+---
+
+## Phase U — the README described a set that no longer exists, and was too long to read
+
+Two commits. The first corrects, the second moves.
+
+### What had drifted
+
+Six statements about the shipped surface, each of which the framing rested on:
+
+| Said | Is |
+|---|---|
+| Six anchors, twelve readings, `s.108` among them | Five and ten; `era-108` retired in Phase R |
+| Eleven of twelve readings frozen, a twelfth asking for current law | All ten frozen — a gap, and now stated as one |
+| Eighteen evaluators, sixteen Tier 1 | Nineteen and seventeen, as the status table two hundred lines earlier already said |
+| Eight of eighteen checks published | 8 open, 9 held, 2 conditional, of 19 |
+| `unresolvable_citations`, `non_existent_authorities`, `version_mismatch`, `non_reproducible_responses` | None is a registry name; one is the counter we refuse to score |
+| "Mid-migration from v1. Anything marked *specified* does not exist yet" | Every row of the table beneath it reads **Shipped** |
+
+`point_in_time` was **missing from the check table entirely** — nineteen evaluators,
+eighteen rows, and the absent one is the check that produced every live finding this
+project has.
+
+Two additions rather than corrections: why the fourth anchor rule now excludes prose
+(otherwise the count drops with no explanation), and why both licensed probes name England
+and Wales (defect 30).
+
+### The split
+
+10,631 words is a forty-minute read and nobody finishes it. The README is now ~6,400 words
+across sixteen sections, and the reference material sits where its reader will look:
+
+| New | Holds |
+|---|---|
+| `docs/configuration.md` | Every `config.yaml` field, all four transport shapes, and a new **Authentication** section |
+| `docs/corpora.md` | The corpus library, the spine, the collision guard, the anchors, `ingest` |
+| `docs/design.md` | The dependency split, determinism as two claims, the Key column, why anything is sealed, the two design rules, the capability map |
+| `CONTRIBUTING.md` | Tests, the four acceptance gates, changing a dependency, cutting a release |
+
+Two things were hoisted rather than moved, because they were nine hundred lines down and
+they are the argument: **the pair is the test**, and **asked once, reproducibility is
+`NOT_CAPTURED` and never `PASS`**.
+
+One section is new. **What it has been run against** states that the existing-corpus
+battery has been fired at three live UK legal-AI products under ordinary-use conditions and
+what it found — no product named, no rate stated (that needs a denominator this project
+does not have), no report published. Before this the page implied the tool had only ever
+met `tests/mock_target/`.
+
+### The gate had to move with the text
+
+`scripts/check_readme_claims.py` now covers twelve documents rather than eight. Moving a
+claim out of a gated file into an ungated one would defeat the gate silently, and the first
+run over the new set caught exactly that: a determinism heading with no scoping clause in
+its own paragraph.
+
+Also fixed while adjacent: the dependency table omitted `websockets`, so it said four
+pure-Python libraries where `pyproject.toml` pins five.
+
+**The cookie-auth rule is now written down.** `type: cookie` sends the value as the entire
+`Cookie:` header verbatim, so a bare JWT authenticates nothing and costs a run in instant
+401s. Capture the header, not the token.
+
+897 tests passing (26 slow deselected), four acceptance gates clean.

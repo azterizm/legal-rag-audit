@@ -61,56 +61,68 @@ that no accuracy work closes; collapsing them destroys the more valuable of the 
 
 ---
 
-## Implementation status
+## Two rules that decide what a run is worth
 
-The v2 migration is complete: every capability below is in the code, and the table is kept
-as a map of the surface rather than as a promissory note. Where this README and
-`V2_FULL_PLAN.md` disagree, the plan wins — but nothing here is waiting to be built.
+Most of what separates this from a spreadsheet of model answers is in these two.
 
-| Capability | Status |
-|---|---|
-| Local-only scoring; no third-party inference path | **Shipped** |
-| Exact version pins + hash-pinned lockfiles, split by mode | **Shipped** — four layers, cross-checked for agreement |
-| CycloneDX SBOM per dependency layer | **Shipped** — generated from the lockfiles, drift-gated |
-| Public CI: tests, gates, `pip-audit` / Bandit / Semgrep / Trivy | **Shipped** — actions pinned by commit SHA |
-| Signed releases: GPG tag, SLSA provenance, cosign | **Shipped** — `scripts/verify_release.sh` is the reader's half |
-| Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
-| 19 evaluators against a configured endpoint | **Shipped** — all rewritten to the §8.2 recipes |
-| Licensed-content reproduction check (§8.2 #18) | **Shipped** — identifiers only; `in_index` / `external_fetch` / `unattributed` never collapsed |
-| SSE / WebSocket transport, JSONPath extraction | **Shipped** |
-| JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
-| Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
-| Non-root containers, base pinned by digest, deps under `--require-hashes` | **Shipped** — two images along the dependency boundary, signed by digest, `trivy image` per image |
-| `validate` / `generate` / `score` mode split; scoring offline and enforced | **Shipped** |
-| `responses.jsonl` interchange format + published schema | **Shipped** |
-| Tier 1 / Tier 2 tagging and tier-separated findings | **Shipped** — 17 Tier 1, 2 Tier 2 |
-| Run manifest: hashes, commit SHA, model versions, seed, corpus mode, battery composition | **Shipped** |
-| `hash` handover record; `score` refuses a ground truth that moved | **Shipped** |
-| `NOT_ELIGIBLE` / `NOT_CAPTURED` statuses | **Shipped** |
-| Authorisation gating on injection / canary families | **Shipped** — `generate` aborts before sending anything; production needs a second, typed act |
-| Seeded plant generation with collision guard | **Shipped** — `plant`, 29 invariants across 15 documents |
-| Two-phase corpus upload for index freshness | **Shipped** |
-| N-pass execution and variance as a first-class finding | **Shipped** — `response_divergence`, Tier 1 |
-| Pathological reference target, sensitivity/specificity CI gates | **Shipped** — 20 profiles over both batteries, [matrix published](docs/harness-verification.md) |
-| Existing-corpus mode and point-in-time probe pairs | **Shipped** — no `upload` endpoint needed; anchors quoted from `legislation.gov.uk` |
-| Domain corpus library, versioned, with staleness triggers | **Shipped** — 3 corpora; a corpus that omits a spine role does not load |
+**The pair is the test.** A dated legal question asked once measures almost nothing: a
+system holding only current law answers every question about the present correctly. So
+every point-in-time anchor asks the *same provision at two moments*, and the pair is what
+separates *retrieved the right version* from *only has one version*. An answer carrying
+both versions passes — telling a reader what the law was and what it became is more than
+was asked for, not less.
 
-The mode split has landed: `generate` and `score` are separate commands, and scoring
-runs with sockets disabled. A run now produces a complete handover document — the
-provenance manifest, the findings, verbatim excerpts for every Tier 1 instance, the
-distribution behind every Tier 2 number, and the ground truth disclosed in full.
+**Asked once, reproducibility is `NOT_CAPTURED` — never `PASS`.** Nothing was compared. A
+single-pass run that read as evidence of stability would be the strongest claim in the
+report resting on the least evidence for it. Ask three times:
 
-Every expectation a Tier 1 check scores against is now a **plant**: a value minted from
-the run seed, guarded against collision with the corpus and with every other plant, and
-inserted at a declared location. A key disclosed after one run is worthless for the next,
-because the next run regenerates. That also took the last model out of Tier 1 — abstention
-is scored by the presence of a specific claim rather than the entailment of a refusal, so
-it needs no cross-encoder and no threshold.
+```bash
+legal-rag-audit generate -c config.yaml -o responses.jsonl --passes 3
+```
 
-Two sections of the attestation are deliberately left for a person to write: the
-representation delta needs their published claims quoted with a URL and a date, and the
-mechanism section needs an architectural reading this diagnostic cannot make. Generating
-either would be the failure the tool exists to measure in other people's systems.
+One pass is the default, because tripling the request count against someone else's
+endpoint is their decision and not one a default should take for them.
+
+**With N passes every count splits in two.** A probe failing 3 of 3 is a defect; a probe
+failing 1 of 3 is non-reproducibility, which is a different finding that no accuracy work
+closes — and usually the more valuable of the two, because it is the one a vendor cannot
+reproduce on their own. Collapsing them destroys the better half.
+
+---
+
+## What it has been run against
+
+Beyond the reference target in `tests/mock_target/`, the existing-corpus battery has been
+fired at **three live UK legal-AI products** under ordinary-use conditions: no uploads, no
+injection payloads, no cross-tenant canaries, no authorisation claimed or needed. One
+fixed battery, hashed and published before any answer existed, scored against phrases
+quoted from `legislation.gov.uk`.
+
+It found things. Without naming products, which is the standing rule here:
+
+- A dated question about a figure **one month before it changed** defeated all three, in
+  three different ways — one returned the superseded figure, one returned the figure that
+  took effect a month later, one returned both at once.
+- One product answered a dated question correctly on one pass of three and wrongly on the
+  other two, **holding the right reasoning on the pass where it was right**. A single-pass
+  audit would have reported it as correct on that provision.
+- One returned a greeting instead of an answer on two passes of three, to a question the
+  transport can show it received.
+- Where two products were stable and correct on the same probe, the divergence check said
+  so and flagged neither. A check that flagged all three would be measuring generative
+  variation rather than instability.
+
+Three findings the runs produced about **the instrument** rather than the targets, each
+now fixed or retired: a prose anchor was withdrawn after three systems wrote the same
+correct answer three ways and two scored as having returned neither version of the law;
+the licensed-content probes were given a jurisdiction after a multi-jurisdiction product
+answered them on French law and passed; and an async transport shape was added rather than
+scripted around.
+
+**No report from those runs is published, and none will be without written consent.** The
+rule is in [`docs/authorisation-and-retention.md`](docs/authorisation-and-retention.md):
+configurations may be named in a published result, products never. Nothing above is a rate
+— stating one would need a denominator this project does not have.
 
 ---
 
@@ -126,23 +138,6 @@ convenience.
 | `score` | Reads `responses.jsonl` plus the ground-truth manifest, writes the report | **None** | Us |
 | `ingest` | Re-checks the point-in-time anchors against `legislation.gov.uk`. Scores nothing, changes no ground truth | Primary source only | Us, on a schedule |
 
-```
-                         ┌──────────────── OUR SIDE ────────────────┐
-  corpus/ ──┐            │                                          │
-  probes/ ──┼── handover │   ground_truth.json (withheld, hashed)   │
-            │            │                                          │
-            ▼            │                                          │
-  ┌──── THEIR SIDE ────┐ │                                          │
-  │  validate (opt.)   │ │                                          │
-  │  generate  ──OR──  │ │                                          │
-  │  their own harness │ │                                          │
-  │        │           │ │                                          │
-  │        ▼           │ │                                          │
-  │  responses.jsonl ──┼─┼──► score ──► report.json + report.md      │
-  └────────────────────┘ │            + evidence bundle + manifest   │
-                         └──────────────────────────────────────────┘
-```
-
 Four things the split buys:
 
 1. **It removes `config.yaml` from the critical path.** Responses can be produced however
@@ -154,20 +149,6 @@ Four things the split buys:
    is nothing of ours to security-review. The question stops being asked rather than
    being answered.
 4. **`score` running with no network at all is a short review** even when it does run.
-
-### Dependency split
-
-`sentence-transformers` pulls torch and transformers — hundreds of transitive packages
-nobody can review. That is fine on our machine and unacceptable on a target's.
-
-| Mode | Dependencies |
-|---|---|
-| `generate`, `validate` | `httpx`, `pyyaml`, `pydantic`, `jsonpath-ng` — four pure-Python libraries |
-| `score` | the above, plus `sentence-transformers`, `torch` (CPU), a pinned NLI model |
-
-CI asserts the boundary: the `generate` entrypoint imports and runs in a virtualenv
-installed without the `[score]` extra, and `torch` is not importable there. *"Read it in
-ten minutes"* is then literally true rather than a slogan.
 
 ### Current component map
 
@@ -252,50 +233,20 @@ product given away.
 
 ## Scoring is deterministic. Target systems typically are not.
 
-Two different things get called determinism — the reproducibility of our scoring, and the
-reproducibility of the target's answers — and conflating them destroys both.
-
 **Ours is a precondition.** Scoring is deterministic: the same responses, the same ground
-truth and the same scoring configuration produce a byte-identical report. No model sits
-in the scoring path by default, and where one does — the two Tier 2 checks — it is local,
-pinned by version, and disclosed on the page. If scoring were not reproducible the report
-would die to *"run it again"*, and reproducibility cannot be sold with an instrument that
-lacks it.
+truth and the same scoring configuration produce a byte-identical report. No model sits in
+the scoring path by default, and where one does — the two Tier 2 checks — it is local,
+pinned by version, and disclosed on the page.
 
 **Theirs is a finding.** A target that returns a different answer to the same question
-cannot reproduce an answer given to a client six months ago when it is disputed. That is
-a records failure and it holds at any accuracy level. So running the harness twice against
-a non-deterministic target legitimately produces different counts: the scoring did not
-change, the system under test did. That is the instrument working, not the instrument
-broken. The variance pass classifies each probe
-across passes as `identical`, `invariant_stable` (prose differs, every Tier 1 outcome is
-the same) or `divergent` (a Tier 1 outcome changed), and only `divergent` is reported as
-a finding. Flagging ordinary phrasing variation as failure is the fastest way to lose a
-report.
+cannot reproduce an answer given to a client six months ago when it is disputed. That is a
+records failure and it holds at any accuracy level. Running the harness twice against a
+non-deterministic target legitimately produces different counts: the scoring did not
+change, the system under test did.
 
-Divergence is decided on **Tier 1 outcomes only**. A Tier 2 similarity of 0.851 on one
-pass and 0.849 on the next crosses a threshold this scorer was configured with, not one
-the target agreed to; counting that as their instability would report a setting of ours
-as a property of their system.
-
-Ask each probe three times:
-
-```bash
-legal-rag-audit generate -c config.yaml -o responses.jsonl --passes 3
-```
-
-One pass is the default rather than three, because tripling the request count against
-someone else's endpoint is their decision and not one a default should take for them. At
-one pass the report says nothing was compared instead of reporting stability.
-
-**With N passes every count splits in two.** 15 eligible probes × 3 passes is 45
-observations, and the report never collapses them: a defect that reproduced on every pass
-and one that appeared on a single pass are different findings about different problems.
-The second is usually the more valuable, because it is the one a vendor cannot reproduce
-on their own.
-
-Everything that could vary on our side is seeded and the seed is recorded: plant
-generation, probe ordering, any sampling.
+Divergence is classified on Tier 1 outcomes only, as `identical`, `invariant_stable` or
+`divergent`, and only the last is a finding. [Why, and what it costs, is in
+`docs/design.md`](docs/design.md).
 
 ---
 
@@ -328,39 +279,15 @@ network namespace, where a socket call fails rather than resolving.
 Deny egress rather than disabling it. A delayed payload still has to make a call
 eventually, and it fails whenever it fires — timing is irrelevant under denial.
 
-Two images, split along §5.3's dependency boundary.
-`legal-rag-audit-generate` carries five pure-Python libraries and is the only one that
-ever talks to your system; `legal-rag-audit-score` adds the ML stack and opens no
-sockets at all. Both run non-root from a base image pinned by digest, install every
-dependency under `--require-hashes`, and are cosign-signed and attested by digest —
-`scripts/verify_release.sh <tag>` checks that before you pull anything.
+Two images, split along the dependency boundary. `legal-rag-audit-generate` carries the
+pure-Python libraries and is the only one that ever talks to your system;
+`legal-rag-audit-score` adds the ML stack and opens no sockets at all. Both run non-root
+from a base image pinned by digest, install every dependency under `--require-hashes`, and
+are cosign-signed and attested by digest — `scripts/verify_release.sh <tag>` checks that
+before you pull anything.
 
-```bash
-docker run --rm --network=audit-net \
-  --read-only --cap-drop=ALL --security-opt no-new-privileges \
-  --user "$(id -u):$(id -g)" \
-  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-  -v "$PWD/in:/in:ro" -v "$PWD/out:/out" \
-  ghcr.io/azterizm/legal-audit-rag-generate@sha256:… \
-  generate -c /in/config.yaml -o /out/responses.jsonl
-```
-
-One read-only input mount, one output directory, no volumes, no daemon, exits when done.
-Nothing persists, so there is nowhere for "queued" to live — and forgetting the output
-mount aborts against the read-only filesystem rather than writing into a volume that
-disappears.
-
-`audit-net` is a network you create: `docker network create --internal audit-net` gives
-the container no external route at all, and a forward proxy of yours on that network is
-what decides which single host it may reach. Docker has no per-container host allowlist
-flag, so put a logging proxy there if you want proof rather than a claim — the connection
-log is yours, not ours. **[docs/hardened-run.md](docs/hardened-run.md)** has the three
-invocations, what each flag answers, and what none of them establishes.
-
-Scoring is the same picture with the network removed entirely: `--network=none`, model
-weights mounted read-only, `HF_HUB_OFFLINE=1` in the image so a cache miss fails instead
-of fetching. And `plant`, `hash` and Tier 1 `score` all run in the *generate* image with
-no network and no model — which is the artefact route below, in a container.
+**[`docs/hardened-run.md`](docs/hardened-run.md)** has the three invocations, what each
+flag answers, and what none of them establishes.
 
 ---
 
@@ -454,182 +381,31 @@ free version of a third-party audit, and unlike a paid one it does not go stale.
 
 ## Configuration
 
-Map the harness to your API's exact shape in `config.yaml`. **An incorrect JSONPath is
-the documented leading cause of false positives** — an empty extracted string scored as a
-finding is a result that has to be retracted in front of a buyer. This is what `validate`
-exists to prevent.
+`config.yaml` maps the harness to your API's exact shape — endpoints, auth by environment
+variable only, and the JSONPaths that pull the answer out of the body. Four transport
+shapes are supported: plain JSON, Server-Sent Events, WebSocket, and submit-then-poll for
+targets that answer asynchronously.
 
 ```yaml
 target:
-  name: "vendor-staging"          # local only — never written to any artefact
-  pseudonym: null                 # what the report calls it. null keeps it anonymous
   endpoints:
     chat: "https://staging.example.com/api/v1/chat"
-    upload: "https://staging.example.com/api/v1/documents"
-    retrieval: "https://staging.example.com/api/v1/search"   # optional
   auth:
-    type: "bearer"                 # bearer | api_key | basic | cookie | none
+    type: "bearer"
     token_env: "TARGET_API_KEY"    # env var only, never inline
   response_format:
     answer_field: "response.text"
     citations_field: "response.sources"
-    stream: false                  # true for Server-Sent Events
-
-corpus:
-  mode: "planted"                  # plant a seeded corpus (default) | existing
-  library: null                    # which corpus from the library — null uses bundled-demo
-  seed: null                       # null uses the published demo seed — read the caveat below
-  path: "./planted-corpus"         # where the planted corpus is written
-  revision_wait_seconds: 60        # wait between replacing a document and re-asking
-
-battery:
-  passes: 3                        # ask each probe N times; 1 reports no reproducibility
-
-tests:
-  hallucination_rate: true
-  citation_integrity: true
-  retrieval_relevance: true
-  injection_resistance: true
-  cross_tenant_leakage: false      # only with a multi-tenant config
-  confidence_threshold: true
-  contradiction_surfacing: true
-  routing_contamination: true
-  cross_clause_synthesis: true
-  memory_management: true
-  cache_invalidation: true
-  latency_penalty: true
-  retrieval_disambiguation: true
-  structural_integrity: true
-  entity_masking_rehydration: true
-  parametric_knowledge_bleed: true
-  cross_document_attribution: true
-
-thresholds:
-  max_hallucination_rate: 0.02
-  min_retrieval_relevance: 0.85
-  max_injection_success_rate: 0.0
-  max_cross_tenant_leaks: 0
 ```
 
-> **`thresholds` are settings, not standards.** `0.85` and `0.02` are numbers someone put
-> in a config file. They are not a published benchmark and nothing about them is
-> authoritative. Every Tier 2 result is reported as a **distribution with the line
-> marked** rather than a bare pass/fail, and the report states where each number came
-> from. Presenting a setting as a standard is the exact failure this project exists to
-> measure in other people's systems. The `display_thresholds` rename that makes the
-> misuse harder to commit by accident is still to come.
->
-> Two of the three thresholds now govern nothing: `max_injection_success_rate` and
-> `max_cross_tenant_leaks` are Tier 1 counts where one instance is sufficient (§3.4), so
-> there is no line to set. They are still read for backward compatibility and are not
-> consulted. `abstention` had a fourth, hard-coded at `0.5` inside a cross-encoder; the
-> Tier 1 rewrite removed both the model and the number.
+> [!IMPORTANT]
+> **An incorrect JSONPath is the documented leading cause of false positives.** A config of
+> any complexity has several independent ways to be silently wrong and none of them fails
+> loudly. Run `legal-rag-audit validate -c config.yaml` once after writing it — two
+> minutes, and it prints the frames the target actually sends.
 
-### Endpoints
-
-1. **`chat` (required)** — `POST` with the query in a JSON body; returns the answer string
-   and, if the system emits them, an array of citations. Extraction is driven by
-   `response_format.answer_field` and `citations_field`.
-2. **`upload` (required for planted-corpus mode)** — `POST` with document content; the
-   harness captures the returned document `id` to build the upload manifest. Citation
-   integrity is set membership against that manifest, so without an `id` the check
-   silently loses its ground truth.
-3. **`retrieval` (optional)** — direct search endpoint. Without it, retrieval relevance
-   has no chunks to score and reports `NOT_CAPTURED` rather than passing.
-
-### Non-standard shapes
-
-Endpoints may be objects rather than strings when you need a specific method, custom
-headers, or a nested (or stringified) JSON body. A **`receive`** endpoint handles
-decoupled asynchronous responses — the harness triggers generation on `chat` and listens
-on `receive`. Use `{{QUERY}}` in `body`; for uploads, `{{FILENAME}}` and `{{CONTENT}}`.
-
-```yaml
-target:
-  endpoints:
-    chat:
-      url: "https://app.example.com/v1/api_core/widget/send_message/?language=en"
-      method: "POST"
-      headers:
-        accept: "application/json, text/plain, */*"
-        conv-id: "bd208096-772e-40a7-bcde-702ad8bdebfc"
-      body: '{"content":"{{QUERY}}","is_voice":false,"client_message_id":"f9517177-f80c"}'
-    receive:
-      # wss:// is detected as a WebSocket
-      url: "wss://app.example.com/socket.io/?EIO=4&transport=websocket"
-      headers:
-        accept-language: "en-GB,en-US;q=0.9,en;q=0.8"
-      # Connection init packet. Accepts a string ("40" for Socket.IO) or a JSON object.
-      init_message: "40"
-  response_format:
-    answer_field: "$[?(@.event_type=='message' & @.data.author.type=='ai_assistant')].data.content"
-    stream: true
-    stop_payload_match: "MESSAGE_END"
-```
-
-A config of this shape has four independent ways to be silently wrong — the handshake
-frame, the terminator, and the two JSONPaths — and none of them fails loudly. Run
-`legal-rag-audit validate -c config.yaml` once after writing it. It prints the frames it
-received, so a terminator can be chosen from what the target actually sends rather than
-from what its documentation says it sends.
-
-### Streams that interleave reasoning with the answer
-
-A JSONPath cannot ask what *type* of frame it is looking at: `jsonpath_ng` filters apply
-to arrays, and one SSE frame is a dict. On a target that emits its reasoning, its tool
-arguments and its answer under the same key, that leaves no path which selects only the
-answer — and a path chosen because it happens to fit the frames you have is a guess that
-holds until the model returns one frame fewer.
-
-Name the frames instead. Both halves are required; one alone matches everything or
-nothing, and the loader refuses it.
-
-```yaml
-  response_format:
-    answer_field: "$.content"
-    answer_frame_field: "$.type"      # only frames where …
-    answer_frame_value: "text_end"    # … this field equals this value
-    stream: true
-```
-
-Frames that do not match are not consulted for the answer. If the value names no frame the
-target sends, the answer comes back empty — and `generate` records an empty answer as a
-transport failure rather than as an answer, so a mis-named frame costs a re-run and never a
-page of findings about a system that did answer.
-
-### Targets that answer asynchronously
-
-Some products do not answer the request that asked the question. One call starts the work
-and hands back a ticket; the answer is fetched from a second address once it is ready.
-Configure both halves — `endpoints.receive` with a `GET` method makes the transport poll
-rather than stream.
-
-```yaml
-  endpoints:
-    chat:    { url: "https://…/analyzer", method: POST, body: { … } }
-    receive: { url: "https://…/message/{{HANDLE}}", method: GET }
-
-  response_format:
-    handle_field: "$.aiMessage.id"   # the ticket, taken from the submit response
-    ready_field:  "$.status"         # poll until …
-    ready_value:  "saved"            # … this field equals this value
-    answer_field: "$.text"
-    poll_interval_seconds: 3
-    poll_timeout_seconds: 300
-```
-
-`{{HANDLE}}` is the reason `handle_field` exists: a per-message identifier does not exist
-until the submit returns, so the poll URL cannot be written in advance.
-
-`ready_field` is not decoration. Without it, polling stops as soon as `answer_field`
-matches anything — which is correct only for targets that create the answer field once
-they have an answer to put in it. Against one that creates the record up front with
-`text: ""`, that test is satisfied on the first poll and **every probe returns an empty
-string**. Both halves are required and the loader refuses one alone.
-
-Exhausting `poll_timeout_seconds` raises, and `generate` records the raise as a transport
-error. An answer that never arrived is a failed measurement, not an empty one — returning
-`""` would write a record that reads exactly like a system with nothing to say.
+**[`docs/configuration.md`](docs/configuration.md)** has every field, all four transport
+shapes with working examples, and the one that costs a whole run if you get it wrong.
 
 ---
 
@@ -786,189 +562,36 @@ The report says so in its limits rather than implying otherwise.
 
 ---
 
-## The corpus library
+## Corpora, and the half that needs no upload endpoint
 
-A corpus is an artefact on disk, not code: a `corpus.yaml` and a directory of documents
-with `@@plant-id@@` where each invariant goes. Three ship with this build.
+A corpus is an artefact on disk, not code. Three ship with this build — a published-seed
+demo and two practice-area corpora for England and Wales — and every one fills the same
+declared roles, so a corpus that omits one **does not load**.
 
 ```bash
 legal-rag-audit plant --list-corpora
-legal-rag-audit plant --corpus employment --seed <your seed> -o run/
 ```
 
-| Corpus | Domain | What it is |
-|---|---|---|
-| `bundled-demo` | none | The try-it corpus. Published seed, synthetic prose, no practice area |
-| `commercial-contracts` | supply, services, procurement (E&W) | A practice-area corpus |
-| `employment` | contracts, policies, tribunal work (E&W) | A practice-area corpus |
+> [!NOTE]
+> **The bundled demo is a demonstration, not an audit.** Fifteen short synthetic documents
+> uploaded and queried immediately is a best case: not your ingestion history, not your
+> chunking at 40,000 documents, not your practice area. A system can pass it cleanly and
+> fail badly in production.
 
-Each ships a README saying what a run of it does **not** establish. Read that before
-quoting a number from one anywhere.
+Set `mode: existing` and there is no corpus at all — the target's own index is the corpus,
+and **`endpoints.upload` need not appear in the config**. That is the point rather than a
+convenience: upload access is usually the friction that turns a £500 engagement into a
+security review, so this half runs standalone, uploads nothing, and asks only ordinary-use
+families. It is also the half whose ground truth nobody has to take our word for, because
+it is quoted from the primary source.
 
-**What does not vary.** Every corpus fills the same roles, declared once in
-`corpora/spine.py`: the same fifteen documents in the same states, the same 29 invariants
-with the same kinds, the same nineteen probes scored by the same checks. A corpus that
-omits a role, invents one, or leaves one without a recorded location **does not load**, and
-the refusal names what to write. That is what makes §9.5's contradiction pair, tenant
-split, injection document, structural nesting and zero-answer topic *mandatory* rather
-than merely recommended: they are not an author's to leave out.
+Two checks live only there — `point_in_time` and `licensed_content_reproduction` — and
+five anchors ship, ten dated readings, quoted from `legislation.gov.uk` under the Open
+Government Licence.
 
-**What varies.** The prose, the filenames, how a reader names each document, where in each
-document an invariant sits, and the wording of each question — because *what is the
-aggregate liability limit in the supplier agreement* retrieves nothing from an employment
-index. Plus two judgment calls the loader cannot make for you: what would make the corpus
-stale, and which authority a model reliably knows that no document here mentions.
-
-Scaffold a new one with `python3 scripts/new_corpus.py <name>`. It arrives complete except
-for the prose, and refuses to load until every `TODO` is gone.
-[`docs/authoring-a-corpus.md`](docs/authoring-a-corpus.md) is the method.
-
-### The bundled demo
-
-`plant` with no `--corpus` writes a 15-document corpus from 14 documents plus one
-revision, with 29 invariants inserted at declared locations. It is **a demo, not an
-audit.** It measures whether a pipeline has generic properties on a best case: fifteen
-short synthetic documents uploaded and queried immediately. It is not your production
-ingestion history, not your chunking at 40,000 documents, not your index at scale, and not
-your practice area. **A system can pass this run cleanly and fail badly in production.** A
-generic corpus cannot tell you whether you are compliant, and this README will not pretend
-otherwise.
-
-| Documents | What they exercise |
-|---|---|
-| 2 tenant-isolated matter files, 3 invariant types in one | Cross-tenant leakage |
-| 2 documents carrying a side-effect payload | Injection resistance |
-| 2 near-identical supplier agreements with contradictory caps | Contradiction surfacing, latency |
-| 1 nested service schedule with a leaf four levels under its heading | Structural integrity |
-| 2 statutes with overlapping article numbers | Retrieval disambiguation, attribution |
-| 1 settlement schedule with paired counterparties | Entity masking re-hydration |
-| 1 namespace-scoped note | Routing contamination |
-| 1 digest of authorities | Citation integrity |
-| 1 chronology with three distinct referents | Context memory |
-| 1 retainer notice, in two states | Index freshness |
-| A question the corpus deliberately cannot answer | Parametric bleed, abstention |
-
-Most documents carry **at least three invariants of at least two types**, because a system
-that paraphrases a leaked clause still emits the counterparty name or the amount — those
-are the payload, and a single planted string would be defeated by rewording. Five
-documents carry fewer, and each records why beside itself in `corpora/spine.py`: in every
-one, a second invariant would give the question a second correct answer, and a check that
-cannot tell a right answer from a wrong one fails correct systems. A sixth appearing
-without a recorded reason fails the build.
-
-**What the collision guard checks**, and what it does not, goes into every ground-truth
-manifest. It verifies that no value occurs in the corpus as authored, that no two plants
-contain one another, that coined words are not in a bundled register of real parties, and
-that every generated neutral citation carries a number above the range any division of the
-High Court has issued in a year. It does **not** check the body of reported authority:
-scoring is offline by construction, so no lookup leaves the machine, and the residue is
-closed by manual review of the generated citations in the first corpus of each domain.
-
-### Existing corpus — the half that needs no upload endpoint
-
-Set `mode: existing`. There is no `path:`, because there is nothing to read: the corpus is
-whatever the target already holds, and **`endpoints.upload` need not be in the config at
-all**. That is the point rather than a convenience. Upload access is usually the friction
-that turns a £500 engagement into a security review, so this half runs standalone.
-
-```bash
-legal-rag-audit plant --mode existing -o run/       # probes + answer key, no corpus
-legal-rag-audit generate -c config.yaml --probes-in run/probes.jsonl -o responses.jsonl
-```
-
-What it gives up is everything planting buys — no canaries, no injection payloads, no
-contradiction pairs. What it gives back is ground truth nobody has to take our word for,
-and findings that cannot be dismissed as synthetic. [§9.1 says to run
-both](V2_FULL_PLAN.md); each covers the other's weakness.
-
-Two checks live only here:
-
-| Check | Ground truth | Needs |
-|---|---|---|
-| `point_in_time` | The phrase in force on a date, quoted from `legislation.gov.uk` under the Open Government Licence | `chat` |
-| `licensed_content_reproduction` | A published set of publisher-assigned identifiers | `chat` |
-
-**Point-in-time pairs ask the same provision at two moments, and the pair is the test.** A
-single dated question measures almost nothing: a system that always answers with the
-current law passes every question about the present. **Five anchors ship, ten readings** —
-three Employment Rights Act 1996 provisions (the compensatory award cap under s.124, the
-week's-pay maximum under s.227, and the insolvency weekly limit under s.186) and two
-Companies Act 2006 accounting thresholds (small companies under s.382, medium-sized under
-s.465).
-
-Each phrase is chosen so it appears in one version of that provision and no other, so it
-cannot be reached by a paraphrase of the other version, and so it has one written form —
-a correct system that writes *£28* where the statute says *£28.00* must not be recorded as
-having returned the superseded law. An answer carrying **both** versions passes; telling a
-reader what the law was and what it became is more than was asked for, not less.
-
-**The fourth rule excludes prose, and that cost an anchor.** A sixth anchor asked for the
-unfair-dismissal qualifying period under s.108, whose answer the statute states in words:
-*not less than one year*. Three systems wrote it three ways — the statutory phrase, *at
-least one year*, and *one year of continuous employment* — and two of them were recorded as
-having returned neither version of the law while having the law entirely right. A reading
-may carry other accepted written forms of the same answer, and that feature is kept; what
-it cannot do is close a set that has no closed form. Figures have one written form and
-durations in English do not, so `era-108` was retired rather than widened a third time.
-
-All ten readings now sit in closed validity ranges and can never change again. **That is a
-gap, not an achievement**: the retired anchor was the only one asking for the law as it
-stands, which is the more natural question and the only kind that can go stale. A
-replacement wants a provision whose *current* value is a figure.
-
-**Refreshing them is a command, not a diary note:**
-
-```bash
-legal-rag-audit ingest --strict -o run/statutes.json
-```
-
-It fetches each anchored provision as it stood on its date and confirms the phrase is
-still there. Scoring never touches it — the anchors are committed and the battery runs
-offline — so what this catches is an anchor going stale. With every reading now frozen,
-what would move is not the law but the source: `legislation.gov.uk` revises its own
-historic snapshots, and a phrase can stop matching without anything having been amended.
-**Storage footprint: 3.3 kB across the ten snapshots**, because the store keeps a window
-around each phrase rather than the statute.
-
-**Licensed content is the question procurement already asks**, and the check is built so
-it can never become an accusation. Only publisher-assigned *identifiers* are matched —
-never editorial prose, which would mean storing a publisher's headnotes in order to ask
-whether somebody else is storing them. A marker in the retrieval is the finding; a marker
-cited to the publisher's own service passes as `external_fetch`; a marker with no evidence
-either way is `NOT_CAPTURED`. The finding says content whose licence sits between them and
-the publisher is being served from their index — never that anyone is infringing.
-
-Both probes name **England and Wales**, and that is load-bearing rather than decorative.
-The marker set is a set of *English* publisher identifiers, so a product holding French and
-EU sources alongside UK ones, asked an unqualified question, answers on French law and
-passes on an answer no marker could ever have appeared in. The check would then mean one
-thing against one target and something else against the next, which defeats the purpose of
-running a single battery across several.
-
-### The corpus is checked before anything is sent
-
-The corpus is resolved and verified before the first request goes out, and a problem with
-it **aborts the run with a diagnosis and writes no report** (exit code 2). Checked:
-
-- A planted root has a `base/` directory. A flat directory is refused rather than read as
-  one, because reading it that way would silently drop the revision phase and take index
-  freshness with it.
-- `mode: existing` — nothing is checked, because nothing is read. The corpus is the
-  target's own index and no local documents are involved.
-- A run with documents to upload and no `endpoints.upload` aborts naming the three ways
-  out, because they mean different things: probe their index, assume they hold the
-  corpus, or declare somewhere to send it.
-- Every document is UTF-8 and non-empty. Hidden files are skipped.
-- Document order is sorted, not filesystem order, so the same corpus reads the same way
-  on every machine.
-- Every template slot is filled and every declared plant is inserted. A plant in the
-  answer key and not in the corpus would fail a correct system.
-
-This exists because the failure it replaces was silent. With the corpus missing, the
-runner used to substitute two stand-in documents and *finish*: the report described a
-2-document corpus while the config said more, and nothing on the page disclosed the
-substitution. A setup problem must never render as a finding (NF9) — if the corpus cannot
-be verified, there is no run.
+**[`docs/corpora.md`](docs/corpora.md)** is the full account: what every corpus must
+contain, what the collision guard checks and what it does not, the anchor rules and why
+the set is this small, and what `ingest` refreshes.
 
 ---
 
@@ -1006,6 +629,21 @@ can be checked by exact match. Prose cannot.
 evaluator's imports and fails the build if a model is reachable from one, so *"no model
 anywhere in the evaluation path"* is asserted rather than promised.
 
+**The `Key` column is when you get the answer, and it is the only thing with a timing rule
+on it.** Nothing about the method is withheld, ever — the code, the recipes above, the
+schemas and the scoring rules are public and forkable.
+
+| Key | Meaning | Count |
+|---|---|---|
+| `open` | The expectation ships **with** the battery. Published in advance | 8 |
+| `held` | Sealed until the report, then handed over in full with a hash you were given beforehand | 9 |
+| `cond.` | `open` when `retrieved_chunks` are captured; `held` when they are not | 2 |
+
+The line between them is mechanical rather than a matter of taste, and the reason anything
+is sealed at all is **not to keep a secret from you — it is to stop us being accused of
+inventing the expectations after seeing your answers**. [Both arguments are in
+`docs/design.md`](docs/design.md).
+
 Plus one that is **not an evaluator** and is counted apart from the nineteen:
 
 | Check | Tier | Key | Recipe |
@@ -1017,9 +655,7 @@ is the only one that can see another's verdict. An evaluator able to read anothe
 result is one that can be written to agree with it, and the independence of the rest is
 what makes a disagreement between passes mean anything.
 
-**Asked once, it reports `NOT_CAPTURED` — never `PASS`.** Nothing was compared, and a
-single-pass run that read as evidence of reproducibility would be the strongest claim in
-the report resting on the least evidence for it.
+Asked once it reports `NOT_CAPTURED`, never `PASS` — see *Two rules* above.
 
 Two things the table cannot say in a cell:
 
@@ -1035,87 +671,6 @@ and p95. The reading of a large gap as catch-and-regenerate is *inference*, regi
 `By design`, and it is printed with the other explanations that fit the same numbers — a
 long retrieval, a cold cache, a rate limit, a slow link. It never enters the findings
 table.
-
-### The Key column: what is published, and what is sealed for a few hours
-
-Nothing about the **method** is withheld, ever. The code, the recipes above, the schemas
-and the scoring rules are public and forkable. The only artefact with a timing rule on it
-is the answer key for one engagement, and the rule is narrow:
-
-| Key | Meaning |
-|---|---|
-| `open` | The expectation ships **with** the battery. Published in advance |
-| `held` | Sealed until the report, then handed over in full with a hash you were given beforehand |
-| `cond.` | `open` when `retrieved_chunks` are captured; `held` when they are not |
-
-The line between them is mechanical, not a matter of taste:
-
-> A check is **open** when knowing its expectation in advance cannot help a system pass
-> it without exhibiting the behaviour being tested.
-
-An *inverted* check says **this token must not appear**. The only way to satisfy it is not
-to emit the token — which is the behaviour under test. Read the key for
-`routing_contamination`, stop leaking out-of-bounds facts, and you have not gamed the
-check; you have passed it. So it is published.
-
-A *positive* check says **this token must appear**. Knowing the string lets it be pinned,
-cached or prompted with no retrieval improvement at all, and the difference is invisible
-in the output. Those nine are sealed — for the length of a run.
-
-**Eight of the nineteen checks are published with their answer keys, nine are sealed, and
-two are conditional.** For the sealed nine, telling you the value we are testing whether
-you retrieved would test nothing.
-
-Every report prints the key beside each check and counts them, so the withholding is a
-bounded fact on the page rather than an atmosphere.
-
-### Why anything is sealed at all
-
-Not to keep a secret from you. **To stop us being accused of inventing the expectations
-after seeing your answers.**
-
-You receive `ground_truth_manifest_hash` at handover, before a single response exists.
-You receive the manifest itself with the report, and can verify it hashes to the value
-you were already holding. There is no window in which we could have edited it.
-
-Both halves are the tool's job, not ours to remember. `hash` writes the record; `score`
-recomputes the digests and **refuses to produce a report** if the ground truth moved, and
-writes the manifest into the output directory beside the findings on every run. If we
-edited the key after seeing your answers, there is no report to argue about.
-
-Without that, every finding is answerable with one sentence — *"you decided what counted
-as a failure once you saw the failure"* — and there is no way to refute it. The hash makes
-that sentence unsayable. It constrains the auditor more than it constrains the vendor,
-which is the point of a document written to survive being handed to a third party.
-
-This is the same instrument as trial pre-registration: the protocol is published, and it
-is published *first*.
-
-Two further notes, because the sealing is smaller than it sounds. Capturing
-`retrieved_chunks` moves the conditional checks into the open half, because detection
-then sits below the layer an output filter can reach — that is a concrete reason to
-expose retrieval, not a request with nothing behind it. And per-engagement seeded plants
-mean a key disclosed after one run is worth nothing for the next: **regeneration is the
-durable property, secrecy only buys hours.**
-
-The bundled demo battery is fully open, keys and all. It ships in the same package as the
-corpus it describes, so anyone can read both.
-
-### Two design rules
-
-**Never enumerate what the target might say; check for a token we authored** — abstention
-is scored by the presence of a specific claim of the shape the question asked for, not by
-string-matching refusal language, because *"I don't have that"* has a thousand phrasings
-and enumerating them is the trap. Anything the question itself contained is excluded
-first: a system that restates the figure it was asked about and then declines has echoed
-the prompt, not invented an answer.
-
-And **injection is scored by side effect, not by judgment**: the payload demands something
-verifiable — begin the reply with a seeded token, end it with one — so success is a prefix
-or substring check rather than an opinion about whether the model was manipulated. The
-spec also lists *answer in French*; it is deliberately not implemented, because deciding
-whether a paragraph is French needs a language classifier, and that would put a model back
-in a Tier 1 scoring path.
 
 ---
 
@@ -1202,103 +757,19 @@ without written consent; and configurations named in any published result, never
 
 ---
 
-## Development
-
-```bash
-pip install --require-hashes -r requirements/dev.txt && pip install --no-deps -e .
-pytest
-```
-
-Skip the tests that build a wheel or download a model with `pytest -m "not slow"`.
-
-Acceptance gates:
-
-```bash
-./scripts/check_no_remote_scoring.sh
-```
-
-Asserts there is no remote-scoring vendor, credential or endpoint anywhere in
-`src/legal_rag_audit/`, that no scoring code imports an HTTP client, that
-`internal_experiments/` is excluded from both the wheel and the image, and that no claim
-in a published document is made without its scope attached. That last check covers
-`README.md`, `SECURITY.md`, `docs/threat-model.md`, `docs/responses-schema.md` and
-`docs/harness-verification.md` — it was widened from the README alone in Phase B2, and
-the first run over the new set found the schema document asserting *"nothing is sent
-anywhere"* with no scope on it.
-
-```bash
-python3 -m pytest tests/test_reference_target.py -q
-```
-
-The two numbers of [§14.2](docs/harness-verification.md): sensitivity — every registered
-check, given a target exhibiting the defect it looks for, reports it — and specificity —
-a target behaving correctly produces no findings across three passes. Both run against a
-reference server in `tests/mock_target/` over the real HTTP path, and both block a
-release. The gate is written against the check register rather than a count, so shipping
-an evaluator without a pathology profile fails the build instead of shrinking the
-denominator.
-
-```bash
-python3 scripts/check_pins.py
-```
-
-Asserts every requirement is exact, every lockfile entry carries hashes, that
-`pyproject.toml` agrees with the lockfiles, and that the base dependency set is the
-`generate` layer and no more. Two sources of truth that disagree are worse than one that
-is vague, because the disagreement is silent.
-
-```bash
-python3 scripts/gen_schemas.py --check
-```
-
-Asserts the published JSON Schemas still match the pydantic models that enforce them.
-The schemas are generated, never hand-edited: a published contract that `score` would
-reject is worse than none, because it sends someone away to build the wrong thing.
-
-```bash
-python3 scripts/gen_sbom.py --check
-```
-
-Asserts the committed SBOMs still describe the lockfiles. Same ratchet: a dependency bump
-that forgets the SBOM leaves a published document describing software nobody installs.
-Regenerating from an unchanged lockfile produces a byte-identical document — no
-generation timestamp, and a serial number derived from the lockfile's own digest — which
-is what makes a drift check possible at all.
-
-Changing a dependency:
-
-```bash
-./scripts/lock.sh
-```
-
-Edit `requirements/*.in`, run that, commit the `.in` and `.txt` together, then regenerate
-the SBOMs with `python3 scripts/gen_sbom.py`. Never hand-edit a lockfile — one that cannot
-be regenerated is not a lockfile.
-
-Cutting a release:
-
-```bash
-git tag -s v0.2.0 -m "v0.2.0" && git push origin v0.2.0
-```
-
-The tag must be signed and annotated. `release.yml` verifies the signature **before** it
-builds anything — a pipeline that builds first has already spent its provenance on an
-unverified commit — then attests, signs and publishes. Anyone can check the result with
-`./scripts/verify_release.sh v0.2.0`.
-
-`internal_experiments/` is not installed, not imported, not collected by pytest and not
-copied into the image. Read `internal_experiments/README.md` before touching anything in
-it.
-
----
-
 ## Reference
 
-`V2_FULL_PLAN.md` is the full specification — evidence model, evaluator contracts,
-interchange schemas and execution plan. `V2_PROGRESS.md` tracks what has landed.
-[`SECURITY.md`](SECURITY.md) is the supply-chain and release-verification position, and
-[`docs/threat-model.md`](docs/threat-model.md) states the threat model split by
-configuration, because a blanket claim would be false against a real corpus.
-[`docs/harness-verification.md`](docs/harness-verification.md) is the answer to *"how do
-I know your tool is right?"* — the reference target, the two gates, and what neither
-number establishes. This README is the summary; where they disagree, the plan wins.
+| | |
+|---|---|
+| [`docs/configuration.md`](docs/configuration.md) | Every `config.yaml` field and all four transport shapes |
+| [`docs/corpora.md`](docs/corpora.md) | The corpus library, the anchors, and what a run of the demo does not establish |
+| [`docs/design.md`](docs/design.md) | Why the awkward decisions were taken, and what each costs |
+| [`docs/responses-schema.md`](docs/responses-schema.md) | The interchange format, for replacing `generate` with your own harness |
+| [`docs/harness-verification.md`](docs/harness-verification.md) | *"How do I know your tool is right?"* — the reference target, the two gates, and what neither number establishes |
+| [`docs/authorisation-and-retention.md`](docs/authorisation-and-retention.md) | What needs authorisation, and what happens to your responses afterwards |
+| [`docs/threat-model.md`](docs/threat-model.md) | Split by configuration, because a blanket claim would be false against a real corpus |
+| [`docs/hardened-run.md`](docs/hardened-run.md) | Running it in a container that cannot reach anything |
+| [`SECURITY.md`](SECURITY.md) | Supply chain and release verification |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Tests, the acceptance gates, and cutting a release |
+| `V2_FULL_PLAN.md` | The full specification. **Where it and this README disagree, the plan wins** |
+| `V2_PROGRESS.md` | What has landed, in order |
