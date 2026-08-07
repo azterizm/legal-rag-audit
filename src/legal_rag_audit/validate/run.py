@@ -422,8 +422,34 @@ async def _observe_poll(config, client, http, probe, timeout) -> Observation:
             obs.ended_by = None
             return obs
 
+        # An asynchronous target's poll URL is not knowable before the submit, and this
+        # command's promise is that it does what `generate` will do. Resolving the
+        # handle here rather than only in the transport is what makes that true — the
+        # first version of this polled a URL with `{{HANDLE}}` still in it, reported
+        # eleven 404s as *the answer never arrived*, and would have sent someone
+        # rewriting a config that was correct.
+        if client.handle_parser is not None:
+            found = client.handle_parser.find(_decode(posted.text) or {})
+            if not found or found[0].value in (None, ""):
+                obs.raw, obs.truncated = _clip(posted.text)
+                obs.error = (
+                    f"response_format.handle_field "
+                    f"({config.target.response_format.handle_field!r}) matched nothing "
+                    f"in the submit response, so there is no address to poll"
+                )
+                obs.elapsed_ms = int((time.monotonic() - t0) * 1000)
+                obs.ended_by = None
+                return obs
+            rec_url, rec_method, rec_headers, rec_kwargs = client._prepare_request(
+                config.target.endpoints.receive,
+                default_payload={},
+                variables={**variables, "HANDLE": str(found[0].value)},
+            )
+            obs.receive_url = rec_url
+
+        interval = getattr(config.target.response_format, "poll_interval_seconds", 1.0)
         while time.monotonic() - t0 < timeout:
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(interval)
             obs.frames += 1
             polled = await http.request(
                 rec_method, rec_url, headers=rec_headers, **rec_kwargs
@@ -432,7 +458,11 @@ async def _observe_poll(config, client, http, probe, timeout) -> Observation:
                 continue
             obs.raw, obs.truncated = _clip(polled.text)
             obs.parsed = _decode(polled.text)
-            if obs.parsed is not None and client.answer_parser.find(obs.parsed):
+            # `_is_finished`, not "the answer path matched": a target that creates the
+            # answer field empty and fills it in later satisfies the latter on the first
+            # poll, and `validate` would bless a config that returns nothing but empty
+            # strings.
+            if obs.parsed is not None and client._is_finished(obs.parsed):
                 _extract(client, obs)
                 obs.ended_by = "terminator"
                 break
@@ -560,7 +590,18 @@ async def _run(
     http = httpx.AsyncClient(timeout=timeout, headers=client.headers)
     try:
         upload = None
-        if not skip_upload:
+        if config.target.endpoints.upload is None:
+            # Existing-corpus mode uploads nothing and needs no upload endpoint (F25),
+            # so a config in that mode legitimately has none. Reaching for it anyway
+            # crashed `validate` with an AttributeError — the one command whose whole
+            # job is to tell someone their config is wrong before they spend a run.
+            upload = UploadObservation(
+                attempted=False,
+                skipped_because="no upload endpoint is configured, which is correct "
+                "for a run against the target's own index — nothing is uploaded, so "
+                "whether uploads issue document identifiers does not arise",
+            )
+        elif not skip_upload:
             upload = await _observe_upload(config, client, http)
         else:
             upload = UploadObservation(
@@ -733,7 +774,15 @@ def validate(
     result.upload = upload
     result.retrieval = retrieval
 
-    timings = [o.elapsed_ms for o in observations if o.http_status == 200]
+    # Any 2xx, not 200 exactly. An asynchronous target answers the submit with 201
+    # Created — it created a message and has not answered yet — and three probes that
+    # all worked were reported as *no query returned 200*, withholding the run-length
+    # projection from precisely the kind of target that most needs one.
+    timings = [
+        o.elapsed_ms
+        for o in observations
+        if o.http_status is not None and 200 <= o.http_status < 300
+    ]
     result.median_ms = int(median(timings)) if timings else None
 
     result.diagnoses = _diagnose(config, result)

@@ -54,6 +54,18 @@ target:
     # do not apply to the dict a single frame is. Both halves or neither.
     # answer_frame_field: "$.type"
     # answer_frame_value: "text_end"
+    #
+    # Targets that answer asynchronously: the submit hands back a ticket and the answer
+    # is polled for. `handle_field` reads the ticket out of the submit response and binds
+    # it to `{{HANDLE}}` in `endpoints.receive`, which cannot be written in advance.
+    # `ready_field`/`ready_value` say when a polled body is finished — required, because
+    # the alternative test (stop once the answer path matches) returns the empty string a
+    # record created up front already has. Both halves or neither.
+    # handle_field: "$.aiMessage.id"
+    # ready_field: "$.status"
+    # ready_value: "saved"
+    # poll_interval_seconds: 3.0
+    # poll_timeout_seconds: 300.0   # exhausting it is a transport error, never an answer
 
 corpus:
   mode: planted                # plant a seeded corpus (default) | existing

@@ -187,7 +187,7 @@ def _projection(result: Validation) -> list[str]:
     lines = [RULE, ""]
     if result.median_ms is None:
         lines.append(
-            "  No query returned 200, so there is no latency to project a run from."
+            "  No query succeeded, so there is no latency to project a run from."
         )
         lines.append("")
         return lines

@@ -597,6 +597,40 @@ target sends, the answer comes back empty — and `generate` records an empty an
 transport failure rather than as an answer, so a mis-named frame costs a re-run and never a
 page of findings about a system that did answer.
 
+### Targets that answer asynchronously
+
+Some products do not answer the request that asked the question. One call starts the work
+and hands back a ticket; the answer is fetched from a second address once it is ready.
+Configure both halves — `endpoints.receive` with a `GET` method makes the transport poll
+rather than stream.
+
+```yaml
+  endpoints:
+    chat:    { url: "https://…/analyzer", method: POST, body: { … } }
+    receive: { url: "https://…/message/{{HANDLE}}", method: GET }
+
+  response_format:
+    handle_field: "$.aiMessage.id"   # the ticket, taken from the submit response
+    ready_field:  "$.status"         # poll until …
+    ready_value:  "saved"            # … this field equals this value
+    answer_field: "$.text"
+    poll_interval_seconds: 3
+    poll_timeout_seconds: 300
+```
+
+`{{HANDLE}}` is the reason `handle_field` exists: a per-message identifier does not exist
+until the submit returns, so the poll URL cannot be written in advance.
+
+`ready_field` is not decoration. Without it, polling stops as soon as `answer_field`
+matches anything — which is correct only for targets that create the answer field once
+they have an answer to put in it. Against one that creates the record up front with
+`text: ""`, that test is satisfied on the first poll and **every probe returns an empty
+string**. Both halves are required and the loader refuses one alone.
+
+Exhausting `poll_timeout_seconds` raises, and `generate` records the raise as a transport
+error. An answer that never arrived is a failed measurement, not an empty one — returning
+`""` would write a record that reads exactly like a system with nothing to say.
+
 ---
 
 ## Running it

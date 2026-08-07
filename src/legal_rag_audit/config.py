@@ -148,6 +148,45 @@ class ResponseFormatConfig(BaseModel):
     answer_frame_field: Optional[str] = None
     answer_frame_value: Optional[str] = None
 
+    #: Where the *submit* response puts the identifier the poll URL needs. Its value is
+    #: available as `{{HANDLE}}` in `endpoints.receive`. Set this when the target answers
+    #: asynchronously: one request starts the work and hands back a ticket, a second
+    #: fetches the answer by that ticket. Without it the poll URL has to be knowable
+    #: before the submit, which for a per-message identifier it is not.
+    handle_field: Optional[str] = None
+
+    #: When the polled body is finished. Polling stops on this and on nothing else.
+    #:
+    #: The alternative — stop as soon as `answer_field` matches — is wrong against any
+    #: target that creates the answer field empty and fills it in later, and that is the
+    #: common shape: a record with `text: ""` and `status: "generating"` matches the
+    #: answer path on the first poll. Every probe would come back instantly with an empty
+    #: answer, and an empty answer is not a measurement (F40).
+    ready_field: Optional[str] = None
+    ready_value: Optional[str] = None
+
+    #: The poll budget. Exhausting it is a transport failure, never an empty answer.
+    poll_interval_seconds: float = Field(default=2.0, gt=0)
+    poll_timeout_seconds: float = Field(default=180.0, gt=0)
+
+    @model_validator(mode="after")
+    def _a_readiness_test_needs_both_halves(self) -> "ResponseFormatConfig":
+        if bool(self.ready_field) != bool(self.ready_value):
+            missing = "ready_value" if self.ready_field else "ready_field"
+            raise ValueError(
+                f"response_format sets one half of the readiness test and not the "
+                f"other: {missing} is missing.\n"
+                "  Polling would then have to guess when the answer is finished, and "
+                "the guess it would\n"
+                "  make — stop once the answer field exists — returns the empty string "
+                "a half-written\n"
+                "  record already has. Set both, or neither:\n\n"
+                "    response_format:\n"
+                '      ready_field: "$.status"\n'
+                '      ready_value: "saved"\n'
+            )
+        return self
+
     @model_validator(mode="after")
     def _a_frame_selector_needs_both_halves(self) -> "ResponseFormatConfig":
         if bool(self.answer_frame_field) != bool(self.answer_frame_value):

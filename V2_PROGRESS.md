@@ -3135,3 +3135,90 @@ and both are single-pass. But the shape is now visible: on the one anchor where 
 target committed twice it returned one version for both dates, and where the second target
 committed twice it returned the right version for each. Same battery, same questions, same
 key.
+
+---
+
+## Phase P — a third target, and an API shape the tool could not express
+
+**Target C, 7 August 2026.** 14 of 14 probes answered, no transport errors, one account
+throughout — the first complete run in a single sitting. Bundle in
+`reports/jimini-2026-08-07/` (gitignored, 1.9 MB).
+
+```
+point_in_time                  12 eligible, 11 scored, 0 failed, 1 not captured   PASS
+licensed_content_reproduction   2 eligible,  2 scored, 0 failed                   PASS
+findings 0
+```
+
+**Eleven scored, eleven correct.** Five anchors are complete pairs and every one is right
+on both dates — `era-124`, `era-227`, `era-186`, `ca-382`, `ca-465` — with several answers
+naming the amending instrument alongside the figure. Scored under the widened key
+(`sha256:0b249b5b…`), against the same sealed probe file as the first two targets
+(`sha256:08c3b9b5…`). Pre-commitment published half an hour before firing and verified at
+scoring.
+
+### The tool grew a transport shape, and three defects fell out of it
+
+This target answers asynchronously: the submit returns a ticket, the answer is fetched
+from a second address once its status changes. Nothing in the config language could say
+that.
+
+* **`handle_field`** takes an identifier out of the submit response and binds it to
+  `{{HANDLE}}` in the poll URL. A per-message identifier does not exist until the submit
+  returns, so the poll address could not previously be written at all.
+* **`ready_field` / `ready_value`** say when a polled body is finished. This is the one
+  that would have silently ruined the run: the old rule was *stop once `answer_field`
+  matches*, and this target's record exists from the moment of submit with `text: ""`.
+  Every probe would have returned an empty string two seconds in. Both halves required,
+  one alone refused at load.
+* **Defect 25** — an exhausted poll budget returned `""`. F40 one layer below where it is
+  usually enforced: an answer that never arrived is a failed measurement, not an empty
+  one. Now raises, and `generate` records the raise as a transport error.
+* **Defect 26** — `validate` crashed with an `AttributeError` on any config without an
+  `upload` endpoint, which is every existing-corpus config, which is every live run this
+  project has done. The one command whose job is to catch a bad config before a run was
+  spent could not be run at all.
+* **Defect 27** — `validate` reimplemented the poll instead of using the transport, so it
+  polled a URL with `{{HANDLE}}` still literal in it, reported eleven 404s as *the answer
+  never arrived*, and would have sent someone rewriting a config that was correct. Its
+  promise is that it does what `generate` does; now it does.
+* **Defect 28** — the run-length projection tested `http_status == 200`, so an async
+  target answering `201 Created` was reported as *no query returned 200* and the
+  projection was withheld from exactly the kind of target that most needs one.
+
+Seven new transport tests; 901 passing, 13 skipped.
+
+### `era-108` should be retired rather than widened again
+
+`era-108-1` answered *one year of continuous employment* as at 1 January 2011 — correct.
+The anchor accepts *not less than one year*, *at least one year* and *a minimum of one
+year*, so a right answer scored `no_version_returned`. The other half matched, on a form
+added by the defect-23 fix one phase ago.
+
+That is three runs in which the project's one prose anchor has failed to measure a system
+that answered correctly, and the second time the response was to add accepted forms.
+Adding a fourth would be chasing paraphrases. There is no closed set of ways to write *one
+year*, which is the fourth anchor rule — the answer must have one written form — saying
+this anchor does not satisfy it. Figures do; prose does not. **Retire it, or replace it
+with a provision whose answer is a number.** Not done here: the key was sealed before the
+run and stays sealed.
+
+### The licensed probes need a jurisdiction
+
+Both passed, and both were answered about French law — Cour de cassation doctrine and a
+Conseil d'État decision cited by its Légifrance identifier. Neither probe names a
+jurisdiction, and against a French product with French sources enabled that is what they
+get. The pass is true (*no proprietary markers were emitted*) and thinner than it looks
+(*the UK index was not asked anything on this family*). **They need a jurisdiction if they
+are to mean the same thing across targets.**
+
+### Where the three targets stand
+
+Same probe file for all three. `era-108` is out of any cross-target comparison — scored
+under the superseded key in the first two and unscoreable in the third — which leaves five
+anchors and ten dated questions on identical footing. All three runs are single-pass, so
+reproducibility has still never been measured on anything.
+
+An operational note that held again: the report names nobody, and the response file
+carries the product's own `[ref:…]` citation scheme. **Hand over `report/`, never
+`responses.jsonl`.**

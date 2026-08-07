@@ -27,6 +27,13 @@ class TargetClient:
         # behaviour every config had before this existed.
         frame_field = getattr(self.config.response_format, 'answer_frame_field', None)
         self.answer_frame_parser = parse(frame_field) if frame_field else None
+        # Asynchronous targets: where the ticket is in the submit response, and how a
+        # polled body says it has finished. Both None keeps the older behaviour, which
+        # was to poll until the answer path matched anything at all.
+        handle_field = getattr(self.config.response_format, 'handle_field', None)
+        self.handle_parser = parse(handle_field) if handle_field else None
+        ready_field = getattr(self.config.response_format, 'ready_field', None)
+        self.ready_parser = parse(ready_field) if ready_field else None
 
     def _build_auth_headers(self) -> Dict[str, str]:
         headers = {}
@@ -97,6 +104,21 @@ class TargetClient:
             return True
         match = self.answer_frame_parser.find(chunk)
         wanted = getattr(self.config.response_format, 'answer_frame_value', None)
+        return bool(match) and str(match[0].value) == str(wanted)
+
+    def _is_finished(self, body) -> bool:
+        """Whether a polled body is the finished answer rather than a record in progress.
+
+        With no `ready_field` this is the pre-existing test: the answer path matched
+        something. That test is only safe against targets which do not create the answer
+        field until they have an answer to put in it. Against one that writes
+        `text: ""` up front it is satisfied on the first poll, and every probe returns
+        an empty string that no evaluator can tell from a system with nothing to say.
+        """
+        if self.ready_parser is None:
+            return bool(self.answer_parser.find(body))
+        match = self.ready_parser.find(body)
+        wanted = getattr(self.config.response_format, 'ready_value', None)
         return bool(match) and str(match[0].value) == str(wanted)
 
     def _prepare_request(self, endpoint_config, default_payload, variables):
@@ -367,29 +389,88 @@ class TargetClient:
                     }
             elif rec_method.upper() == "GET":
                 import asyncio
+                import time
+
+                fmt = self.config.response_format
                 logger.debug(f"Sending query to {url}: {query}")
                 response = await self.client.request(method, url, headers=headers, **kwargs)
                 response.raise_for_status()
-                
-                for _ in range(30):
-                    await asyncio.sleep(1.0)
-                    resp = await self.client.request(rec_method, rec_url, headers=rec_headers, **rec_kwargs)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        match = self.answer_parser.find(data)
-                        if match:
-                            answer_text = match[0].value
-                            citations = []
-                            cit_match = self.citations_parser.find(data)
-                            if cit_match and isinstance(cit_match[0].value, list):
-                                citations.extend(cit_match[0].value)
-                            return {
-                                "answer": answer_text,
-                                "citations": citations,
-                                "raw": data
-                            }
-                return {"answer": "", "citations": [], "raw": {}}
-                
+
+                # An asynchronous target hands back a ticket rather than an answer, and
+                # the poll URL is not knowable until it does. Re-prepare the receive
+                # request with `{{HANDLE}}` bound to what the submit response gave us.
+                submitted = {}
+                if self.handle_parser is not None:
+                    try:
+                        submitted = response.json()
+                    except Exception as exc:
+                        raise RuntimeError(
+                            f"response_format.handle_field is set, so the submit "
+                            f"response has to be JSON to read the handle out of, and "
+                            f"this one is not: {exc}"
+                        ) from exc
+                    found = self.handle_parser.find(submitted)
+                    if not found or found[0].value in (None, ""):
+                        raise RuntimeError(
+                            f"the submit request succeeded and "
+                            f"response_format.handle_field "
+                            f"({fmt.handle_field!r}) matched nothing in its body. "
+                            f"Without the handle there is no answer to poll for; "
+                            f"check the path against a real response before reading "
+                            f"anything into this run."
+                        )
+                    rec_url, rec_method, rec_headers, rec_kwargs = self._prepare_request(
+                        receive_endpoint,
+                        default_payload={},
+                        variables={**variables, "HANDLE": str(found[0].value)},
+                    )
+
+                deadline = time.monotonic() + fmt.poll_timeout_seconds
+                polls, last_state = 0, None
+                while time.monotonic() < deadline:
+                    await asyncio.sleep(fmt.poll_interval_seconds)
+                    polls += 1
+                    resp = await self.client.request(
+                        rec_method, rec_url, headers=rec_headers, **rec_kwargs
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+
+                    if not self._is_finished(data):
+                        if self.ready_parser is not None:
+                            state = self.ready_parser.find(data)
+                            last_state = state[0].value if state else None
+                        continue
+
+                    match = self.answer_parser.find(data)
+                    citations = []
+                    cit_match = self.citations_parser.find(data)
+                    if cit_match and isinstance(cit_match[0].value, list):
+                        citations.extend(cit_match[0].value)
+                    return {
+                        "answer": match[0].value if match else "",
+                        "citations": citations,
+                        "raw": data,
+                    }
+
+                # An answer that never arrived is a failed measurement, not an empty one
+                # (F40). Returning "" here would have `generate` write a record that
+                # reads exactly like a target declining to answer.
+                raise TimeoutError(
+                    f"the answer was still not ready after "
+                    f"{fmt.poll_timeout_seconds:g}s ({polls} polls of "
+                    f"{rec_url}). Last "
+                    + (
+                        f"{fmt.ready_field} was {last_state!r}, wanted "
+                        f"{fmt.ready_value!r}"
+                        if self.ready_parser is not None
+                        else "poll carried no answer"
+                    )
+                    + ". Raise response_format.poll_timeout_seconds if this target is "
+                    "simply slow; nothing about this probe was measured."
+                )
+
         # Fallback to normal synchronous / SSE processing if receive is not configured
         logger.debug(f"Sending query to {url}: {query}")
         

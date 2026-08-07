@@ -224,3 +224,192 @@ def test_half_a_selector_is_refused_at_load(half):
     """One half alone matches every frame or none of them, and both are wrong quietly."""
     with pytest.raises(Exception, match="frame selector"):
         _stream_config("http://example.invalid", **half)
+
+
+# --------------------------------------------------------------------------------
+# Asynchronous targets: submit returns a ticket, the answer is polled for.
+#
+# The third live target answers this way, and none of it could be configured before.
+# The poll URL contains an identifier that does not exist until the submit returns, and
+# the polled record exists from the moment of submit with an empty answer field — so
+# both "where is the ticket" and "when is it finished" have to be said explicitly. The
+# tests below are the three ways that goes wrong.
+
+ASYNC_ANSWER = "As at 1 June 2014 the limit on a week's pay was £464."
+
+
+class _AsyncHandler(BaseHTTPRequestHandler):
+    #: How many polls return `generating` before one returns `saved`.
+    generating_polls = 2
+    polls = 0
+
+    def do_POST(self):  # noqa: N802 - http.server's interface
+        self.rfile.read(int(self.headers.get("Content-Length", 0)) or 0)
+        type(self).polls = 0
+        self._json(
+            201,
+            {
+                "conversation": {"id": "conv-1"},
+                "userMessage": {"id": "user-1"},
+                # The answer's handle, and the only thing that identifies it.
+                "aiMessage": {"id": "msg-42", "status": "generating", "text": ""},
+            },
+        )
+
+    def do_GET(self):  # noqa: N802 - http.server's interface
+        if not self.path.endswith("/msg-42"):
+            self._json(404, {"error": "no such message"})
+            return
+        type(self).polls += 1
+        if type(self).polls <= type(self).generating_polls:
+            # The shape that breaks the old rule: the record is already there, and the
+            # answer field is already present and empty.
+            self._json(200, {"id": "msg-42", "status": "generating", "text": "",
+                             "legalSources": []})
+        else:
+            self._json(200, {"id": "msg-42", "status": "saved", "text": ASYNC_ANSWER,
+                             "legalSources": [{"title": "ERA 1996 s.227"}]})
+
+    def _json(self, status, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        pass
+
+
+@pytest.fixture
+def async_target():
+    _AsyncHandler.generating_polls = 2
+    server = HTTPServer(("127.0.0.1", 0), _AsyncHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _async_config(url: str, **response_format) -> AuditConfig:
+    return AuditConfig(
+        **{
+            "target": {
+                "name": "stub",
+                "endpoints": {
+                    "chat": {"url": f"{url}/analyzer", "method": "POST",
+                             "body": {"message": {"text": "{{QUERY}}"}}},
+                    "receive": {"url": url + "/chat_message/{{HANDLE}}", "method": "GET"},
+                },
+                "auth": {"type": "none"},
+                "response_format": {
+                    "answer_field": "$.text",
+                    "citations_field": "$.legalSources",
+                    "poll_interval_seconds": 0.01,
+                    "poll_timeout_seconds": 5.0,
+                    **response_format,
+                },
+            },
+            "corpus": {"mode": "existing", "path": "/tmp"},
+        }
+    )
+
+
+def _async_once(url, **response_format):
+    import asyncio
+
+    async def go():
+        client = TargetClient(_async_config(url, **response_format).target)
+        try:
+            return await client.chat("what was the limit on 1 June 2014?")
+        finally:
+            await client.close()
+
+    return asyncio.run(go())
+
+
+def test_the_handle_comes_from_the_submit_response(async_target):
+    """The poll URL is not knowable before the submit, which is the whole point.
+
+    `{{HANDLE}}` resolves to `aiMessage.id`; the stub 404s any other path, so an
+    unresolved template fails the test rather than passing by luck.
+    """
+    result = _async_once(
+        async_target,
+        handle_field="$.aiMessage.id",
+        ready_field="$.status",
+        ready_value="saved",
+    )
+    assert result["answer"] == ASYNC_ANSWER
+    assert result["citations"] == [{"title": "ERA 1996 s.227"}]
+
+
+def test_polling_waits_for_ready_rather_than_for_the_answer_field(async_target):
+    """The defect this was written for.
+
+    The record carries `text: ""` from the moment of submit. Stopping when the answer
+    path matches — the rule every earlier config used — returns that empty string on the
+    first poll, and an empty answer is indistinguishable from a system that declined to
+    answer. Two polls must go by before the answer appears.
+    """
+    _AsyncHandler.generating_polls = 3
+    result = _async_once(
+        async_target,
+        handle_field="$.aiMessage.id",
+        ready_field="$.status",
+        ready_value="saved",
+    )
+    assert result["answer"] == ASYNC_ANSWER
+    assert _AsyncHandler.polls == 4
+
+
+def test_without_ready_the_empty_answer_comes_straight_back(async_target):
+    """Left in deliberately, as the record of why `ready_field` is not optional here.
+
+    This is the pre-existing behaviour and it is still correct for targets that create
+    the answer field only once they have an answer. Against this shape it is wrong, and
+    silently: a well-formed empty result, on the first poll, for every probe.
+    """
+    result = _async_once(async_target, handle_field="$.aiMessage.id")
+    assert result["answer"] == ""
+    assert _AsyncHandler.polls == 1
+
+
+def test_an_answer_that_never_arrives_raises_rather_than_returning_empty(async_target):
+    """F40, one layer below where it is usually enforced.
+
+    Returning `""` on an exhausted budget would have `generate` write a record that
+    reads exactly like a target with nothing to say. A raise becomes a transport error,
+    and a transport error is not a result about anyone.
+    """
+    _AsyncHandler.generating_polls = 10_000
+    with pytest.raises(TimeoutError, match="nothing about this probe was measured"):
+        _async_once(
+            async_target,
+            handle_field="$.aiMessage.id",
+            ready_field="$.status",
+            ready_value="saved",
+            poll_timeout_seconds=0.2,
+        )
+
+
+def test_a_handle_path_that_matches_nothing_is_refused_at_run(async_target):
+    """A mistyped path would otherwise poll a URL with `{{HANDLE}}` still in it."""
+    with pytest.raises(RuntimeError, match="matched nothing"):
+        _async_once(
+            async_target,
+            handle_field="$.aiMessage.identifier",
+            ready_field="$.status",
+            ready_value="saved",
+        )
+
+
+@pytest.mark.parametrize(
+    "half", [{"ready_field": "$.status"}, {"ready_value": "saved"}]
+)
+def test_half_a_readiness_test_is_refused_at_load(half):
+    with pytest.raises(Exception, match="readiness test"):
+        _async_config("http://example.invalid", **half)
