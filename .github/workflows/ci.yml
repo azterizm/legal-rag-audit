@@ -109,9 +109,37 @@ jobs:
       # LEGAL_RAG_AUDIT_TIER2_GATE is set here and nowhere else. The two model-backed
       # rows fetch checkpoints resolved by name, and running them on every matrix entry
       # of every push would mean downloading unpinned weights three times a commit.
+      # The checkpoints, fetched while a network still exists.
+      #
+      # `score` disables sockets at start-up, so a checkpoint that is not already in the
+      # local cache does not download — it raises `OfflineViolation`, which is the
+      # enforcement working. The fix is to put the weights in the cache beforehand, never
+      # to relax the enforcement for the one job that would find it inconvenient.
+      #
+      # Resolved by name, with no revision pinned. That is a recorded manifest gap
+      # (Dockerfile.score says the same thing about BAKE_MODELS): this step fetches
+      # whatever the hub serves today, so a Tier 2 row here is scoped to that, exactly
+      # as a Semgrep result is scoped to the rules published that morning.
+      - name: Pre-fetch the Tier 2 checkpoints
+        run: |
+          python3 - <<'PY'
+          from sentence_transformers import CrossEncoder, SentenceTransformer
+
+          # The two defaults in evaluators/retrieval.py and evaluators/hallucination.py.
+          SentenceTransformer("all-MiniLM-L6-v2")
+          CrossEncoder("cross-encoder/nli-deberta-v3-base")
+          PY
+
+      # HF_HUB_OFFLINE, for the same reason Dockerfile.score sets it. A cached checkpoint
+      # is not enough on its own: `hf_hub_download` still makes a metadata call to see
+      # whether the hub has something newer, and that call is the one scoring refuses.
+      # With the variable set, the loader resolves from the cache and opens no socket —
+      # which is also the stronger property, because the weights a row was scored against
+      # are then the ones fetched by the step above rather than whatever arrived mid-run.
       - name: Harness self-verification
         env:
           LEGAL_RAG_AUDIT_TIER2_GATE: "1"
+          HF_HUB_OFFLINE: "1"
         run: python3 -m pytest tests/test_reference_target.py -q
 
   artefact-route:
@@ -130,7 +158,23 @@ jobs:
 
       # §5.1.1: plant, hash and score never touch a network. Asserted here by removing
       # the network rather than by removing the HTTP client, which is the other half of
-      # what tests/test_dependency_boundary.py checks. `unshare -rn` drops the process
+      # what tests/test_dependency_boundary.py checks. `unshare --net` drops the process
       # into an empty network namespace — a socket call fails rather than resolving.
+      #
+      # `sudo`, and not `--map-root-user`, because the runner image restricts
+      # unprivileged user namespaces (`kernel.apparmor_restrict_unprivileged_userns`) and
+      # `unshare --map-root-user` now fails on `/proc/self/uid_map` before the step runs
+      # at all. The alternative was turning that kernel restriction off for the job,
+      # which trades a hardening on the host for a convenience in a test.
+      #
+      # Elevation buys the namespace and nothing else — the claim under test is about
+      # egress, not privilege, and root inside an empty netns still cannot reach
+      # anything. The script's own probe is what keeps this honest: if `unshare` ever
+      # silently does nothing, the connection to 1.1.1.1 succeeds and the step fails
+      # rather than passing with a guarantee it never tested.
+      #
+      # The interpreter is named by absolute path because sudo's `secure_path` drops the
+      # setup-python directory from PATH, and the system python3 has none of this
+      # installed.
       - name: plant → hash → score with no network namespace
-        run: unshare --map-root-user --net python3 .github/scripts/artefact_route.py
+        run: sudo unshare --net "$(command -v python3)" .github/scripts/artefact_route.py
