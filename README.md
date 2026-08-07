@@ -33,9 +33,10 @@ Every report leads with Tier 1. Tier 2 is supporting texture.
 
 ### The checks have mechanical names
 
-There is no headline percentage. `unresolvable_citations`, `non_existent_authorities`,
-`version_mismatch`, `unsupported_assertions`, `non_reproducible_responses`,
-`licensed_content_reproduction` — each is
+There is no headline percentage. `point_in_time`, `citation_integrity`,
+`injection_resistance`, `response_divergence`, `unsupported_assertions`,
+`licensed_content_reproduction` — the names in the table below are the names in the code,
+and each is
 counted against **the probes declared eligible for that check before the run**, not
 against the battery total, and reported as a count with its denominator and the date the
 battery was fixed:
@@ -62,10 +63,9 @@ that no accuracy work closes; collapsing them destroys the more valuable of the 
 
 ## Implementation status
 
-This README describes the v2 design. The repository is mid-migration from v1, and the
-table below is the honest split. **Anything marked *specified* does not exist in the code
-yet** — it is documented here because the interchange formats are the product surface and
-they are being built against a written spec, not discovered.
+The v2 migration is complete: every capability below is in the code, and the table is kept
+as a map of the surface rather than as a promissory note. Where this README and
+`V2_FULL_PLAN.md` disagree, the plan wins — but nothing here is waiting to be built.
 
 | Capability | Status |
 |---|---|
@@ -76,7 +76,7 @@ they are being built against a written spec, not discovered.
 | Signed releases: GPG tag, SLSA provenance, cosign | **Shipped** — `scripts/verify_release.sh` is the reader's half |
 | Corpus verified before a run starts; loud abort, no report on failure | **Shipped** |
 | 19 evaluators against a configured endpoint | **Shipped** — all rewritten to the §8.2 recipes |
-| Licensed-content reproduction check (#18) | **Shipped** — identifiers only; `in_index` / `external_fetch` / `unattributed` never collapsed |
+| Licensed-content reproduction check (§8.2 #18) | **Shipped** — identifiers only; `in_index` / `external_fetch` / `unattributed` never collapsed |
 | SSE / WebSocket transport, JSONPath extraction | **Shipped** |
 | JSON report with per-check counts and tiers | **Shipped** — published contract, `report.v2` |
 | Markdown attestation, evidence bundle, Tier 2 distributions | **Shipped** |
@@ -890,11 +890,11 @@ Two checks live only here:
 
 **Point-in-time pairs ask the same provision at two moments, and the pair is the test.** A
 single dated question measures almost nothing: a system that always answers with the
-current law passes every question about the present. **Six anchors ship, twelve readings**
-— four Employment Rights Act 1996 provisions (the unfair dismissal qualifying period under
-s.108, the compensatory award cap under s.124, the week's-pay maximum under s.227, and the
-insolvency weekly limit under s.186) and two Companies Act 2006 accounting thresholds
-(small companies under s.382, medium-sized under s.465).
+current law passes every question about the present. **Five anchors ship, ten readings** —
+three Employment Rights Act 1996 provisions (the compensatory award cap under s.124, the
+week's-pay maximum under s.227, and the insolvency weekly limit under s.186) and two
+Companies Act 2006 accounting thresholds (small companies under s.382, medium-sized under
+s.465).
 
 Each phrase is chosen so it appears in one version of that provision and no other, so it
 cannot be reached by a paraphrase of the other version, and so it has one written form —
@@ -902,9 +902,19 @@ a correct system that writes *£28* where the statute says *£28.00* must not be
 having returned the superseded law. An answer carrying **both** versions passes; telling a
 reader what the law was and what it became is more than was asked for, not less.
 
-Eleven of the twelve readings sit in closed validity ranges and can never change again.
-The twelfth asks for the law as it stands, which is the more natural question and the only
-one that can go stale.
+**The fourth rule excludes prose, and that cost an anchor.** A sixth anchor asked for the
+unfair-dismissal qualifying period under s.108, whose answer the statute states in words:
+*not less than one year*. Three systems wrote it three ways — the statutory phrase, *at
+least one year*, and *one year of continuous employment* — and two of them were recorded as
+having returned neither version of the law while having the law entirely right. A reading
+may carry other accepted written forms of the same answer, and that feature is kept; what
+it cannot do is close a set that has no closed form. Figures have one written form and
+durations in English do not, so `era-108` was retired rather than widened a third time.
+
+All ten readings now sit in closed validity ranges and can never change again. **That is a
+gap, not an achievement**: the retired anchor was the only one asking for the law as it
+stands, which is the more natural question and the only kind that can go stale. A
+replacement wants a provision whose *current* value is a figure.
 
 **Refreshing them is a command, not a diary note:**
 
@@ -914,10 +924,11 @@ legal-rag-audit ingest --strict -o run/statutes.json
 
 It fetches each anchored provision as it stood on its date and confirms the phrase is
 still there. Scoring never touches it — the anchors are committed and the battery runs
-offline — so what this catches is an anchor going stale, which would otherwise mean
-scoring answers against a version of the law that no longer exists. **Storage footprint:
-4.0 kB kept of 1.6 MB fetched** across the twelve snapshots, because the store keeps a
-window around each phrase rather than the statute.
+offline — so what this catches is an anchor going stale. With every reading now frozen,
+what would move is not the law but the source: `legislation.gov.uk` revises its own
+historic snapshots, and a phrase can stop matching without anything having been amended.
+**Storage footprint: 3.3 kB across the ten snapshots**, because the store keeps a window
+around each phrase rather than the statute.
 
 **Licensed content is the question procurement already asks**, and the check is built so
 it can never become an accusation. Only publisher-assigned *identifiers* are matched —
@@ -926,6 +937,13 @@ whether somebody else is storing them. A marker in the retrieval is the finding;
 cited to the publisher's own service passes as `external_fetch`; a marker with no evidence
 either way is `NOT_CAPTURED`. The finding says content whose licence sits between them and
 the publisher is being served from their index — never that anyone is infringing.
+
+Both probes name **England and Wales**, and that is load-bearing rather than decorative.
+The marker set is a set of *English* publisher identifiers, so a product holding French and
+EU sources alongside UK ones, asked an unqualified question, answers on French law and
+passes on an answer no marker could ever have appeared in. The check would then mean one
+thing against one target and something else against the next, which defeats the purpose of
+running a single battery across several.
 
 ### The corpus is checked before anything is sent
 
@@ -956,7 +974,7 @@ be verified, there is no run.
 
 ## What the checks are
 
-Eighteen evaluators. Sixteen are Tier 1 by design, because determinism is a property of
+Nineteen evaluators. Seventeen are Tier 1 by design, because determinism is a property of
 corpus design rather than of the scorer: the question is not *"what model judges the
 response?"* but *"what do we plant in the documents so that no judgment is needed?"*
 Proper nouns, high-precision figures, specific dates and citations survive paraphrase and
@@ -978,17 +996,17 @@ can be checked by exact match. Prose cannot.
 | 12 | `structural_integrity` | 1 | held | Invariant planted deep in a nested list; relational query |
 | 13 | `disambiguation` | 1 | held | Distinct invariant under each colliding article number |
 | 14 | `context_memory` | 1 | held | Distinct invariant per referent; which one the pronoun resolved to |
-| 15 | `latency` | 1 (measurement) | open | TTFB and total as distributions. The *interpretation* is labelled inference, not measurement |
-| 16 | `unsupported_assertions` | **2** | open | Sentence-level NLI entailment against retrieved chunks |
-| 17 | `retrieval_relevance` | **2** | open | Cosine similarity over retrieved chunks |
-| 18 | `licensed_content_reproduction` | 1 | cond. | Publisher-proprietary marker in retrieved chunks, or in an answer attributed to an internal document |
+| 15 | `point_in_time` | 1 | held | The phrase in force on the date asked, against the other version's phrase. Existing-corpus only |
+| 16 | `latency` | 1 (measurement) | open | TTFB and total as distributions. The *interpretation* is labelled inference, not measurement |
+| 17 | `unsupported_assertions` | **2** | open | Sentence-level NLI entailment against retrieved chunks |
+| 18 | `retrieval_relevance` | **2** | open | Cosine similarity over retrieved chunks |
+| 19 | `licensed_content_reproduction` | 1 | cond. | Publisher-proprietary marker in retrieved chunks, or in an answer attributed to an internal document |
 
-**Fifteen of the eighteen are shipped and Tier 1**; #18 arrives with existing-corpus mode
-to make sixteen. A test reads every Tier 1 evaluator's imports and fails the build if a
-model is reachable from one, so *"no model anywhere in the evaluation path"* is asserted
-rather than promised.
+**All nineteen are shipped, and seventeen of them are Tier 1.** A test reads every Tier 1
+evaluator's imports and fails the build if a model is reachable from one, so *"no model
+anywhere in the evaluation path"* is asserted rather than promised.
 
-Plus one that is **not an evaluator** and is counted apart from the eighteen:
+Plus one that is **not an evaluator** and is counted apart from the nineteen:
 
 | Check | Tier | Key | Recipe |
 |---|---|---|---|
@@ -1042,10 +1060,11 @@ check; you have passed it. So it is published.
 
 A *positive* check says **this token must appear**. Knowing the string lets it be pinned,
 cached or prompted with no retrieval improvement at all, and the difference is invisible
-in the output. Those eight are sealed — for the length of a run.
+in the output. Those nine are sealed — for the length of a run.
 
-**Eight of the eighteen checks are published with their answer keys.** For the other
-eight, telling you the value we are testing whether you retrieved would test nothing.
+**Eight of the nineteen checks are published with their answer keys, nine are sealed, and
+two are conditional.** For the sealed nine, telling you the value we are testing whether
+you retrieved would test nothing.
 
 Every report prints the key beside each check and counts them, so the withholding is a
 bounded fact on the page rather than an atmosphere.
