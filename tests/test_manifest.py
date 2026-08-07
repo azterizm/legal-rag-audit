@@ -658,3 +658,48 @@ def test_a_handover_record_needs_no_artefacts_to_be_valid():
     so the schema stays permissive for future artefact types."""
     record = Handover(created="2026-08-02T00:00:00+00:00", tool_version="0.1.0")
     assert record.artefacts() == {}
+
+
+def test_the_handover_record_seals_filenames_and_not_paths_to_them(tmp_path):
+    """Defect 24 — defect 22 one file over.
+
+    `handover.json` is published before the run and travels with the bundle. An absolute
+    path inside it names a directory on the operator's machine, and working directories
+    get named after clients. Verification never reads these: `verify_pre_commitment`
+    takes its paths from the command line and compares digests.
+    """
+    secret = tmp_path / "ordalie-engagement"
+    secret.mkdir()
+    _responses, gt, probes = make_run(secret)
+
+    handover = build_handover(probes=probes, ground_truth=gt)
+
+    assert handover.probes.path == "probes.jsonl"
+    assert handover.ground_truth.path == "ground_truth.json"
+    assert "ordalie-engagement" not in json.dumps(handover.model_dump(mode="json"))
+
+
+def test_a_handover_sealed_from_one_directory_verifies_from_another(tmp_path):
+    """The reason dropping the path costs nothing: it was never what verification used.
+
+    A bundle is read on a different machine, under a different directory, than the one
+    that sealed it. If the recorded path were load-bearing, that move would break every
+    pre-commitment — so it is the digests that travel, and only the digests.
+    """
+    sealed = tmp_path / "sealed"
+    sealed.mkdir()
+    responses, gt, probes = make_run(sealed)
+    handover = sealed / "handover.json"
+    write_handover(handover, build_handover(probes=probes, ground_truth=gt))
+
+    moved = tmp_path / "read-somewhere-else"
+    shutil.copytree(sealed, moved)
+
+    report = score(
+        responses_path=str(moved / "responses.jsonl"),
+        ground_truth_path=str(moved / "ground_truth.json"),
+        probes_path=str(moved / "probes.jsonl"),
+        handover_path=str(moved / "handover.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert report["manifest"]["pre_commitment"]["status"] == "verified"

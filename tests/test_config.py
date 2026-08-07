@@ -353,3 +353,62 @@ def test_the_docstring_example_in_the_error_is_valid_yaml(tmp_path: Path) -> Non
         )
     )
     CorpusConfig(**yaml.safe_load(fragment)["corpus"])
+
+
+class TestATwoHundredWithNoTextIsNotAnAnswer:
+    """A parse failure and a silent target are the same observation from here.
+
+    The dangerous half is ours. An `answer_field` that does not match the target's shape
+    produces an empty string per probe, an empty string matches no invariant, and the
+    whole battery reads as a system that declined to answer — twelve findings-shaped
+    results about a named company, every one of them a statement about our JSONPath. So
+    an empty answer is recorded with `error` set, which makes the record unusable: every
+    check reads it as NOT_CAPTURED and none as a finding (F40).
+    """
+
+    def _ask(self, tmp_path: Path, answer: str):
+        import asyncio
+
+        from legal_rag_audit.generate.run import Generator
+        from legal_rag_audit.interchange import Probe
+
+        config = load({**MINIMAL, "corpus": {"mode": "existing"}}, tmp_path)
+        generator = Generator(config=config, documents=[], passes=1)
+
+        async def chat(_query):
+            return {"answer": answer, "citations": None, "raw": {"seen": True}}
+
+        generator.client.chat = chat
+        probe = Probe(
+            probe_id="p1",
+            family="point_in_time",
+            intent="positive",
+            text="what was the cap?",
+            eligible_for=["point_in_time"],
+        )
+        return asyncio.run(generator._ask(probe, 1))
+
+    def test_an_answer_that_arrived_is_recorded_as_one(self, tmp_path: Path) -> None:
+        response = self._ask(tmp_path, "The cap was £68,400.")
+        assert response.error is None
+        assert response.usable is True
+
+    @pytest.mark.parametrize("empty", ["", "   \n  "], ids=["empty", "whitespace"])
+    def test_a_body_with_no_text_is_recorded_as_a_failure(
+        self, tmp_path: Path, empty: str
+    ) -> None:
+        response = self._ask(tmp_path, empty)
+        assert response.usable is False
+        assert response.error.startswith("EmptyAnswer:")
+        # The status is kept: it was a 200, and a reader diagnosing this needs to know
+        # the request succeeded and the parse did not.
+        assert response.http_status == 200
+
+    def test_the_frames_are_kept_so_the_parse_can_be_diagnosed(
+        self, tmp_path: Path
+    ) -> None:
+        """The one thing that makes the failure recoverable. Without the raw body there
+        is no way to work out which path would have matched, and the run has to be
+        fired at the target a second time to find out."""
+        response = self._ask(tmp_path, "")
+        assert response.raw_response == {"seen": True}

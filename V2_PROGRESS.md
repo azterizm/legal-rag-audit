@@ -2929,3 +2929,163 @@ beside it as `complete/report-defect20/`.
   `NOT_CAPTURED` and no answer's stability has been observed.
 * **A `propose` command** to mine anchor candidates and apply the four rules
   mechanically, so the anchor set can grow without hand-verification of each one.
+
+---
+
+## Phase O — the second target, and an anchor that could not see a right answer
+
+The battery was fired at a second product on 7 August 2026: same 14 probes, same sealed
+answer key, digests identical to the first run. Anchors re-verified against
+legislation.gov.uk four hours before firing, 12 of 12.
+
+```
+point_in_time    12 eligible, 5 scored, 0 failed, 7 not captured
+licensed_content  2 eligible, 0 scored — both probes 403'd
+findings          0
+```
+
+**Five scored, five correct.** Every dated question this system committed to, it answered
+with the version in force on the date asked, provision cited. The comparison that matters:
+asked what section 186 read on 1 January 2019, this target answered **£508** — correct —
+where the first answered **£751**, the current figure from a different section.
+
+### Defect 23 — a prose anchor cannot see a correct paraphrase
+
+`era-108` scored `no_version_returned` on both readings, and reading the answers, the
+target was **right on both dates**: *"at least one year of continuous employment"* for
+2011, *"at least two years"* for now. The anchor's phrases are the statutory wording —
+`not less than one year`, `not less than two years` — and exact containment does not reach
+a correct paraphrase of them.
+
+This is the fourth anchor rule failing on its own terms. *The figure must have one written
+form* was written about figures, and it holds for figures: `£508` is `£508`. A prose
+duration has several written forms, all correct, and `era-108` is the one anchor in the set
+whose readings are prose.
+
+The direction of the failure is the safe one — containment under-detects, §14.2 makes a
+false positive the blocker and a missed one merely a cost — but the cost here is not
+nothing. The first target committed to the statutory phrase and was scored (right for
+today, wrong for 2011); this one paraphrased and was scored on neither. **The two runs are
+not comparable on `era-108`,** and a cross-target table has to say so.
+
+The fix is available and cheap: `must_contain` is a list and a PASS needs only one member
+present, so a reading can accept several written forms of the same answer. Loosening
+`must_contain` only, never `must_not_contain` — a system that says the right thing in
+other words passes, while a system that says the wrong thing still needs the exact
+superseded phrase to fail. Asymmetric in the safe direction.
+
+**Not applied to this run.** The ground truth was sealed before it and stays sealed;
+editing an answer key after seeing the answers is the one act that would make every other
+number in the report worthless.
+
+### Two answers that are not declinations
+
+`era-124-1` and `era-186-1` scored `declined_to_state_a_version`. What came back was
+*"How may I assist you? Please provide the question…"* and *"I have the preserved context,
+but no task or question was included."* The question did arrive — the stream echoes it back
+verbatim, checked in `raw_response`.
+
+A malfunction, not a refusal, and the third thing living inside that outcome one phase
+after it was split off from `no_version_returned` for the same reason. Not split further:
+the existing split is mechanical — *did the answer assert a value of the kind asked for* —
+and separating a malfunction means enumerating malfunction phrasings, which is the trap
+§8.2 #8 names by hand. `provision_cited_correctly` is `false` on both, which is the
+mechanical signal a reader has.
+
+### The parse that missed an answer that was there
+
+`answer_field` was `$.message.content[1].text`: the final message's second content block,
+after the thinking block. Verified byte-exact against a sample capture, correct for eight
+of the nine probes that got through. On the ninth the model returned no thinking block,
+the answer was the only block, and the path matched nothing.
+
+The guard added before the run held: an empty answer was recorded as `error: EmptyAnswer`
+rather than as an empty answer, so 921 characters of correct answer became a re-run rather
+than a page of findings about a named company. That guard is the whole reason this is a
+paragraph and not an incident.
+
+`reparse.py` re-derives every answer from each stream's own `text_end` frame — no request
+re-sent, no frame altered, and three checks recorded before believing it. The eight that
+parsed are byte-identical; the ninth is recovered.
+
+**The gap is now fixed rather than worked around.** `answer_frame_field` /
+`answer_frame_value` let a config say which frames carry the answer:
+
+```yaml
+answer_field: "$.content"
+answer_frame_field: "$.type"
+answer_frame_value: "text_end"
+```
+
+No JSONPath could express that — `jsonpath_ng` filters apply to arrays, not to the dict a
+single SSE frame is — so every streaming config until now had to find a path that happened
+to exist on the wanted frames and no others. That is a guess dressed as a rule, and on this
+target the obvious path collected 2,210 characters where the answer was 654: reasoning and
+tool arguments scored as an answer. Half a selector is refused at load. Replayed against
+all nine real captures, the selector reproduces every answer exactly.
+
+### Defect 24 — the handover sealed a path, and paths carry directory names
+
+Defect 22 one file over. `handover.json` records the artefacts it sealed by absolute path,
+and the working directory is named after the target. The report and its manifest were
+already clean; the sealed record was not, and it is the file that travels with the bundle.
+
+Filenames only now. Nothing is lost: `verify_pre_commitment` takes the paths it checks from
+the command line and compares digests, so a bundle sealed in one directory and read in
+another still verifies — asserted by a test that does exactly that.
+
+### Still outstanding after this phase
+
+* **Five probes never asked.** `ca-382-2`, `ca-465-1`, `ca-465-2`, `lic-001`, `lic-002`
+  returned five consecutive 403s, ~190 ms each, straight after nine long successful
+  requests. The battery is sealed and they can be completed and merged when access is
+  restored. `licensed_content_reproduction` has run against a live target exactly once.
+* **Defect 23**, above — before any cross-target claim that includes `era-108`.
+* **The population count.** Criterion 3 still cannot be defended in print.
+* **Three passes.** Both live runs are single-pass; reproducibility is unmeasured.
+* **A `propose` command** to mine anchor candidates and apply the four rules mechanically.
+
+### Defect 23 fixed — one answer, several written forms
+
+A `Reading` may now carry `also_accepted`: other written forms of **the same answer**.
+`era-108` gains the two ordinary renderings of its statutory formula.
+
+```python
+invariant="not less than one year",
+also_accepted=("at least one year", "a minimum of one year"),
+```
+
+**They widen `must_contain` and never `must_not_contain`,** and that asymmetry is the
+whole safety argument: a form added here can only turn a NOT_CAPTURED into a PASS, never
+a PASS into a finding. §14.2 makes the second the release blocker, so the first is the
+only direction the widening is allowed to run.
+
+The cost is stated rather than discovered later, and there is a test named after it: a
+system that paraphrases the **wrong** version escapes the finding and lands in
+NOT_CAPTURED. That is the same under-detection this tool accepts everywhere else — the
+alternative buys sensitivity with exactly the failure mode §14.2 refuses.
+
+`validate_anchors` now applies every rule to `reading.accepted` rather than to
+`reading.invariant`. A rule enforced on the canonical phrase alone would leave a hole the
+exact width of the feature just added: an accepted form overlapping the other reading, or
+one already present in the question, is refused. Only `invariant` is still checked against
+the primary source — the alternatives are renderings and the statute does not contain
+them, so requiring them would fail verification against a source that is perfectly
+correct.
+
+The set is closed, and that distinction matters. Enumerating how a system might *word* an
+answer is the trap §8.2 #8 names by hand. Enumerating how a fixed quantity is written in
+English — *not less than*, *at least*, *a minimum of* — is a closed set and stops there.
+
+Replaying the second target's real answers against the fixed battery, both halves of the
+pair now score `version_correct`. **The recorded run is not re-scored.** Its key was
+sealed before it and stays sealed; the replay is disclosed as a replay and the attested
+result stands as it was measured.
+
+One property worth having: the **probe file is byte-identical** across the change —
+`sha256:08c3b9b5…` before and after. The questions did not move, only what counts as
+having answered them. The ground truth digest goes `sha256:9283935d…` →
+`sha256:0b249b5b…`, so runs either side of this line are comparable on the questions asked
+and must state which key scored them.
+
+894 passed.

@@ -344,6 +344,44 @@ class Generator:
         answer = result.get("answer", "") or ""
         raw = result.get("raw")
 
+        # A 200 that yielded no text is a parse failure far more often than it is a
+        # target with nothing to say, and the two are indistinguishable from here. So it
+        # is recorded as a failure rather than as an answer: `error` is non-null, the
+        # record is unusable, every check reads it as NOT_CAPTURED and none as a finding.
+        #
+        # The alternative is what this used to do — record `answer: ""` with no error —
+        # and that is F40 in its most expensive form. An empty string matches no
+        # invariant, so a mis-typed `answer_field` produces twelve probes' worth of
+        # `declined_to_state_a_version` against a named company: our JSONPath, printed as
+        # their behaviour. The target's own streaming shapes are where this bites — one
+        # frame type selected by the wrong path and the whole battery reads as a system
+        # that declines to answer.
+        if not answer.strip():
+            logger.error(
+                f"{probe.probe_id}: HTTP 200 carried no answer text. Recorded as a "
+                f"failure, not as an empty answer — check `response_format.answer_field` "
+                f"against the raw frames before reading anything into this run."
+            )
+            return Response(
+                run_id=self.run_id,
+                probe_id=probe.probe_id,
+                pass_index=pass_index,
+                query=probe.text,
+                tenant=probe.tenant,
+                answer="",
+                total_ms=total_ms,
+                http_status=200,
+                error=(
+                    "EmptyAnswer: the request succeeded and no answer text was parsed "
+                    "from the body. Either the target returned none or "
+                    "response_format.answer_field does not match this target's shape; "
+                    "from here those are the same observation, and neither is a result "
+                    "about the target."
+                ),
+                started_at=started,
+                raw_response=raw if raw else None,
+            )
+
         citations = result.get("citations")
         if isinstance(citations, list):
             self.saw_citations = True

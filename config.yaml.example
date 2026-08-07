@@ -49,6 +49,11 @@ target:
     answer_field: "response.text"  # JSONPath to the answer text
     citations_field: "response.sources"  # JSONPath to citations array
     stream: false  # true if SSE
+    # Streaming targets that interleave reasoning, tool arguments and answer text under
+    # one key: name the frames the answer may be read from. A JSONPath cannot — filters
+    # do not apply to the dict a single frame is. Both halves or neither.
+    # answer_frame_field: "$.type"
+    # answer_frame_value: "text_end"
 
 corpus:
   mode: planted                # plant a seeded corpus (default) | existing

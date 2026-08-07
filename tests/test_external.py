@@ -98,7 +98,7 @@ def test_an_anchor_whose_question_carries_the_other_answer_is_refused():
                     in_force_from="2012-01-01"),
         ),
     )
-    with pytest.raises(AnchorError, match="contains the other reading's invariant"):
+    with pytest.raises(AnchorError, match="contains the other reading's accepted form"):
         validate_anchors((bad,))
 
 
@@ -772,3 +772,170 @@ def test_the_reference_targets_provision_text_matches_the_anchors():
             f"{probe_id}: the anchor scores against {phrase!r}, which is not in the "
             f"provision text the reference target quotes"
         )
+
+
+# --------------------------------------- defect 23: one answer, several written forms
+#
+# The second live target answered both halves of the `era-108` pair correctly — "at least
+# one year" for 2011, "at least two years" for now — and scored as having returned
+# neither version. The fourth anchor rule, *the figure must have one written form*, was
+# written about figures and holds for figures. A quantity the statute states in words has
+# several correct renderings, and exact containment reaches one of them.
+
+
+def _era_108():
+    return next(a for a in ANCHORS if a.anchor_id == "era-108")
+
+
+def test_the_prose_anchor_accepts_the_ordinary_rendering_of_its_formula():
+    first, second = _era_108().readings
+    assert "at least one year" in first.accepted
+    assert "at least two years" in second.accepted
+    # The statutory phrase is still first, and still the one the source is checked for.
+    assert first.accepted[0] == first.invariant == "not less than one year"
+
+
+def test_a_correct_paraphrase_now_scores_as_the_right_version():
+    """The answer that started this. Before the fix it was `no_version_returned`."""
+    expectations = {
+        e.probe_id: e for e in build_external_ground_truth().expectations
+    }
+    expectation = expectations["pit-era-108-1"]
+    result = PointInTimeEvaluator().evaluate(
+        answer=(
+            "As at 1 January 2011, the employee generally needed at least one year of "
+            "continuous employment, ending on the effective date of termination."
+        ),
+        in_force=expectation.must_contain,
+        superseded=expectation.must_not_contain,
+        provision=expectation.provision,
+        as_at=expectation.as_at_date,
+    )
+    assert result["status"] == "PASS"
+    assert result["outcome"] == "version_correct"
+
+
+def test_widening_what_counts_as_right_never_widens_what_counts_as_wrong():
+    """The whole safety argument, asserted rather than described.
+
+    An added form can only turn a NOT_CAPTURED into a PASS. If the same forms reached
+    `must_not_contain`, one of them could turn a PASS into a finding against a system
+    that was answering correctly — and §14.2 makes that the release blocker.
+    """
+    for expectation in build_external_ground_truth().expectations:
+        if expectation.check != "point_in_time":
+            continue
+        assert len(expectation.must_not_contain) == 1, (
+            f"{expectation.probe_id}: the forbidden list must stay the canonical phrase"
+        )
+
+
+def test_a_system_that_paraphrases_the_wrong_version_is_not_captured_not_failed():
+    """The cost of that asymmetry, stated on the record instead of discovered later.
+
+    Answering the 2011 question with the *current* rule, in words rather than in the
+    statute's, escapes the finding. That is the under-detection this tool accepts
+    everywhere else — the alternative buys sensitivity with a false positive.
+    """
+    expectations = {
+        e.probe_id: e for e in build_external_ground_truth().expectations
+    }
+    expectation = expectations["pit-era-108-1"]
+    result = PointInTimeEvaluator().evaluate(
+        answer="As at 1 January 2011 the employee needed at least two years' service.",
+        in_force=expectation.must_contain,
+        superseded=expectation.must_not_contain,
+        provision=expectation.provision,
+        as_at=expectation.as_at_date,
+    )
+    assert result["status"] == "NOT_CAPTURED"
+
+
+def test_an_accepted_form_that_overlaps_the_other_reading_is_refused():
+    """The discriminating rule, over the widened set. Without this the feature is a hole
+    exactly its own width: one reading's answer would satisfy both, and the pair — which
+    is the entire test — would stop separating anything."""
+    bad = Anchor(
+        anchor_id="x",
+        instrument="ukpga/1996/18",
+        title="T",
+        section="1",
+        provision="section 1",
+        topic="employment",
+        readings=(
+            Reading(
+                as_at="2011-01-01",
+                question="Then?",
+                invariant="not less than one year",
+                # Contained in the other reading's phrase.
+                also_accepted=("two years",),
+                in_force_from="2010-01-01",
+                in_force_to="2012-01-01",
+            ),
+            Reading(as_at=None, question="Now?", invariant="not less than two years",
+                    in_force_from="2012-01-01"),
+        ),
+    )
+    with pytest.raises(AnchorError, match="overlaps"):
+        validate_anchors((bad,))
+
+
+def test_an_accepted_form_the_question_already_contains_is_refused():
+    bad = Anchor(
+        anchor_id="x",
+        instrument="ukpga/1996/18",
+        title="T",
+        section="1",
+        provision="section 1",
+        topic="employment",
+        readings=(
+            Reading(
+                as_at="2011-01-01",
+                question="Was it at least one year back then?",
+                invariant="not less than one year",
+                also_accepted=("at least one year",),
+                in_force_from="2010-01-01",
+                in_force_to="2012-01-01",
+            ),
+            Reading(as_at=None, question="Now?", invariant="not less than two years",
+                    in_force_from="2012-01-01"),
+        ),
+    )
+    with pytest.raises(AnchorError, match="already contains its own answer"):
+        validate_anchors((bad,))
+
+
+def test_an_empty_accepted_form_is_refused():
+    bad = Anchor(
+        anchor_id="x",
+        instrument="ukpga/1996/18",
+        title="T",
+        section="1",
+        provision="section 1",
+        topic="employment",
+        readings=(
+            Reading(as_at="2011-01-01", question="Then?",
+                    invariant="not less than one year", also_accepted=("",),
+                    in_force_from="2010-01-01", in_force_to="2012-01-01"),
+            Reading(as_at=None, question="Now?", invariant="not less than two years",
+                    in_force_from="2012-01-01"),
+        ),
+    )
+    with pytest.raises(AnchorError, match="empty accepted form"):
+        validate_anchors((bad,))
+
+
+def test_only_the_statutory_phrase_is_checked_against_the_primary_source():
+    """`ingest --verify` asks whether the source still says what the anchor quotes. The
+    added forms are ordinary English renderings and are *not* in the statute — requiring
+    them would fail every verification against a source that is perfectly correct."""
+    text = (
+        "(1) Section 94 does not apply to the dismissal of an employee unless he has "
+        "been continuously employed for a period of not less than two years ending "
+        "with the effective date of termination."
+    )
+    reading = _era_108().readings[1]
+    snapshot = snapshot_for(_era_108(), reading, text.encode("utf-8"), text)
+    assert snapshot.invariant_present is True
+    assert snapshot.invariant == "not less than two years"
+    assert "at least two years" not in text

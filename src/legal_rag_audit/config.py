@@ -105,6 +105,36 @@ class AuthConfig(BaseModel):
         return self
 
 class ResponseFormatConfig(BaseModel):
+    """Where the answer is in what came back, and which parts of it are the answer.
+
+    `answer_frame_field` / `answer_frame_value` exist because a streaming target's frames
+    are *typed*, and a JSONPath cannot see the type. `jsonpath_ng` filter expressions
+    (`$[?(@.type=="text")]`) apply to arrays, not to the dict that one SSE frame is, so
+    the only way to select a frame used to be to find a path that happened to exist on
+    the frames you wanted and on no others.
+
+    That is a guess dressed as a rule, and it failed on the second live target. Its
+    stream carries reasoning, tool arguments and answer text under the same key: the
+    obvious path collected 2,210 characters where the answer was 654, chain-of-thought
+    scored as an answer. The path chosen instead — the final message's second content
+    block, after the thinking block — was verified byte-exact against a capture and then
+    matched nothing on the one probe where that model returned no thinking block. The
+    answer was in the file the whole time, 921 characters of it, and the run recorded a
+    failure (correctly, per the guard in `generate`) rather than an answer.
+
+    With these two fields the same target is configured by saying what is true:
+
+        answer_field: "$.content"
+        answer_frame_field: "$.type"
+        answer_frame_value: "text_end"
+
+    Frames whose `answer_frame_field` does not equal `answer_frame_value` are not
+    consulted for the answer at all. Both must be set together — one alone is a
+    half-written rule, and the validator below refuses it rather than silently ignoring
+    it (§6.1: a config that asks for something the run does not do is the failure this
+    loader exists to prevent).
+    """
+
     model_config = STRICT
 
     answer_field: str = "response.text"
@@ -113,6 +143,29 @@ class ResponseFormatConfig(BaseModel):
     stop_payload_match: Optional[str] = None
     stop_field: Optional[str] = None
     stop_value: Optional[str] = None
+    #: Restrict the answer to frames where this field equals `answer_frame_value`.
+    #: Streaming only; a non-streaming body is one object and there is nothing to select.
+    answer_frame_field: Optional[str] = None
+    answer_frame_value: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _a_frame_selector_needs_both_halves(self) -> "ResponseFormatConfig":
+        if bool(self.answer_frame_field) != bool(self.answer_frame_value):
+            missing = (
+                "answer_frame_value" if self.answer_frame_field else "answer_frame_field"
+            )
+            raise ValueError(
+                f"response_format sets one half of the frame selector and not the "
+                f"other: {missing} is missing.\n"
+                "  A selector with nothing to compare against would either match every "
+                "frame or none,\n"
+                "  and both of those are wrong quietly. Set both, or neither:\n\n"
+                "    response_format:\n"
+                '      answer_field: "$.content"\n'
+                '      answer_frame_field: "$.type"\n'
+                '      answer_frame_value: "text_end"\n'
+            )
+        return self
 
 class TargetConfig(BaseModel):
     """The system under test, and what the artefacts are allowed to call it.

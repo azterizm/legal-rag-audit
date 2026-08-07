@@ -573,6 +573,30 @@ frame, the terminator, and the two JSONPaths — and none of them fails loudly. 
 received, so a terminator can be chosen from what the target actually sends rather than
 from what its documentation says it sends.
 
+### Streams that interleave reasoning with the answer
+
+A JSONPath cannot ask what *type* of frame it is looking at: `jsonpath_ng` filters apply
+to arrays, and one SSE frame is a dict. On a target that emits its reasoning, its tool
+arguments and its answer under the same key, that leaves no path which selects only the
+answer — and a path chosen because it happens to fit the frames you have is a guess that
+holds until the model returns one frame fewer.
+
+Name the frames instead. Both halves are required; one alone matches everything or
+nothing, and the loader refuses it.
+
+```yaml
+  response_format:
+    answer_field: "$.content"
+    answer_frame_field: "$.type"      # only frames where …
+    answer_frame_value: "text_end"    # … this field equals this value
+    stream: true
+```
+
+Frames that do not match are not consulted for the answer. If the value names no frame the
+target sends, the answer comes back empty — and `generate` records an empty answer as a
+transport failure rather than as an answer, so a mis-named frame costs a re-run and never a
+page of findings about a system that did answer.
+
 ---
 
 ## Running it

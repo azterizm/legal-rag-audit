@@ -136,10 +136,22 @@ def build_external_ground_truth(
                 Expectation(
                     probe_id=probe_id,
                     check=POINT_IN_TIME,
-                    must_contain=[reading.invariant],
-                    # The other reading's phrase. Its presence alone is never the
-                    # finding — an answer carrying both has told the reader more than
-                    # was asked, not less (see `evaluators.point_in_time`).
+                    # Every written form of this version's answer. A PASS needs one of
+                    # them, so a system that renders *not less than one year* as *at
+                    # least one year* is recorded as having returned the right version
+                    # rather than neither (defect 23).
+                    must_contain=list(reading.accepted),
+                    # The other reading's phrase, and **only the canonical one** — the
+                    # asymmetry is the safety argument. Widening what counts as right
+                    # can only turn a NOT_CAPTURED into a PASS; widening what counts as
+                    # wrong could turn a PASS into a finding, and §14.2 makes that the
+                    # release blocker. A system that paraphrases the superseded version
+                    # therefore escapes into NOT_CAPTURED, which is the under-detection
+                    # this tool accepts everywhere else.
+                    #
+                    # Its presence alone is never the finding in any case — an answer
+                    # carrying both has told the reader more than was asked, not less
+                    # (see `evaluators.point_in_time`).
                     must_not_contain=[other.invariant],
                     as_at_date=reading.as_at,
                     provision=anchor.provision,

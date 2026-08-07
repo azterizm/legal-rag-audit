@@ -23,6 +23,10 @@ class TargetClient:
         self.answer_parser = parse(self.config.response_format.answer_field)
         self.citations_parser = parse(self.config.response_format.citations_field)
         self.stop_parser = parse(self.config.response_format.stop_field) if getattr(self.config.response_format, 'stop_field', None) else None
+        # Which frames of a stream carry the answer. None means every frame, which is the
+        # behaviour every config had before this existed.
+        frame_field = getattr(self.config.response_format, 'answer_frame_field', None)
+        self.answer_frame_parser = parse(frame_field) if frame_field else None
 
     def _build_auth_headers(self) -> Dict[str, str]:
         headers = {}
@@ -80,6 +84,20 @@ class TargetClient:
             return [self._inject_variables(item, variables) for item in template]
         else:
             return template
+
+    def _carries_the_answer(self, chunk) -> bool:
+        """Whether this frame is one the answer may be read from.
+
+        True for everything unless the config named a frame selector. A stream that
+        interleaves reasoning, tool arguments and answer text under one key cannot be
+        told apart by JSONPath — filters do not apply to a dict root — so the type is
+        matched here instead, where it can be.
+        """
+        if self.answer_frame_parser is None:
+            return True
+        match = self.answer_frame_parser.find(chunk)
+        wanted = getattr(self.config.response_format, 'answer_frame_value', None)
+        return bool(match) and str(match[0].value) == str(wanted)
 
     def _prepare_request(self, endpoint_config, default_payload, variables):
         if isinstance(endpoint_config, str):
@@ -308,7 +326,11 @@ class TargetClient:
                                         logger.debug("Websocket receive stopped by strict stop_field match.")
                                         break
 
-                                match = self.answer_parser.find(chunk)
+                                match = (
+                                    self.answer_parser.find(chunk)
+                                    if self._carries_the_answer(chunk)
+                                    else None
+                                )
                                 if match:
                                     if not self.config.response_format.stream:
                                         answer_text = match[0].value
@@ -414,10 +436,11 @@ class TargetClient:
                                     logger.debug("HTTP stream stopped by strict stop_field match.")
                                     break
                                 
-                            match = self.answer_parser.find(chunk)
-                            if match:
-                                answer_text += match[0].value
-                            
+                            if self._carries_the_answer(chunk):
+                                match = self.answer_parser.find(chunk)
+                                if match:
+                                    answer_text += match[0].value
+
                             cit_match = self.citations_parser.find(chunk)
                             if cit_match and isinstance(cit_match[0].value, list):
                                 citations.extend(cit_match[0].value)

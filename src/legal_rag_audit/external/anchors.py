@@ -55,6 +55,27 @@ reason: a system writing *£6.5m* or *£6.5 million* satisfies the shorter phras
 are correct answers. The figure alone is still discriminating — no other version of that
 provision states it.
 
+**Where the fourth rule ran out, and what replaced it (defect 23).** It was written about
+figures and it holds for figures: `£508` is `£508`, and a shorter prefix absorbs the
+variants. It does not hold for a quantity the statute states in *words*. `era-108` reads
+*not less than one year*; the second live target answered *at least one year* — the
+ordinary English rendering of the same formula, correct on both halves of the pair — and
+was recorded as having returned neither version. Under-detection is the safe direction,
+but it cost the comparison: the first target committed to the statutory phrase and was
+scored on it, and the two runs stopped being comparable on that anchor.
+
+A reading may therefore carry `also_accepted`: other written forms of *the same answer*.
+They widen `must_contain` and never `must_not_contain` — see `Reading.accepted` for why
+that asymmetry is the entire safety argument — and `validate_anchors` applies every rule
+above to the widened set, because a rule enforced on the canonical phrase alone would
+have a hole exactly the width of the new feature. Only `invariant` is checked against
+the primary source; the alternatives are renderings, and the statute does not contain
+them.
+
+The set is not open-ended. Enumerating how a system might *word* an answer is the trap
+§8.2 #8 names by hand; enumerating how a fixed quantity is written in English is a closed
+set — *not less than*, *at least*, *a minimum of* — and stops there.
+
 **Why the set is employment- and company-law heavy.** These are the provisions whose
 amendments are *numeric*. A qualitative amendment gives no phrase that survives rule 2,
 which is the constraint that rejects most of the statute book rather than a judgement
@@ -90,16 +111,56 @@ class Reading:
     as_at: Optional[str]
     question: str
     #: The discriminating phrase, verbatim from the source. See the three rules above.
+    #: This is the only form `ingest --verify` checks against `legislation.gov.uk`,
+    #: because it is the only one the source contains.
     invariant: str
     #: The validity range legislation.gov.uk states for this version. `in_force_to` of
     #: `None` means the version is current — the only kind that can move under us.
     in_force_from: str
     in_force_to: Optional[str] = None
+    #: Other written forms of **the same answer** — defect 23. See `accepted`.
+    also_accepted: tuple[str, ...] = ()
 
     @property
     def frozen(self) -> bool:
         """Whether this reading can ever change. A closed range cannot."""
         return self.in_force_to is not None
+
+    @property
+    def accepted(self) -> tuple[str, ...]:
+        """Every written form that counts as having returned this version.
+
+        The fourth rule — *the figure must have one written form* — was written about
+        figures and holds for figures: `£508` is `£508`. It does not hold for a
+        quantity the statute states in words. `era-108` reads *not less than one year*,
+        and a system that answers *at least one year* has returned the right version of
+        the law in the ordinary English rendering of that formula.
+
+        The second live target did exactly that, on both halves of the pair, and scored
+        as having returned neither version (defect 23). Under-detection is the safe
+        direction — §14.2 makes a false positive the release blocker and a missed one
+        merely a cost — but the cost was not nothing: the first target committed to the
+        statutory phrase and was scored on it, this one paraphrased and was scored on
+        nothing, and the two runs stopped being comparable on that anchor.
+
+        **These forms widen `must_contain` and never `must_not_contain`.** A system that
+        says the right thing in other words now passes; a system that says the wrong
+        thing still has to produce the superseded phrase verbatim to fail. That
+        asymmetry is deliberate and it is the whole safety argument: every form added
+        here can only turn a NOT_CAPTURED into a PASS, never a PASS into a finding.
+
+        What it costs, stated rather than hidden: a system that paraphrases the *wrong*
+        version escapes the finding and lands in NOT_CAPTURED. That is the same
+        under-detection this tool already accepts everywhere else, and the alternative —
+        loose forms in `must_not_contain` — buys sensitivity with exactly the failure
+        §14.2 refuses.
+
+        Forms are the standard renderings of the statutory formula, not a list of
+        phrasings someone might use. Enumerating how a system could word an answer is
+        the trap §8.2 #8 names; enumerating how a fixed quantity is written in English
+        is a closed set.
+        """
+        return (self.invariant, *self.also_accepted)
 
 
 @dataclass(frozen=True)
@@ -146,6 +207,12 @@ ANCHORS: Final[tuple[Anchor, ...]] = (
                     "Act 1996 applied to their dismissal?"
                 ),
                 invariant="not less than one year",
+                # The three standard renderings of the statutory formula. A system
+                # answering *at least one year* has returned this version of the law,
+                # and the exact phrase alone recorded that as neither version (defect
+                # 23). Every form names its own quantity, so none is reachable from the
+                # other reading — `validate_anchors` refuses the set if one is.
+                also_accepted=("at least one year", "a minimum of one year"),
                 in_force_from="2010-10-01",
                 in_force_to="2011-04-06",
             ),
@@ -157,6 +224,7 @@ ANCHORS: Final[tuple[Anchor, ...]] = (
                     "dismissal?"
                 ),
                 invariant="not less than two years",
+                also_accepted=("at least two years", "a minimum of two years"),
                 in_force_from="2012-04-06",
                 # Live. The qualifying period is under active legislative attention, and
                 # this is the reading `ingest --verify` exists to re-check.
@@ -346,10 +414,16 @@ class AnchorError(Exception):
 def validate_anchors(anchors: tuple[Anchor, ...] = ANCHORS) -> None:
     """Refuse an anchor set that could produce a finding against a correct answer.
 
-    Two rules, both of which have exactly one failure mode and it is a false positive:
-    an anchor whose two readings share an invariant scores the same string as required
-    and forbidden, and an anchor whose invariant appears in the other reading's question
-    would fail a system that did nothing but repeat what it was asked.
+    Rules, each of which has exactly one failure mode and it is a false positive: an
+    anchor whose two readings share an accepted form scores the same string as required
+    and forbidden; an anchor whose invariant appears in the other reading's question
+    would fail a system that did nothing but repeat what it was asked; and — since
+    defect 23 widened a reading to several written forms — an added form that overlaps
+    the other reading would make a right answer look like the wrong one.
+
+    Every rule is checked over `reading.accepted`, not over `reading.invariant`. A rule
+    enforced on the canonical phrase and not on its alternatives is a rule with a hole
+    the exact width of the feature that was just added.
     """
     seen: set[str] = set()
     for anchor in anchors:
@@ -366,20 +440,46 @@ def validate_anchors(anchors: tuple[Anchor, ...] = ANCHORS) -> None:
                 f"test nothing."
             )
         for reading, other in ((first, second), (second, first)):
-            if _norm(other.invariant) in _norm(reading.question):
+            if len({_norm(f) for f in reading.accepted}) != len(reading.accepted):
                 raise AnchorError(
-                    f"{anchor.anchor_id}: the question asked about "
-                    f"{reading.as_at or 'the present'} contains the other reading's "
-                    f"invariant {other.invariant!r}.\n"
-                    f"  A system that echoed the question would be recorded as having "
-                    f"returned the wrong version."
+                    f"{anchor.anchor_id}: the reading for "
+                    f"{reading.as_at or 'the present'} lists the same accepted form "
+                    f"twice: {list(reading.accepted)}."
                 )
-            if _norm(reading.invariant) in _norm(reading.question):
-                raise AnchorError(
-                    f"{anchor.anchor_id}: the question asked about "
-                    f"{reading.as_at or 'the present'} already contains its own answer "
-                    f"{reading.invariant!r}."
-                )
+            for form in reading.accepted:
+                if not form.strip():
+                    raise AnchorError(
+                        f"{anchor.anchor_id}: an empty accepted form would match every "
+                        f"answer ever given."
+                    )
+                # The discriminating rule, over the widened set. If one reading's form
+                # is contained in the other's, an answer stating one version satisfies
+                # both and the pair stops separating anything.
+                for rival in other.accepted:
+                    if _norm(form) in _norm(rival) or _norm(rival) in _norm(form):
+                        raise AnchorError(
+                            f"{anchor.anchor_id}: the accepted form {form!r} for "
+                            f"{reading.as_at or 'the present'} overlaps {rival!r} from "
+                            f"the other reading.\n"
+                            f"  One version's answer would satisfy both readings, and "
+                            f"the pair would stop\n  telling them apart. Accepted forms "
+                            f"must each name their own version's answer."
+                        )
+                if _norm(form) in _norm(reading.question):
+                    raise AnchorError(
+                        f"{anchor.anchor_id}: the question asked about "
+                        f"{reading.as_at or 'the present'} already contains its own "
+                        f"answer {form!r}."
+                    )
+            for form in other.accepted:
+                if _norm(form) in _norm(reading.question):
+                    raise AnchorError(
+                        f"{anchor.anchor_id}: the question asked about "
+                        f"{reading.as_at or 'the present'} contains the other reading's "
+                        f"accepted form {form!r}.\n"
+                        f"  A system that echoed the question would be recorded as "
+                        f"having returned the wrong version."
+                    )
 
 
 def _norm(text: str) -> str:

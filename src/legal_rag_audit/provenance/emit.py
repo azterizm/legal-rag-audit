@@ -50,7 +50,17 @@ class PreCommitmentError(Exception):
 def _artefact(label: str, path: str | Path) -> HashedArtefact:
     digest, kind, files = hash_path(path)
     return HashedArtefact(
-        path=str(path),
+        # The name, never the path — defect 22 one file over. `handover.json` is
+        # published before the run and travels with the bundle, and an absolute path
+        # inside it names a directory on the operator's machine. Working directories get
+        # named after clients: the first two runs of this tool were fired from
+        # directories called after the product under test, and this field wrote that name
+        # into the sealed record of a run whose every other artefact was anonymous.
+        #
+        # Nothing is lost. `verify_pre_commitment` takes the paths it checks from the
+        # command line, never from here, and the digest beside this field is what
+        # identifies the artefact. The path only ever identified the laptop.
+        path=Path(path).name,
         kind=kind,
         digest=digest,
         files=files,
