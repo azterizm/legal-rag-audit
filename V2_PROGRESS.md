@@ -3429,3 +3429,92 @@ token and could not be guessed without spending quota on a seven-query account. 
 noting for the next target: **for cookie auth, capture the header, not the token.**
 
 911 tests passing.
+
+---
+
+## Phase T — the third target repeated, and the first comparable cell
+
+Six requests on a **fresh, previously unused Ordalie account** — the first run of this
+target not sharing an account with an earlier one, so this bundle carries no split-account
+caveat. Six requests stayed well inside the limit that produced five consecutive 403s at
+nine on the August battery. Bundle in
+`reports/ordalie-2026-08-07/three-pass-subset/`.
+
+```
+point_in_time         2 eligible, 4 records scored, 0 failed   PASS
+response_divergence   2 eligible, 2 scored, 1 failed           FAIL
+variance              3 passes: 0 identical, 1 stable in prose, 1 divergent
+```
+
+### `era-227-1` is now measured three times on all three targets
+
+As at 1 June 2014, correct answer £464.
+
+| target | pass 1 | pass 2 | pass 3 | |
+|---|---|---|---|---|
+| B | £464 | £464 | £464 | correct, stable |
+| C | £464 | £464 | £464 | correct, stable |
+| A | £751 | £468 | £751 | wrong, and not consistently |
+
+**The first cell in this project where all three targets are measured identically.** Same
+probe, same three passes, same key — the expectations for this probe are byte-identical
+across every answer-key version the project has used. Two products get it right every time
+and reword it every time (`invariant_stable`, correctly not a finding); one returns the
+present-day figure twice and a third wrong figure once.
+
+That the check separates them is the point. A divergence check that flagged all three
+would be measuring generative variation; this one flags the target whose *answer* moved and
+not the two whose *prose* moved.
+
+### The greeting malfunction is reproducible
+
+`era-124-1`, as at 1 January 2012, correct answer £68,400:
+
+| pass | answered |
+|---|---|
+| 1 | *"What would you like me to help with?"* |
+| 2 | £68,400 — correct, naming the increase to £72,300 as taking effect 1 February 2012 |
+| 3 | *"How can I help you today?"* |
+
+The August run recorded this probe as `declined_to_state_a_version` and argued in the
+bundle that it was a malfunction rather than a refusal, because the stream echoed the
+question back. **That argument now has three passes behind it.** The question arrived on
+both failing passes — 1,293 and 826 frames echo it verbatim — and the product greeted the
+user anyway. Two of three, same probe, ninety minutes later, different account.
+
+A reproducible product defect, and not a statement about the system's grasp of the law: on
+the pass where it answered it was right, and more precise than either other target on this
+probe.
+
+### One dated question beat all three products
+
+`era-124-1` asks for a figure **one month before it changed**.
+
+| target | result |
+|---|---|
+| B | correct once, greeted twice |
+| C | correct once, £72,300 twice — the figure that took effect a month later |
+| A | £65,300 and £72,300 in one answer (single pass) |
+
+Three systems, three different failures, one question near a version boundary. None is
+reliably right and all three are wrong in ways a reader could not detect from the answer
+alone. **If one probe in this battery is worth keeping, it is this one** — and the
+observation is not that these products are bad but that the boundary is where dated
+retrieval breaks, which is a claim about the problem rather than about three companies.
+
+### Where the three targets now stand
+
+| | battery | passes | result |
+|---|---|---|---|
+| A | 14 probes, 6 Aug | 1 | current law for past dates |
+| A | 2 probes, 7 Aug | 3 | both divergent — refusal, refusal, wrong figure |
+| B | 14 probes, 7 Aug | 1 | 8 of 8 scored correct |
+| B | 2 probes, 7 Aug | 3 | one stable and correct, one malfunctioning 2 of 3 |
+| C | 14 probes, 7 Aug | 1 | 11 of 11 scored correct |
+| C | 14 probes, 7 Aug | 3 | one correct answer returned 1 time in 3 |
+
+Every single-pass result in that table is now known to be a worse description of its target
+than the three-pass one beside it, in both directions: A and B look more consistent than
+they are, C looks better than it is.
+
+911 tests passing.
