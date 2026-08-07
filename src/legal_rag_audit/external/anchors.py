@@ -31,11 +31,12 @@ candidate that fails one is left out rather than weakened:
    positive a release blocker, so a phrase that can be reached innocently is not a phrase.
 3. *Stable.* Prefer a pair of dates that are both historic, because a historic version can
    never change again. `era-124` is that pattern deliberately: both readings sit in closed
-   validity ranges, so the anchor needs no maintenance ever. `era-108`'s second reading is
-   the law as it stands, which is the more natural question and the one that can go stale —
-   `ingest` is what catches it, and the two anchors together are the argument for why that
-   command exists. Every anchor added after those two is fully frozen, so exactly one
-   reading in this file can ever move.
+   validity ranges, so the anchor needs no maintenance ever. **Every reading in this file
+   is now frozen**, which was not the intention: the one anchor asking for the law as it
+   stands was `era-108`, and it was retired (see below). `ingest` still earns its place —
+   legislation.gov.uk revises its own historic snapshots, and an anchor's phrase can stop
+   matching without the law having changed — but the set has lost the reading that made
+   the case for it most directly, and a replacement should restore one.
 
 **A fourth rule, learned by rejecting candidates.** *The figure must have one written
 form.* A phrase is scored by exact containment, so an invariant a correct system would
@@ -75,6 +76,26 @@ them.
 The set is not open-ended. Enumerating how a system might *word* an answer is the trap
 §8.2 #8 names by hand; enumerating how a fixed quantity is written in English is a closed
 set — *not less than*, *at least*, *a minimum of* — and stops there.
+
+**That last sentence was wrong, and `era-108` is retired because of it (defect 29).** The
+third live target answered *one year of continuous employment*: correct, and carrying no
+qualifier at all, so none of the three accepted forms appears in it. Three runs, three
+systems, three different renderings; two of them scored as having returned neither version
+of the law. The set of ways to write a duration in English is not closed, and a fourth
+widening would have been the same mistake a third time.
+
+`also_accepted` stays. It is sound, it is the right shape for a user's own anchors, and
+the asymmetry that makes it safe is unaffected by any of this. What it cannot do is rescue
+an anchor whose answer has no canonical written form — which is the fourth rule, applied
+to the anchor set itself rather than to a candidate. **The rule now excludes prose
+outright**, and `era-108` joins the rejected candidates above, having been the one that
+taught the rule its own scope.
+
+The cost is real and is not hidden: five anchors instead of six, ten dated questions
+instead of twelve, and no reading in the set that asks for the law as it stands. A
+replacement wants a provision whose current value is a *figure* — that restores both the
+count and the live reading — and finding one mechanically rather than by hand is what a
+`propose` command is for.
 
 **Why the set is employment- and company-law heavy.** These are the provisions whose
 amendments are *numeric*. A qualitative amendment gives no phrase that survives rule 2,
@@ -143,6 +164,15 @@ class Reading:
         statutory phrase and was scored on it, this one paraphrased and was scored on
         nothing, and the two runs stopped being comparable on that anchor.
 
+        **`era-108` is no longer in the set**, and this property is why it could not be
+        saved rather than why it was kept. The third target wrote *one year of continuous
+        employment* — no qualifier, so no accepted form appears — and the widening that
+        rescued the second target did nothing for the third. Adding forms works for a
+        quantity with a canonical written form and only postpones the problem for one
+        without. The feature is right; that anchor was not (defect 29). Use it for an
+        answer that has one settled spelling and a handful of ordinary variants, not for
+        one whose renderings are open-ended.
+
         **These forms widen `must_contain` and never `must_not_contain`.** A system that
         says the right thing in other words now passes; a system that says the wrong
         thing still has to produce the superseded phrase verbatim to fail. That
@@ -190,48 +220,20 @@ class Anchor:
         return stem if reading.as_at is None else f"{stem}/{reading.as_at}"
 
 
+#: Five anchors, ten dated questions. There were six.
+#:
+#: `era-108` — the unfair-dismissal qualifying period, ERA 1996 s.108 — was retired after
+#: the third live run (defect 29). Its answer is a duration the statute states in words,
+#: and three systems wrote it three ways: *not less than one year* (the statutory phrase),
+#: *at least one year*, and *one year of continuous employment*. Two of those scored as
+#: having returned neither version of the law, both times against a system that had the
+#: law right. The fix applied after the second run — accepting other written forms — is
+#: kept and is correct, and it did not help the third, because there is no closed set of
+#: ways to write a duration. See the module docstring.
+#:
+#: It was also the only reading in the set asking for the law as it stands. Restoring
+#: that, with a provision whose current value is a figure, is open work.
 ANCHORS: Final[tuple[Anchor, ...]] = (
-    Anchor(
-        anchor_id="era-108",
-        instrument="ukpga/1996/18",
-        title="Employment Rights Act 1996",
-        section="108",
-        provision="section 108",
-        topic="employment",
-        readings=(
-            Reading(
-                as_at="2011-01-01",
-                question=(
-                    "As at 1 January 2011, how long did an employee have to have been "
-                    "continuously employed before section 94 of the Employment Rights "
-                    "Act 1996 applied to their dismissal?"
-                ),
-                invariant="not less than one year",
-                # The three standard renderings of the statutory formula. A system
-                # answering *at least one year* has returned this version of the law,
-                # and the exact phrase alone recorded that as neither version (defect
-                # 23). Every form names its own quantity, so none is reachable from the
-                # other reading — `validate_anchors` refuses the set if one is.
-                also_accepted=("at least one year", "a minimum of one year"),
-                in_force_from="2010-10-01",
-                in_force_to="2011-04-06",
-            ),
-            Reading(
-                as_at=None,
-                question=(
-                    "How long must an employee have been continuously employed before "
-                    "section 94 of the Employment Rights Act 1996 applies to their "
-                    "dismissal?"
-                ),
-                invariant="not less than two years",
-                also_accepted=("at least two years", "a minimum of two years"),
-                in_force_from="2012-04-06",
-                # Live. The qualifying period is under active legislative attention, and
-                # this is the reading `ingest --verify` exists to re-check.
-                in_force_to=None,
-            ),
-        ),
-    ),
     Anchor(
         anchor_id="era-124",
         instrument="ukpga/1996/18",

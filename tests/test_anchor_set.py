@@ -40,13 +40,19 @@ def test_both_practice_areas_are_covered() -> None:
     assert "commercial" in topics
 
 
-def test_only_one_reading_in_the_whole_set_can_ever_change() -> None:
-    """Every anchor after the first two is fully frozen, deliberately.
+def test_at_most_one_reading_in_the_whole_set_can_ever_change() -> None:
+    """A closed validity range cannot be amended again, so a frozen anchor needs no
+    refresh ever. One live reading is enough to justify `ingest`; more would be
+    maintenance without additional argument.
 
-    A closed validity range cannot be amended again, so those anchors need no refresh
-    ever. `era-108`'s second reading asks for the law as it stands, which is the more
-    natural question and the one `ingest` exists to re-check. One live reading is enough
-    to justify that command; more would be maintenance without additional argument.
+    **There are currently none, and that is a gap rather than a design.** The set's one
+    live reading belonged to `era-108`, retired for answering in prose (defect 29). Until
+    a replacement lands, `ingest` re-checks only historic snapshots — still worth doing,
+    because legislation.gov.uk revises those, but no longer the direct demonstration that
+    the answer key can go stale underneath a run.
+
+    Asserted as a ceiling rather than an equality so a replacement does not have to edit
+    a test to be accepted, and so a second live reading still has to be argued for.
     """
     live = [
         (anchor.anchor_id, reading.as_at)
@@ -54,7 +60,7 @@ def test_only_one_reading_in_the_whole_set_can_ever_change() -> None:
         for reading in anchor.readings
         if not reading.frozen
     ]
-    assert live == [("era-108", None)], live
+    assert len(live) <= 1, live
 
 
 def test_no_invariant_is_a_substring_of_another_in_the_same_anchor() -> None:

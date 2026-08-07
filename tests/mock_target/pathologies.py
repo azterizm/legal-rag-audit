@@ -445,7 +445,7 @@ PROFILES: tuple[Profile, ...] = (
         name="answer_current_law",
         behaviour="Serves one version of a provision whatever date is asked about",
         detects=("point_in_time",),
-        probes=("pit-era-108-1", "pit-era-108-2", "pit-era-124-1", "pit-era-124-2"),
+        probes=("pit-era-124-1", "pit-era-124-2", "pit-era-227-1", "pit-era-227-2"),
         apply=_answer_current_law,
         battery="existing",
     ),

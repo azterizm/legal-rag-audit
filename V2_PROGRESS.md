@@ -3222,3 +3222,68 @@ reproducibility has still never been measured on anything.
 An operational note that held again: the report names nobody, and the response file
 carries the product's own `[ref:…]` citation scheme. **Hand over `report/`, never
 `responses.jsonl`.**
+
+---
+
+## Phase Q — retiring an anchor, and giving a probe a forum
+
+Two changes to the shipped battery, both found by the third target, both of them the kind
+that must land before anyone else runs this.
+
+### Defect 29 — `era-108` retired
+
+The battery shipped one anchor whose answer is stated in words rather than as a figure,
+and three live systems wrote that answer three ways:
+
+| target | answer | scored |
+|---|---|---|
+| A | *not less than one year* (the statutory phrase) | measured |
+| B | *at least one year* | neither version |
+| C | *one year of continuous employment* | neither version |
+
+Two of three correct systems recorded as having returned neither version of the law. The
+fix after target B was to accept other written forms, and the docstring claimed the set of
+those was closed — *not less than*, *at least*, *a minimum of*. Target C answered with no
+qualifier at all. The set is not closed, and a third widening would have been the same
+mistake a third time.
+
+`also_accepted` stays: it is sound, the asymmetry that makes it safe is untouched, and it
+is the right shape for a user's own anchors. What changed is the fourth anchor rule, now
+applied to the set rather than to candidates — **the answer must have a canonical written
+form, which excludes prose outright**, asserted by a test that walks every shipped
+invariant and requires a figure.
+
+Costs, stated rather than buried: five anchors instead of six, ten dated questions instead
+of twelve, and **no reading left in the set that asks for the law as it stands** — that was
+`era-108`'s second reading, and it was the most direct argument for `ingest`. The command
+still earns its place, because legislation.gov.uk revises historic snapshots too, but a
+replacement should restore a live reading with a provision whose current value is a figure.
+The test that used to assert exactly one live reading now asserts at most one, so a
+replacement does not have to edit a test to be accepted.
+
+### Defect 30 — the licensed probes name a jurisdiction
+
+Neither licensed probe said which law it was asking about. Target C holds French, EU and
+UK sources; it answered both on French law — Cour de cassation doctrine, and a Conseil
+d'État decision cited by its Légifrance identifier — and both passed.
+
+The pass was true and it was not the same pass. The marker set is a set of *English*
+publisher identifiers, so a French answer cannot produce one whatever the index holds: the
+probe could not have failed. One battery is only one battery if a probe asks every target
+the same question, so both now say *England and Wales*. The jurisdiction is the only thing
+added — neither names a case, because a probe that named one would be testing whether the
+system can repeat a string we handed it.
+
+### The battery has a new version
+
+```
+probes        sha256:a13a7370900e41cd59fd470803a0e37b3fa26ac457321919e6c0c16e1d969c73   (12)
+ground truth  sha256:07b4c88edcd65c16dd1c2b598f01dee806126b125395f1a9e0f1b657b66c35ac
+```
+
+Runs against the previous battery (`08c3b9b5…`) are not comparable to runs against this
+one on the licensed family, and carry two point-in-time probes this one does not. All
+three recorded targets used the old one. Nothing is re-scored: the three bundles stand as
+measured, and the change applies from here.
+
+901 tests passing.

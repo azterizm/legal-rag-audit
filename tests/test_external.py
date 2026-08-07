@@ -18,6 +18,7 @@ below tests that nothing fires when it should not.
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,6 +38,7 @@ from legal_rag_audit.external import (
     snapshot_for,
     validate_anchors,
 )
+from legal_rag_audit.external.battery import LICENSED_PROBES
 from legal_rag_audit.external.ingest import IngestError, ingest, text_of
 from legal_rag_audit.generate.run import EXISTING_INDEX, GenerationError, resolve_corpus
 from legal_rag_audit.score.registry import BY_NAME
@@ -642,7 +644,10 @@ def test_ingest_asks_for_the_dated_representation_of_each_provision():
     store = ingest(ANCHORS[:1], client=client)
     assert len(store.snapshots) == 2
     assert all(url.endswith("/data.xml") for url in client.calls)
-    assert any("/2011-01-01/data.xml" in url for url in client.calls)
+    # The first anchor's earlier reading. Dated, not the current representation —
+    # asking for `/section/124/data.xml` would fetch the law as it stands today and
+    # verify the anchor against the wrong version of the provision.
+    assert any("/2012-01-01/data.xml" in url for url in client.calls)
 
 
 def test_ingest_records_a_missing_phrase_rather_than_inventing_one():
@@ -781,26 +786,94 @@ def test_the_reference_targets_provision_text_matches_the_anchors():
 # neither version. The fourth anchor rule, *the figure must have one written form*, was
 # written about figures and holds for figures. A quantity the statute states in words has
 # several correct renderings, and exact containment reaches one of them.
+#
+# `era-108` has since been retired (defect 29): the third live target wrote "one year of
+# continuous employment", with no qualifier for any accepted form to match, and no fourth
+# widening was going to close a set that is not closed. The feature is kept, because it is
+# right for an answer with one settled spelling and a few ordinary variants, and these
+# tests now exercise it on an anchor built here rather than on a shipped one. That is
+# where they belonged: the behaviour under test is `also_accepted`, not the anchor set.
 
 
-def _era_108():
-    return next(a for a in ANCHORS if a.anchor_id == "era-108")
+def _prose_anchor() -> Anchor:
+    """The retired anchor's shape, kept as a fixture. Not in `ANCHORS`."""
+    return Anchor(
+        anchor_id="era-108",
+        instrument="ukpga/1996/18",
+        title="Employment Rights Act 1996",
+        section="108",
+        provision="section 108",
+        topic="employment",
+        readings=(
+            Reading(
+                as_at="2011-01-01",
+                question=(
+                    "As at 1 January 2011, how long did an employee have to have been "
+                    "continuously employed before section 94 of the Employment Rights "
+                    "Act 1996 applied to their dismissal?"
+                ),
+                invariant="not less than one year",
+                also_accepted=("at least one year", "a minimum of one year"),
+                in_force_from="2010-10-01",
+                in_force_to="2011-04-06",
+            ),
+            Reading(
+                as_at=None,
+                question=(
+                    "How long must an employee have been continuously employed before "
+                    "section 94 of the Employment Rights Act 1996 applies to their "
+                    "dismissal?"
+                ),
+                invariant="not less than two years",
+                also_accepted=("at least two years", "a minimum of two years"),
+                in_force_from="2012-04-06",
+            ),
+        ),
+    )
+
+
+def _prose_expectation():
+    """The 2011 half, as `battery` would build it from that anchor."""
+    reading, other = _prose_anchor().readings
+    return SimpleNamespace(
+        must_contain=list(reading.accepted),
+        must_not_contain=[other.invariant],
+        provision="section 108",
+        as_at_date=reading.as_at,
+    )
 
 
 def test_the_prose_anchor_accepts_the_ordinary_rendering_of_its_formula():
-    first, second = _era_108().readings
+    first, second = _prose_anchor().readings
     assert "at least one year" in first.accepted
     assert "at least two years" in second.accepted
     # The statutory phrase is still first, and still the one the source is checked for.
     assert first.accepted[0] == first.invariant == "not less than one year"
 
 
+def test_the_retired_anchor_is_not_in_the_shipped_set():
+    """Defect 29. Three systems wrote the same duration three ways; two scored as having
+    returned neither version of the law, both times while having the law right."""
+    assert all(a.anchor_id != "era-108" for a in ANCHORS)
+    assert len(ANCHORS) == 5
+
+
+def test_no_shipped_anchor_answers_in_prose():
+    """The fourth rule, turned on the anchor set instead of on a candidate.
+
+    Every remaining invariant names a figure. An answer with a canonical written form is
+    the only kind exact containment can score, and that is now a property of the set
+    rather than a preference stated in a docstring.
+    """
+    for anchor in ANCHORS:
+        for reading in anchor.readings:
+            for form in reading.accepted:
+                assert "£" in form, f"{anchor.anchor_id}: {form!r} is not a figure"
+
+
 def test_a_correct_paraphrase_now_scores_as_the_right_version():
     """The answer that started this. Before the fix it was `no_version_returned`."""
-    expectations = {
-        e.probe_id: e for e in build_external_ground_truth().expectations
-    }
-    expectation = expectations["pit-era-108-1"]
+    expectation = _prose_expectation()
     result = PointInTimeEvaluator().evaluate(
         answer=(
             "As at 1 January 2011, the employee generally needed at least one year of "
@@ -837,10 +910,7 @@ def test_a_system_that_paraphrases_the_wrong_version_is_not_captured_not_failed(
     statute's, escapes the finding. That is the under-detection this tool accepts
     everywhere else — the alternative buys sensitivity with a false positive.
     """
-    expectations = {
-        e.probe_id: e for e in build_external_ground_truth().expectations
-    }
-    expectation = expectations["pit-era-108-1"]
+    expectation = _prose_expectation()
     result = PointInTimeEvaluator().evaluate(
         answer="As at 1 January 2011 the employee needed at least two years' service.",
         in_force=expectation.must_contain,
@@ -934,8 +1004,37 @@ def test_only_the_statutory_phrase_is_checked_against_the_primary_source():
         "been continuously employed for a period of not less than two years ending "
         "with the effective date of termination."
     )
-    reading = _era_108().readings[1]
-    snapshot = snapshot_for(_era_108(), reading, text.encode("utf-8"), text)
+    reading = _prose_anchor().readings[1]
+    snapshot = snapshot_for(_prose_anchor(), reading, text.encode("utf-8"), text)
     assert snapshot.invariant_present is True
     assert snapshot.invariant == "not less than two years"
     assert "at least two years" not in text
+
+
+# ------------------------------------------------- defect 30: a probe needs a forum
+#
+# The licensed-content probes named no jurisdiction. Against a product holding French, EU
+# and UK sources they were answered on French law, and passed — necessarily, because the
+# marker set is a set of English publisher identifiers and a French answer cannot contain
+# one whatever the index holds. The pass was true and it was not the same pass a UK-only
+# product earns from the same words.
+
+
+def test_the_licensed_probes_name_their_jurisdiction():
+    """One battery, one meaning. A probe answered on a different body of law by a
+    different target is not a probe those two targets can be compared on."""
+    for probe_id, text, _why in LICENSED_PROBES:
+        assert "England and Wales" in text, (
+            f"{probe_id} does not say which law it is asking about, so a "
+            f"multi-jurisdiction target may answer a different question than a "
+            f"single-jurisdiction one and score the same"
+        )
+
+
+def test_the_licensed_probes_still_name_no_case():
+    """The jurisdiction is the only thing added. A probe that named the authority would
+    be testing whether the system can repeat a string we handed it (§8.2 #18)."""
+    for probe_id, text, _why in LICENSED_PROBES:
+        assert "[" not in text and "v " not in text, (
+            f"{probe_id} looks like it names an authority"
+        )

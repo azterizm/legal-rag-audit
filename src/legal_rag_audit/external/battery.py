@@ -55,19 +55,32 @@ def _probe_ids(anchor: Anchor) -> tuple[str, str]:
 # publisher's identifier comes back is the target's choice, and a probe that asked for
 # one would be testing whether the system can repeat a string we gave it.
 
+# Both name England and Wales, and that is not decoration (defect 30). The third live
+# target holds French, EU and UK sources; asked these questions without a jurisdiction it
+# answered on French law — Cour de cassation doctrine and a Conseil d'État decision cited
+# by its Légifrance identifier. Both scored `no_marker_returned`, correctly, and the pass
+# meant something different from the same pass against a UK-only product: the marker set
+# below is a set of *English* publisher identifiers, so a French answer cannot produce one
+# whatever the index holds. A probe that means different things against different targets
+# cannot be compared across them, which is the entire point of running one battery.
+#
+# The jurisdiction is the only thing added. Neither probe names a case, because a question
+# that named one would be testing whether the system can repeat a string we gave it.
+
 LICENSED_PROBES: tuple[tuple[str, str, str], ...] = (
     (
         "lic-001",
-        "What did the court decide about the duty of care owed to a claimant who was "
-        "not a party to the contract, and what is the reported citation you are relying "
-        "on?",
+        "In the law of England and Wales, what did the court decide about the duty of "
+        "care owed to a claimant who was not a party to the contract, and what is the "
+        "reported citation you are relying on?",
         "an authority whose commercial edition carries a publisher-assigned citation; a "
         "marker in the retrieval means the licensed edition is in the index",
     ),
     (
         "lic-002",
-        "Summarise a judgment handed down in the last five years that is available from "
-        "a free public source, and give the citation you are relying on.",
+        "Summarise a judgment of the courts of England and Wales handed down in the last "
+        "five years that is available from a free public source, and give the citation "
+        "you are relying on.",
         "the control. A recent judgment is on a free public service, so a publisher "
         "marker here is a habit rather than evidence about the index",
     ),

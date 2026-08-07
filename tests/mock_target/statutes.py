@@ -39,18 +39,6 @@ CAPTURED: Final = "2026-08-06"
 #: Keyed by probe rather than by date because the mock resolves a question the way the
 #: planted half does — it looks it up. What it must not do is consult the expectation.
 PROVISIONS: Final[dict[str, tuple[str, str]]] = {
-    "pit-era-108-1": (
-        "https://www.legislation.gov.uk/ukpga/1996/18/section/108/2011-01-01",
-        "Qualifying period of employment. 108(1) Section 94 does not apply to the "
-        "dismissal of an employee unless he has been continuously employed for a period "
-        "of not less than one year ending with the effective date of termination.",
-    ),
-    "pit-era-108-2": (
-        "https://www.legislation.gov.uk/ukpga/1996/18/section/108",
-        "Qualifying period of employment. 108(1) Section 94 does not apply to the "
-        "dismissal of an employee unless he has been continuously employed for a period "
-        "of not less than two years ending with the effective date of termination.",
-    ),
     "pit-era-124-1": (
         "https://www.legislation.gov.uk/ukpga/1996/18/section/124/2012-01-01",
         "Limit of compensatory award. 124(1) The amount of a compensatory award to a "
@@ -125,8 +113,6 @@ PROVISIONS: Final[dict[str, tuple[str, str]]] = {
 #: Which provision each probe is about, for the answer's own prose. Separate from the
 #: text so a mock answer can name the section without parsing it back out.
 PROVISION_NAMES: Final[dict[str, str]] = {
-    "pit-era-108-1": "section 108 of the Employment Rights Act 1996",
-    "pit-era-108-2": "section 108 of the Employment Rights Act 1996",
     "pit-era-124-1": "section 124 of the Employment Rights Act 1996",
     "pit-era-124-2": "section 124 of the Employment Rights Act 1996",
     "pit-era-227-1": "section 227 of the Employment Rights Act 1996",
@@ -142,8 +128,6 @@ PROVISION_NAMES: Final[dict[str, str]] = {
 #: The other reading of the same provision, for `answer_current_law`. A system that only
 #: holds one version answers every date with it, which is the defect the pair detects.
 OTHER_READING: Final[dict[str, str]] = {
-    "pit-era-108-1": "pit-era-108-2",
-    "pit-era-108-2": "pit-era-108-1",
     "pit-era-124-1": "pit-era-124-2",
     "pit-era-124-2": "pit-era-124-1",
     "pit-era-227-1": "pit-era-227-2",
