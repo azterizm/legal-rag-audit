@@ -254,6 +254,21 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
                 "  variance            one pass — nothing compared. Reproducibility "
                 "was not measured, and this is not a pass"
             )
+        elif not variance.get("compared"):
+            # Three zeros beside "3 passes" reads as a measurement that found nothing,
+            # and it is the absence of a measurement (F40, on the console). It happens
+            # for a real reason: `response_divergence` is cross-cutting, probes declare
+            # it and ground truth does not, so a `score` run given no probe file cannot
+            # find it eligible and compares nothing. Say that, and say the fix.
+            print(
+                "  variance            "
+                f"{variance['passes']} passes and nothing compared — reproducibility "
+                "was NOT measured"
+            )
+            print(
+                "                      pass --probes: response_divergence is declared "
+                "by the probes, not by the answer key"
+            )
         else:
             print(
                 f"  variance            {variance['passes']} passes: "

@@ -646,6 +646,19 @@ def _variance_summary(
         "divergent": detail.get("divergent", 0),
         "not_comparable": detail.get("not_comparable", 0),
         "status": divergence["status"],
+        # Whether anything was actually compared, rather than left to be inferred from
+        # three zeros. `response_divergence` is cross-cutting: probes declare it and the
+        # answer key does not, so `score` without a probe file finds it NOT_ELIGIBLE and
+        # compares nothing — on a three-pass run, which is precisely when a reader is
+        # looking here. Zero identical, zero stable and zero divergent is what an
+        # unmeasured check and a perfectly-stable one both look like, and F40 says those
+        # two must never print the same.
+        "compared": bool(
+            detail.get("identical", 0)
+            or detail.get("invariant_stable", 0)
+            or detail.get("divergent", 0)
+            or detail.get("not_comparable", 0)
+        ),
         # Named so a consumer does not have to infer the scope of the comparison from
         # the tier table. Divergence is decided on these and nothing else.
         "invariant_checks": detail.get("invariant_checks", []),

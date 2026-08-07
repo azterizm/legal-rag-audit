@@ -3287,3 +3287,73 @@ three recorded targets used the old one. Nothing is re-scored: the three bundles
 measured, and the change applies from here.
 
 901 tests passing.
+
+---
+
+## Phase R — the first reproducibility measurement, and what one pass had hidden
+
+42 probes, three passes, one account, no transport errors. Scored against the same sealed
+key as the single-pass run, pre-commitment still verifying. Bundle in
+`reports/jimini-2026-08-07/three-pass/`.
+
+```
+point_in_time        12 eligible, 11 scored             PASS
+licensed_content      2 eligible,  2 scored             PASS
+response_divergence  14 eligible, 14 scored, 3 failed   FAIL
+variance             3 passes: 0 identical, 11 stable in prose, 3 divergent
+```
+
+**Every run this project has done, against every target, was single-pass.**
+`response_divergence` shipped in the registry and had never once been measured against a
+live system. It has now, and it failed.
+
+### One pass reported this target as fully correct. It is not.
+
+The single-pass run reported eleven of eleven dated questions right, and that was true of
+that pass. `era-124-1` asks for the maximum compensatory award as at **1 January 2012** —
+£68,400, rising to £72,300 a month later on 1 February.
+
+| pass | answered |
+|---|---|
+| 1 | **£68,400**, with the transition explained: *"increased (to £72,300) with effect from 1 February 2012, so on 1 January 2012 the applicable cap was still £68,400"* |
+| 2 | £72,300 |
+| 3 | £72,300 |
+
+The system holds the right answer and the right reasoning and returns them about a third
+of the time. **This is the argument for three passes, and it is the first time the project
+has been able to make it with evidence.** It also means the two earlier targets' clean
+results are worth less than they looked: both single-pass, and a single pass is now known
+to be capable of reporting this product as fully correct on a provision it gets wrong two
+times in three.
+
+The record scores `answered_in_neither_version`, not a failure — £72,300 is neither the
+version in force nor the sealed superseded reading, so containment cannot call it wrong
+(§14.2). The wrong figure is named in the not-captured table, which is what defect 20's
+split was built for. A summary that reads only the finding count misses the most important
+thing in the run, and the bundle says so.
+
+### Two of the three divergences are ours
+
+`era-108-1` and `era-108-2` flip between PASS and NOT_CAPTURED across passes. All six
+answers are legally correct; the wording moves and exact containment loses it. That is the
+anchor retired in Phase Q producing noise in a third form — the strongest possible
+confirmation that retiring it was right, arriving one commit late.
+
+`0 identical` is its own result: no probe returned byte-identical text three times. Eleven
+were stable in outcome while varying in prose, which is what that classification exists to
+separate from the case above.
+
+### Defect 31 — three zeros are not a measurement
+
+The first scoring of this run printed `3 passes: 0 identical, 0 stable in prose, 0
+divergent`. Nothing had been compared: `response_divergence` is cross-cutting, probes
+declare it and the answer key does not, so `score` without `--probes` finds it
+NOT_ELIGIBLE. Zero-zero-zero is also what a perfectly reproducible target looks like, and
+F40 says those two must never print the same. The summary now carries `compared`, and the
+console says which it is and how to fix it.
+
+Found on the first three-pass run the project ever did, which is exactly when a reader
+looks at that line — and had the probe file been passed the first time, it would still be
+there.
+
+905 tests passing.
