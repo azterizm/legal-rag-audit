@@ -772,4 +772,3 @@ without written consent; and configurations named in any published result, never
 | [`SECURITY.md`](SECURITY.md) | Supply chain and release verification |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Tests, the acceptance gates, and cutting a release |
 | `V2_FULL_PLAN.md` | The full specification. **Where it and this README disagree, the plan wins** |
-| `V2_PROGRESS.md` | What has landed, in order |

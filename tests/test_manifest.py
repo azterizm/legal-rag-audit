@@ -197,7 +197,7 @@ def test_the_manifest_records_the_handover_filename_and_not_the_path_to_it(tmp_p
 
     Every other artefact of a run can be anonymous — `report.md` says "the target
     system", `capture_notes` carries `target.pseudonym` or nothing — and this one field
-    put `…/scratchpad/writford/run/handover.json` in the manifest of a report whose whole
+    put `…/scratchpad/<target>/run/handover.json` in the manifest of a report whose whole
     point was that it named nobody. The path was never useful either: it identifies a
     location on the operator's machine, while the digests beside it identify the record.
     """
@@ -668,7 +668,7 @@ def test_the_handover_record_seals_filenames_and_not_paths_to_them(tmp_path):
     get named after clients. Verification never reads these: `verify_pre_commitment`
     takes its paths from the command line and compares digests.
     """
-    secret = tmp_path / "ordalie-engagement"
+    secret = tmp_path / "acme-legal-ai-engagement"
     secret.mkdir()
     _responses, gt, probes = make_run(secret)
 
@@ -676,7 +676,7 @@ def test_the_handover_record_seals_filenames_and_not_paths_to_them(tmp_path):
 
     assert handover.probes.path == "probes.jsonl"
     assert handover.ground_truth.path == "ground_truth.json"
-    assert "ordalie-engagement" not in json.dumps(handover.model_dump(mode="json"))
+    assert "acme-legal-ai-engagement" not in json.dumps(handover.model_dump(mode="json"))
 
 
 def test_a_handover_sealed_from_one_directory_verifies_from_another(tmp_path):

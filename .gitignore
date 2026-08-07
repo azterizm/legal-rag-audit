@@ -39,3 +39,12 @@ venv.bak/
 .env
 
 .legal_rag_audit.log
+
+# The engineering log. Kept locally, never published: it names the live targets
+# beside their findings, and configurations may be named in a published result
+# but products never (docs/authorisation-and-retention.md).
+V2_PROGRESS.md
+
+# Captured run output. Session tokens end up in these.
+output.log
+*.log
