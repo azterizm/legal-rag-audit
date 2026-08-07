@@ -3357,3 +3357,75 @@ looks at that line — and had the probe file been passed the first time, it wou
 there.
 
 905 tests passing.
+
+---
+
+## Phase S — the same question three times, on a second target
+
+Six requests on a fresh Writford account: two probes, three passes. Not a re-run of the
+battery — the free tier is about seven queries, so the run was designed to repeat two
+probes rather than cover fourteen. Bundle in
+`reports/writford-2026-08-06/three-pass-subset/`.
+
+Both probes returned **£751** on 6 August — the *current* limit on a week's pay, given for
+two different provisions at two different past dates. That is the failure the point-in-time
+pair exists to detect, and the open question was whether a wrong answer is stable.
+
+**It is not. Both probes diverged.**
+
+`era-227-1`, as at 1 June 2014, correct answer £464 — £751, then **£468**, then £751.
+`era-186-2`, as at 1 January 2019, correct answer £508 — *"I could not produce a grounded
+answer"*, the same refusal again, then £751.
+
+Three passes, three different behaviours on one question: an honest refusal, an honest
+refusal, and a wrong figure. The refusal is the better answer and which one a user gets is
+a coin toss. On `era-227-1` pass 1 the system says outright that it is giving the
+present-day figure because the historic one is not in its sources — candid, still wrong,
+and a reader skimming for a number takes £751.
+
+### Two targets, two different failures
+
+| | single pass says | three passes say |
+|---|---|---|
+| target C | 11 of 11 dated questions correct | one of them wrong 2 times in 3 |
+| target A | returns the current figure for past dates | *and* not reproducibly — refusal, refusal, wrong figure |
+
+Both are cases where one pass materially misleads, and they mislead in opposite
+directions: C looks better than it is, A looks more consistent than it is. That is a
+stronger pair than either alone, and it is the argument for three passes stated twice.
+
+### Defect 32 — a refusal and a wrong figure printed the same
+
+Scored as first written, the Writford run reported **0 divergent**. `response_divergence`
+compared Tier 1 *status*, and `declined_to_state_a_version` and
+`answered_in_neither_version` are both `NOT_CAPTURED`. Six records, three genuinely
+different behaviours, reported as stable.
+
+This is the rule the project already fixed once. **Defect 21** split declining from
+asserting-something-else for exactly this reason, one phase after **defect 20** split
+`no_version_returned`. The finer signal has existed for two phases and the divergence check
+never looked at it. It does now, and the attestation prints the series in full rather than
+`NOT_CAPTURED → NOT_CAPTURED → NOT_CAPTURED`.
+
+**The first version of the fix was wrong in the other direction**, and that is worth the
+record. It refined every status, so target C's `pit-ca-382-2` — `version_correct` twice and
+`version_correct_with_context` once, i.e. **correct on all three passes** — was reported as
+divergent. §14.2 makes that the release blocker, and the count it produced (4 divergent
+instead of 3) looked like a better finding while being a worse one. Passes are now
+collapsed to `PASS` whatever their flavour; only `NOT_CAPTURED` is refined. Both directions
+carry tests.
+
+Re-scoring target C's three-pass run under the fix leaves the verdict unchanged — 3
+divergent, 11 stable, one finding — and improves what it says: the series now names
+`£72,300` rather than reporting an anonymous status change. No request was re-sent.
+
+### On credentials, and a defect that was not ours
+
+The first Writford attempt returned six 401s in under a second. `auth.type: cookie` sends
+its value as the whole `Cookie:` header verbatim, and a bare JWT has no `name=`, so nothing
+was authenticated and nothing was measured — recorded as six transport errors, which is
+what they were. The cookie's name (`auth_token`, alongside `auth_check=1`) is not in the
+token and could not be guessed without spending quota on a seven-query account. Worth
+noting for the next target: **for cookie auth, capture the header, not the token.**
+
+911 tests passing.

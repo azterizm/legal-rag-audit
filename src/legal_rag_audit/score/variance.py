@@ -20,6 +20,10 @@ Three classifications, from §8.3:
 * **`divergent`** — a Tier 1 invariant outcome changed between passes. A Tier 1 finding
   (`response_divergence`), reported with both texts and the diff.
 
+*What counts as the same outcome* is `signature_of` below, and it is finer than the
+check's status: a refusal and a wrongly-asserted figure are both NOT_CAPTURED and are not
+the same event (defect 32).
+
 And a fourth this module adds, because §8.3's three assume there is something to
 compare: **`not_comparable`** — fewer than two scored passes. It is not `identical`, and
 recording it as such would let a single-pass run read as evidence of stability. Same rule
@@ -119,10 +123,59 @@ def invariant_checks(checks: list[dict[str, Any]]) -> list[str]:
     )
 
 
+def signature_of(record: dict[str, Any]) -> str:
+    """What counts as *the same outcome* for one record on one pass (defect 32).
+
+    Status alone is not enough, and the third live run is why. A target asked the same
+    dated question three times refused twice and then asserted a figure — a wrong one —
+    on the third. All three records are `NOT_CAPTURED`, so a comparison on status called
+    that **stable**. It is the opposite of stable, and *an honest refusal and a wrong
+    figure must not print the same* is the rule this project already fixed once, for
+    `point_in_time`, as defect 21. The split it produced was never wired through to
+    here, so the finer signal existed and nothing looked at it.
+
+    The signature therefore carries, in order of coarseness:
+
+    * `status` — PASS / FAIL / NOT_CAPTURED, as before;
+    * `outcome` — which kind of not-a-pass it was, so declining and asserting-something-
+      else are different events;
+    * `claims_offered` — the values asserted, so two different wrong figures are two
+      different answers rather than one shrug repeated.
+
+    No false-positive risk against a correct system: `claims_offered` is populated only
+    on the neither-version outcome, so a record that passes contributes an empty list
+    and two passing passes still compare equal. A system that answers correctly three
+    times in three different sentences stays `invariant_stable`, which is what §8.3
+    wants and what keeps this check worth reading.
+
+    It is written to be read, not just compared. The signature is what the attestation
+    prints in `PASS → FAIL → PASS`, so a divergence between two flavours of the same
+    status has to say which flavours, or the report would show a probe changing from
+    `NOT_CAPTURED` to `NOT_CAPTURED` and look broken. A record carrying no outcome —
+    every check other than `point_in_time` — renders as the bare status, exactly as it
+    did before this existed.
+    """
+    status = str(record.get("status"))
+    outcome = record.get("outcome")
+    # A pass is a pass, whatever flavour. `point_in_time` distinguishes `version_correct`
+    # from `version_correct_with_context` — an answer that gave the right figure for the
+    # date and also said what it later became — and that check's own stated limit is that
+    # carrying both versions is *more than was asked for, not less*. Refining here would
+    # report a system that answered correctly three times as having diverged, which is
+    # the false positive §14.2 makes the release blocker, and it would pad a real finding
+    # with a non-event. The conflation worth breaking is inside NOT_CAPTURED, where a
+    # refusal and a wrongly-asserted figure look identical.
+    if not outcome or status == "PASS":
+        return status
+    claims = [str(c) for c in (record.get("claims_offered") or [])]
+    inner = f"{outcome}: {', '.join(sorted(claims))}" if claims else str(outcome)
+    return f"{status} ({inner})"
+
+
 def _outcomes_by_pass(
     checks: list[dict[str, Any]], names: list[str]
 ) -> dict[str, dict[int, dict[str, str]]]:
-    """probe_id -> pass_index -> {check: status}."""
+    """probe_id -> pass_index -> {check: signature}."""
     table: dict[str, dict[int, dict[str, str]]] = {}
     wanted = set(names)
     for check in checks:
@@ -135,7 +188,7 @@ def _outcomes_by_pass(
                 continue
             table.setdefault(probe_id, {}).setdefault(pass_index, {})[
                 check["check"]
-            ] = record.get("status")
+            ] = signature_of(record)
     return table
 
 
