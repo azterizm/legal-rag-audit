@@ -27,7 +27,9 @@ from typing import Any
 from ..interchange import Probe
 from .distributions import render as render_distribution
 
-PASS = "PASS"
+# A check outcome, not a credential. Bandit reads any name containing "pass" as a
+# password; this one is the other sense of the word.
+PASS = "PASS"  # nosec B105
 FAIL = "FAIL"
 NOT_ELIGIBLE = "NOT_ELIGIBLE"
 NOT_CAPTURED = "NOT_CAPTURED"

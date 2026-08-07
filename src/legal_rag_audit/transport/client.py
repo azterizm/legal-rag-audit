@@ -279,8 +279,7 @@ class TargetClient:
             if rec_url.startswith("ws://") or rec_url.startswith("wss://"):
                 import websockets
                 import asyncio
-                import json
-                
+
                 safe_headers = {k: v for k, v in rec_headers.items() if k.lower() not in ["connection", "upgrade", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]}
                 
                 # Forward cookies from httpx client to websocket
@@ -503,33 +502,44 @@ class TargetClient:
                         break
                     
                     if data_str:
+                        # Only the decode is guarded, and only against a frame that is
+                        # not JSON — a stream carries comments, keep-alives and a
+                        # provider's own framing alongside the payload, and one of those
+                        # is skipped rather than ending the read.
+                        #
+                        # Everything below the decode is deliberately outside the guard.
+                        # A raise there is a bug in extraction or a config whose paths do
+                        # not fit this target, and swallowing it yields an empty answer
+                        # that reads exactly like a system with nothing to say (F40).
+                        # `generate` records a raise as a transport error, which is the
+                        # honest record of a read that failed.
+                        json_str = self._extract_json_from_string(data_str)
                         try:
-                            import json
-                            json_str = self._extract_json_from_string(data_str)
-                            if json_str:
-                                chunk = json.loads(json_str)
-                            else:
-                                chunk = json.loads(data_str)
-                                
-                            if getattr(self, 'stop_parser', None):
-                                stop_match = self.stop_parser.find(chunk)
-                                if stop_match and str(stop_match[0].value) == getattr(self.config.response_format, 'stop_value', None):
-                                    logger.debug("HTTP stream stopped by strict stop_field match.")
-                                    break
-                                
-                            if self._carries_the_answer(chunk):
-                                match = self.answer_parser.find(chunk)
-                                if match:
-                                    answer_text += match[0].value
+                            chunk = json.loads(json_str if json_str else data_str)
+                        except json.JSONDecodeError:
+                            logger.debug(
+                                "skipping a stream frame that is not JSON: %.120r",
+                                data_str,
+                            )
+                            continue
 
-                            cit_match = self.citations_parser.find(chunk)
-                            if cit_match and isinstance(cit_match[0].value, list):
-                                citations.extend(cit_match[0].value)
-                            if not isinstance(raw_response, list):
-                                raw_response = []
-                            raw_response.append(chunk)
-                        except Exception:
-                            pass
+                        if getattr(self, 'stop_parser', None):
+                            stop_match = self.stop_parser.find(chunk)
+                            if stop_match and str(stop_match[0].value) == getattr(self.config.response_format, 'stop_value', None):
+                                logger.debug("HTTP stream stopped by strict stop_field match.")
+                                break
+
+                        if self._carries_the_answer(chunk):
+                            match = self.answer_parser.find(chunk)
+                            if match:
+                                answer_text += match[0].value
+
+                        cit_match = self.citations_parser.find(chunk)
+                        if cit_match and isinstance(cit_match[0].value, list):
+                            citations.extend(cit_match[0].value)
+                        if not isinstance(raw_response, list):
+                            raw_response = []
+                        raw_response.append(chunk)
             return {
                 "answer": answer_text,
                 "citations": citations,

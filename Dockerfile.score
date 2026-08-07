@@ -55,13 +55,39 @@ COPY src /src/src
 RUN /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
         --no-deps --no-build-isolation /src
 
-RUN /opt/venv/bin/python -m compileall -q /opt/venv/lib
+# -x excludes torch's own test-support tree, and it is not a convenience.
+# `torch/testing/_internal/py312_intrinsics.py` is written in PEP 695 syntax, which this
+# interpreter cannot parse — the file exists to be imported by torch's test suite on
+# 3.12 and above, and is unreachable on 3.11. Without the exclusion `compileall` exits 1
+# on a SyntaxError in a file that will never be imported, and the image does not build.
+#
+# Narrow on purpose. `|| true` would have fixed the build too, and would also have
+# swallowed a genuinely broken module in a scoring dependency — the failure this pass
+# exists to surface early rather than at first import inside a client's run.
+RUN /opt/venv/bin/python -m compileall -q -x 'torch/testing/_internal/' /opt/venv/lib
 
 
 # ---------------------------------------------------------------------------- runtime
 FROM ${BASE}
 
 COPY --from=build /opt/venv /opt/venv
+
+# The installer, out of the artefact. Same reason as Dockerfile.generate, and the same
+# two vendored advisories: the base image's `setuptools` carries private copies of
+# `jaraco.context` and `wheel` that `trivy image` reports against, in code no run
+# reaches. A virtualenv does not put `/usr/local/lib/python3.11/site-packages` on its
+# path at all, so nothing in this image could import these even if it wanted to.
+#
+# `/opt/venv` keeps its `setuptools`: unlike the generate layer, it is a pinned entry in
+# requirements/score.txt — torch asks for it — so removing it would be deleting a
+# declared dependency to make a scanner quieter.
+RUN rm -rf /usr/local/lib/python3.11/site-packages/pip* \
+           /usr/local/lib/python3.11/site-packages/setuptools* \
+           /usr/local/lib/python3.11/site-packages/pkg_resources* \
+           /usr/local/lib/python3.11/site-packages/wheel* \
+           /usr/local/bin/pip* \
+           /opt/venv/lib/python3.11/site-packages/pip* \
+           /opt/venv/bin/pip*
 
 # Both variables, because sentence-transformers has moved which one it honours between
 # versions and a cache that silently lands somewhere else would look like a working

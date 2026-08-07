@@ -181,6 +181,27 @@ fetched from the public registry when the job runs, so a Semgrep result is scope
 rules published that day. The scanner version is pinned and hashed like everything else;
 the ruleset is not.
 
+#### Advisories currently accepted, and why
+
+A green scan with a suppression behind it is worth less than a red one, so the
+suppressions are listed here rather than left in a workflow file.
+
+| Advisory | Package | Layer | Why it is accepted |
+|---|---|---|---|
+| CVE-2026-52870 | `mcp==1.23.3` | audit | Needs `server.experimental.enable_tasks()` on an MCP server |
+| CVE-2026-52869 | `mcp==1.23.3` | audit | Needs an authenticated SSE or Streamable HTTP server transport |
+| CVE-2026-59950 | `mcp==1.23.3` | audit | Needs the deprecated WebSocket server transport |
+
+All three are `semgrep`'s transitive dependency, and all three require running an MCP
+*server*. CI runs `semgrep scan` — a command-line scanner — and never `semgrep mcp`.
+`requirements/audit.txt` is the CI-only layer: no image contains it, and it is not what a
+developer or a target installs. `semgrep==1.172.0`, the newest published, pins
+`mcp==1.23.3` exactly, so there is no version to move to until semgrep releases one.
+
+The exceptions are per-advisory. A fourth finding against `mcp`, or any finding against
+anything else, still fails the build. Nothing is accepted in the `generate`, `score` or
+`dev` layers.
+
 ### CI actions are pinned by commit SHA
 
 Every `uses:` in every workflow is a 40-character commit SHA, never a tag. A tag is a

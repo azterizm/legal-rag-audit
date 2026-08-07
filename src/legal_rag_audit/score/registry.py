@@ -51,6 +51,11 @@ CAPABILITY_HELP = {
 
 NOT_CAPTURED = "NOT_CAPTURED"
 
+#: What `response_divergence` records in the `pass_index` column. Its finding spans the
+#: whole series rather than sitting in one pass, but the row has to address like every
+#: other per-probe row. A pass number, not a password — hence the suppression.
+_SERIES_PASS_INDEX = 1  # nosec B105
+
 
 @dataclass
 class CheckInput:
@@ -725,7 +730,7 @@ def _score_response_divergence(data: CheckInput) -> CheckOutcome:
             "probe_id": result.probe_id,
             # The probe's whole series, so this row addresses the same way as every
             # other per-probe row even though it spans passes rather than sitting in one.
-            "pass_index": 1,
+            "pass_index": _SERIES_PASS_INDEX,
             "status": "FAIL" if result.is_finding else (
                 NOT_CAPTURED
                 if result.classification == variance.NOT_COMPARABLE

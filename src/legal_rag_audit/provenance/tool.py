@@ -28,7 +28,9 @@ an installed wheel outside a checkout legitimately has no commit sha, and record
 distinction NOT_CAPTURED draws for checks (F40).
 """
 
-import subprocess
+# One caller, `_git` below, and its argv is fixed.
+import shutil
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any, Optional
 
@@ -54,9 +56,20 @@ def _git(*args: str) -> Optional[str]:
     to call from inside `score`'s offline enforcement. Every failure mode (no git, no
     checkout, a timeout) is the same answer: we do not know.
     """
+    # Resolved from PATH rather than spelled `git`, and rather than hard-coded to
+    # `/usr/bin/git`: this runs from a wheel, from a checkout and inside two images, and
+    # an absolute path that is right in one of those is wrong in the others. Looking it
+    # up first also makes "git is not installed" an answer we reach without spawning
+    # anything, which is the common case inside the score image.
+    git = shutil.which("git")
+    if git is None:
+        return None
+
+    # No shell, and `args` is never caller data: every call site in this module passes
+    # literals (`rev-parse`, `cat-file`, `status`).
     try:
-        result = subprocess.run(
-            ["git", *args],
+        result = subprocess.run(  # nosec B603
+            [git, *args],
             cwd=_PACKAGE_ROOT,
             capture_output=True,
             text=True,

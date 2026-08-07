@@ -25,7 +25,23 @@ provision rather than the site's furniture.
 
 import logging
 from typing import Iterable, Optional
-from xml.etree import ElementTree
+
+# The stdlib parser, deliberately, and the alternative is a dependency. `defusedxml`
+# would harden this against entity-expansion attacks in a document we did not fetch
+# ourselves. What we fetch is one `data.xml` per anchor reading from `legislation.gov.uk`
+# over TLS, run by an operator refreshing a store — never during `generate` and never
+# during `score`, so no target and no corpus reaches this parser. Adding a sixth library
+# to the layer a target installs, to guard a path a target never executes, would cost
+# more than it buys (docs/design.md, the dependency split). Hence the suppressions —
+# Bandit's inline, Semgrep's on its own line because the two comment forms cannot share
+# one.
+#
+# What the residual risk actually is, since both scanners say "XXE" and that is not it:
+# `ElementTree` does not resolve external entities or retrieve a DTD, so the exposure a
+# reader should weigh is an XML bomb — a denial of service, against an operator running
+# a refresh, from a UK government publisher.
+# nosemgrep: python.lang.security.use-defused-xml.use-defused-xml
+from xml.etree import ElementTree  # nosec B405
 
 from .anchors import ANCHORS, Anchor, Reading
 from .store import Snapshot, Store, snapshot_for
@@ -55,7 +71,8 @@ def text_of(body: bytes) -> str:
     it either contains the phrase or it does not, and the caller checks.
     """
     try:
-        root = ElementTree.fromstring(body)
+        # Trusted source, operator-run path — see the note on the import.
+        root = ElementTree.fromstring(body)  # nosec B314
     except ElementTree.ParseError as e:
         raise IngestError(f"the response was not parseable XML: {e}") from None
     return " ".join(part.strip() for part in root.itertext() if part and part.strip())

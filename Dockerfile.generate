@@ -72,6 +72,36 @@ FROM ${BASE}
 
 COPY --from=build /opt/venv /opt/venv
 
+# The installer, out of the artefact.
+#
+# `pip`, `setuptools`, `wheel` and `pkg_resources` are not in requirements/generate.txt.
+# They arrive twice for reasons that have nothing to do with this project: once because
+# `python:3.11-slim` ships them, and once because `python -m venv` seeds them. Nothing in
+# the fourteen packages of the generate layer imports any of them, and the entry point is
+# a plain console script, so at run time they are inventory rather than software.
+#
+# That inventory is not free. `setuptools` carries a private copy of a dozen libraries
+# under `_vendor/`, and `trivy image` reports advisories against those copies — the
+# generate image failed on CVE-2026-23949 in a vendored `jaraco.context` and
+# CVE-2026-24049 in a vendored `wheel`, both in code no run reaches. Deleting the
+# packages is the honest fix rather than an ignore rule, because the finding is real
+# about the image even though it is unreachable in it, and the reason a client is asked
+# to accept it would otherwise be our word.
+#
+# The other half is deliberate: an image with no installer cannot have anything added to
+# it at run time. For the artefact somebody else is asked to run against their own
+# system, that is the property to want.
+RUN rm -rf /usr/local/lib/python3.11/site-packages/pip* \
+           /usr/local/lib/python3.11/site-packages/setuptools* \
+           /usr/local/lib/python3.11/site-packages/pkg_resources* \
+           /usr/local/lib/python3.11/site-packages/wheel* \
+           /usr/local/bin/pip* \
+           /opt/venv/lib/python3.11/site-packages/pip* \
+           /opt/venv/lib/python3.11/site-packages/setuptools* \
+           /opt/venv/lib/python3.11/site-packages/pkg_resources* \
+           /opt/venv/lib/python3.11/site-packages/wheel* \
+           /opt/venv/bin/pip*
+
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

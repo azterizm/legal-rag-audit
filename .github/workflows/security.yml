@@ -63,8 +63,27 @@ jobs:
       - name: Audit the dev layer
         run: pip-audit --no-deps -r requirements/dev.txt --progress-spinner off
 
+      # Three exceptions, all against the same package, all in this layer only.
+      #
+      # `semgrep==1.172.0` — the newest published — pins `mcp==1.23.3` exactly, so there
+      # is no version of `mcp` this resolution can move to; the fix is a semgrep release,
+      # not a re-lock. All three advisories are about running an MCP *server*:
+      # CVE-2026-52870 needs `server.experimental.enable_tasks()`, CVE-2026-52869 needs
+      # an authenticated SSE or Streamable HTTP transport, CVE-2026-59950 needs the
+      # deprecated WebSocket server transport. CI runs `semgrep scan`, a CLI, and never
+      # `semgrep mcp`. No image and no lockfile a user installs contains `mcp` —
+      # requirements/audit.txt is CI-only, which is the reason it is a fourth layer.
+      #
+      # Per-ID, never a blanket `--ignore-vuln mcp`: a fourth advisory against this
+      # package still fails the job, and so does one against anything else semgrep
+      # brings in. Recorded in SECURITY.md too — an exception only a workflow file knows
+      # about is an exception nobody reviews. Delete these when semgrep moves.
       - name: Audit the audit layer
-        run: pip-audit --no-deps -r requirements/audit.txt --progress-spinner off
+        run: |
+          pip-audit --no-deps -r requirements/audit.txt --progress-spinner off \
+            --ignore-vuln PYSEC-2026-3481 \
+            --ignore-vuln PYSEC-2026-3482 \
+            --ignore-vuln PYSEC-2026-3483
 
   static-analysis:
     name: static analysis (bandit, semgrep)

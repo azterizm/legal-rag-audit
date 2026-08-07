@@ -60,7 +60,8 @@ from .registry import (
 
 logger = logging.getLogger(__name__)
 
-PASS = "PASS"
+# A check outcome, not a credential. See the same four in attestation.py.
+PASS = "PASS"  # nosec B105
 FAIL = "FAIL"
 NOT_ELIGIBLE = "NOT_ELIGIBLE"
 NOT_CAPTURED = "NOT_CAPTURED"
