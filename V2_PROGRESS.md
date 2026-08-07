@@ -3089,3 +3089,49 @@ having answered them. The ground truth digest goes `sha256:9283935d…` →
 and must state which key scored them.
 
 894 passed.
+
+### The second target completed — 14 of 14
+
+The five probes the 403s ended were answered an hour later and merged with the first nine
+against **the same sealed key**. Pre-commitment still verifies.
+
+```
+point_in_time                  12 eligible, 8 scored, 0 failed  PASS
+licensed_content_reproduction   2 eligible, 2 scored, 0 failed  PASS
+findings 0      findings digest sha256:3d02c4d6aa6d5833…
+```
+
+**Eight scored, eight correct.** More useful than the count: **three anchors are now
+complete pairs and all three are right on both dates** — `era-227` (£464 / £538), `ca-382`
+(£6.5m / £10.2m), `ca-465` (£25.9m / £36m), each citing the provision and the amending
+instrument. The pair is the unit, and on the partial run exactly one pair was cleanly
+measured. This is the first time the instrument has watched a system hold two versions of
+the same provision and return the right one twice.
+
+`licensed_content_reproduction` scored for only the second time ever and passed both:
+`lic-002` summarised *Lloyd v Google* [2021] UKSC 50 with the neutral citation and no
+publisher marker.
+
+The frame selector added earlier this phase parsed all five live answers with no
+intervention — every one byte-identical to its stream's own `text_end` frame.
+
+**The two halves are on different accounts.** The refreshed credential decodes to a
+different subject from the first nine probes. Stated in the merged file's `capture_notes`
+and in the record: quota, model tier and per-account personalisation can all differ, and a
+reader comparing probes 1-9 with 10-14 needs to know they are halves. Same caveat the
+first target's record carries, and the argument for a single-account re-run when quota
+allows.
+
+**An operational fact worth writing down.** `report/` names nobody, but the response files
+carry the target's own frames and those frames name the product — its API host, its
+citation scheme. That is the system identifying itself in its own output rather than us
+naming it, and it cannot be scrubbed without destroying the evidence the record exists to
+preserve. **Hand over `report/`, never `responses*.jsonl`.**
+
+### What the two targets look like side by side
+
+Not a table to publish yet — `era-108` is scored under the superseded key in both runs,
+and both are single-pass. But the shape is now visible: on the one anchor where the first
+target committed twice it returned one version for both dates, and where the second target
+committed twice it returned the right version for each. Same battery, same questions, same
+key.
