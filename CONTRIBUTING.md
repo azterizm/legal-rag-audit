@@ -90,6 +90,27 @@ builds anything — a pipeline that builds first has already spent its provenanc
 unverified commit — then attests, signs and publishes. Anyone can check the result with
 `./scripts/verify_release.sh v0.2.0`.
 
+**The first release creates two GHCR packages, and a new GHCR package is private.** The
+push, the attestation and the signatures all succeed; the pull in `docs/hardened-run.md`
+then fails for everyone who is not the owner, which reads exactly like a broken release.
+After the first tag, set both packages to public in their package settings. Nothing in the
+workflow can do this and nothing will warn about it — the images are linked back to this
+repository by the `org.opencontainers.image.source` label in each Dockerfile.
+
+**Do not cut a release under a name you might change.** The cosign certificate records the
+identity `https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/<tag>`,
+and that string is fixed in the certificate at signing time. Rename the repository
+afterwards and `verify_release.sh` looks for an identity that no longer matches, so a
+genuine release fails verification. The escape hatch is `LEGAL_RAG_AUDIT_REPO`, which
+overrides the slug the verifier checks against:
+
+```bash
+LEGAL_RAG_AUDIT_REPO=owner/old-name ./scripts/verify_release.sh v0.2.0
+```
+
+A reader has no way to guess that, so a rename after a release needs a note in
+`SECURITY.md` saying which releases were signed under which name.
+
 `internal_experiments/` is not installed, not imported, not collected by pytest and not
 copied into the image. Read `internal_experiments/README.md` before touching anything in
 it.

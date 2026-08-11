@@ -14,6 +14,7 @@ Fast: no network, no install, no build. These are file reads.
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -452,6 +453,136 @@ def test_security_md_states_the_package_counts_the_lockfiles_actually_have():
         assert int(row.group(1)) == len(names), (
             f"SECURITY.md says the {layer} layer is {row.group(1)} packages; the "
             f"lockfile has {len(names)}"
+        )
+
+
+# ------------------------------------------------------- the repository has one name
+
+
+#: Where the repository's own slug is written out by hand rather than derived.
+#:
+#: `release.yml` derives every image name from `${{ github.repository }}`, so the
+#: *published* path follows a rename on its own. Nothing else does. Each of these is a
+#: copy that a rename has to be told about, and a copy that is not told goes on being
+#: read: `docs/hardened-run.md` hands a reader a `docker run` line, the Dockerfile label
+#: is what links a GHCR package back to a repository, and `verify_release.sh`'s fallback
+#: decides which repository a stranger's verification is aimed at.
+#:
+#: The failure this guards is a *partial* rename, which is the likely one. A repository
+#: renamed on GitHub keeps redirecting, CI stays green, and the stale copies keep
+#: printing an image path that was never published and a verification target that is not
+#: this project.
+_SLUG_RE = r"(?P<slug>[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*)"
+
+SLUG_SITES = (
+    ("Dockerfile.generate", rf"image\.source=\"https://github\.com/{_SLUG_RE}\""),
+    ("Dockerfile.score", rf"image\.source=\"https://github\.com/{_SLUG_RE}\""),
+    ("scripts/verify_release.sh", rf"LEGAL_RAG_AUDIT_REPO:-{_SLUG_RE}\}}"),
+    ("scripts/gen_sbom.py", rf"PROJECT_URL = \"https://github\.com/{_SLUG_RE}\""),
+    ("docs/hardened-run.md", rf"ghcr\.io/{_SLUG_RE}-(?:generate|score)"),
+    ("README.md", rf"https://github\.com/{_SLUG_RE}/actions/"),
+    ("SECURITY.md", rf"https://github\.com/{_SLUG_RE}/actions/"),
+    ("CONTRIBUTING.md", rf"git clone https://github\.com/{_SLUG_RE}"),
+)
+
+
+def _slugs_written_by_hand() -> dict[str, set[str]]:
+    found: dict[str, set[str]] = {}
+    for name, pattern in SLUG_SITES:
+        path = REPO_ROOT / name
+        assert path.exists(), f"{name} is missing, so its copy of the slug cannot agree"
+        matches = {
+            m.group("slug")
+            for m in re.finditer(pattern, path.read_text(encoding="utf-8"))
+        }
+        assert matches, (
+            f"{name} no longer states the repository slug in the shape this test reads "
+            f"({pattern!r}). Either the file changed or the guard did — do not delete "
+            f"the assertion to make it pass"
+        )
+        found[name] = matches
+    return found
+
+
+def test_every_hand_written_copy_of_the_repository_slug_agrees():
+    """One repository, one name, in eight files that each spell it out.
+
+    A rename is nearly always applied to the places somebody greps for and missed in one
+    or two. Nothing else in the build would notice: the workflows derive their paths, the
+    tests do not read these strings, and GitHub redirects the old URL — so the only
+    symptom is a reader following a documented `docker pull` to an image that does not
+    exist.
+    """
+    found = _slugs_written_by_hand()
+    distinct = {slug for slugs in found.values() for slug in slugs}
+    assert len(distinct) == 1, (
+        "the repository is named more than one thing across its own files, which means "
+        f"a rename was applied in some of them and not others: {json.dumps({k: sorted(v) for k, v in found.items()}, indent=2)}"
+    )
+
+
+def test_the_slug_the_documents_use_is_the_repository_they_are_in():
+    """Eight files agreeing on the wrong name is still the wrong name.
+
+    The check above proves consistency. This one anchors it to something outside the
+    files — the remote the checkout came from — which is the only thing that can catch a
+    rename nobody has applied anywhere yet.
+    """
+    try:
+        origin = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as e:  # pragma: no cover - no git here
+        pytest.skip(f"git is not usable here, so there is no remote to compare to: {e}")
+
+    if origin.returncode != 0:
+        pytest.skip("this checkout has no origin remote to compare the slug against")
+
+    match = re.search(
+        rf"github\.com[:/]{_SLUG_RE}?(?:\.git)?$", origin.stdout.strip()
+    )
+    if not match:
+        pytest.skip(f"origin is not a GitHub remote: {origin.stdout.strip()!r}")
+
+    expected = match.group("slug").removesuffix(".git")
+    written = {slug for slugs in _slugs_written_by_hand().values() for slug in slugs}
+    assert written == {expected}, (
+        f"this checkout came from {expected!r}, but its own files call the project "
+        f"{sorted(written)}. A rename was applied to the remote and not to the "
+        f"repository, or the other way round"
+    )
+
+
+def test_the_published_image_path_is_derived_and_never_typed():
+    """`release.yml` must follow a rename rather than have to be told about one.
+
+    Every image name, attestation subject and cosign target comes from
+    `${{ github.repository }}`. Typing the slug there would put the one copy that decides
+    what actually gets pushed out of reach of the check above — and it would be the copy
+    nobody notices is wrong, because a push to a fresh GHCR path succeeds.
+    """
+    release = (WORKFLOW_DIR / "release.yml").read_text(encoding="utf-8")
+
+    # To end of line, not `\S+` — the expression this insists on has a space in it.
+    ghcr = [ref.strip() for ref in re.findall(r"ghcr\.io/(.+)", release)]
+    assert ghcr, "release.yml publishes no image"
+    for ref in ghcr:
+        assert ref.startswith("${{ github.repository }}"), (
+            f"release.yml names an image path literally: ghcr.io/{ref}. It must be "
+            f"derived from ${{{{ github.repository }}}} so a rename cannot leave the "
+            f"workflow publishing to the old path"
+        )
+
+    # The suffixes are the other half: docs/hardened-run.md writes them out, and a reader
+    # copying that line has to land on something release.yml actually pushed.
+    for suffix in ("-generate", "-score"):
+        assert f"ghcr.io/${{{{ github.repository }}}}{suffix}" in release, (
+            f"release.yml no longer publishes an image ending {suffix}, which "
+            f"docs/hardened-run.md tells people to pull"
         )
 
 
