@@ -1,7 +1,7 @@
 # Development
 
 ```bash
-git clone https://github.com/azterizm/legal-audit-rag && cd legal-audit-rag
+git clone https://github.com/azterizm/legal-rag-audit && cd legal-rag-audit
 ```
 
 ---

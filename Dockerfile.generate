@@ -132,4 +132,4 @@ CMD ["--help"]
 # bytes, which is the weaker half of what §12.5 is for.
 LABEL org.opencontainers.image.title="legal-rag-audit (generate)" \
       org.opencontainers.image.description="Probe generation and Tier 1 scoring. No ML stack: five pure-Python dependencies — the set a target installs." \
-      org.opencontainers.image.source="https://github.com/azterizm/legal-audit-rag"
+      org.opencontainers.image.source="https://github.com/azterizm/legal-rag-audit"

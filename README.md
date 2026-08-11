@@ -351,7 +351,7 @@ The full position, with the command next to every claim, is in
 |---|---|---|
 | What is in it? | CycloneDX 1.6 SBOM per layer, in [`sbom/`](sbom/) | `python3 scripts/gen_sbom.py --check` |
 | Are the bytes fixed? | Every entry `==` and hashed | `python3 scripts/check_pins.py` |
-| Is it scanned? | `pip-audit`, Bandit, Semgrep, Trivy — weekly and on push, with `trivy image` run separately per image | [the runs](https://github.com/azterizm/legal-audit-rag/actions/workflows/security.yml) |
+| Is it scanned? | `pip-audit`, Bandit, Semgrep, Trivy — weekly and on push, with `trivy image` run separately per image | [the runs](https://github.com/azterizm/legal-rag-audit/actions/workflows/security.yml) |
 | Who published this release? | GPG-signed tag, verified before the build starts | `./scripts/verify_release.sh <tag>` |
 | Was it built from that commit? | SLSA provenance from a public workflow | same script |
 | Is this the same file? | Cosign signature in the public Rekor log | same script |

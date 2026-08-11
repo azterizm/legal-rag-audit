@@ -34,7 +34,7 @@
 set -euo pipefail
 
 TAG="${1:-}"
-REPO="${LEGAL_RAG_AUDIT_REPO:-azterizm/legal-audit-rag}"
+REPO="${LEGAL_RAG_AUDIT_REPO:-azterizm/legal-rag-audit}"
 WORKDIR="${2:-}"
 
 if [ -z "${TAG}" ]; then

@@ -58,7 +58,7 @@ SCHEMA_URL = "http://cyclonedx.org/schema/bom-1.6.schema.json"
 #: standard URL namespace, so the derivation is one a stranger can repeat with the
 #: standard library and no reference to this file.
 SERIAL_NAMESPACE = uuid.NAMESPACE_URL
-PROJECT_URL = "https://github.com/azterizm/legal-audit-rag"
+PROJECT_URL = "https://github.com/azterizm/legal-rag-audit"
 
 REQUIREMENT_RE = re.compile(
     r"^(?P<name>[A-Za-z0-9_.\-]+)\s*==\s*(?P<version>[^\s;\\]+)"

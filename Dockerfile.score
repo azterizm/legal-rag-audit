@@ -135,4 +135,4 @@ CMD ["--help"]
 
 LABEL org.opencontainers.image.title="legal-rag-audit (score)" \
       org.opencontainers.image.description="Offline scoring, both tiers. Carries the ML stack; not the image a target is asked to run." \
-      org.opencontainers.image.source="https://github.com/azterizm/legal-audit-rag"
+      org.opencontainers.image.source="https://github.com/azterizm/legal-rag-audit"

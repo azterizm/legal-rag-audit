@@ -33,7 +33,7 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   -v "$PWD/in:/in:ro" -v "$PWD/out:/out" \
-  ghcr.io/azterizm/legal-audit-rag-generate@sha256:… \
+  ghcr.io/azterizm/legal-rag-audit-generate@sha256:… \
   generate -c /in/config.yaml -o /out/responses.jsonl
 ```
 
@@ -48,7 +48,7 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   -v "$PWD/out:/out" -v "$PWD/models:/models:ro" \
-  ghcr.io/azterizm/legal-audit-rag-score@sha256:… \
+  ghcr.io/azterizm/legal-rag-audit-score@sha256:… \
   score --responses /out/responses.jsonl --ground-truth /out/ground_truth.json \
         --probes /out/probes.jsonl -o /out/report
 ```
@@ -69,7 +69,7 @@ docker run --rm --network=none \
   --user "$(id -u):$(id -g)" \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   -v "$PWD/out:/out" \
-  ghcr.io/azterizm/legal-audit-rag-generate@sha256:… \
+  ghcr.io/azterizm/legal-rag-audit-generate@sha256:… \
   plant -o /out/planted
 ```
 
@@ -165,7 +165,7 @@ Populate a cache once, then mount it read-only:
 ```bash
 mkdir -p models
 docker run --rm -e HF_HUB_OFFLINE=0 -v "$PWD/models:/models" \
-  --entrypoint python ghcr.io/azterizm/legal-audit-rag-score@sha256:… -c \
+  --entrypoint python ghcr.io/azterizm/legal-rag-audit-score@sha256:… -c \
   "from sentence_transformers import CrossEncoder, SentenceTransformer; \
    SentenceTransformer('all-MiniLM-L6-v2'); \
    CrossEncoder('cross-encoder/nli-deberta-v3-base')"

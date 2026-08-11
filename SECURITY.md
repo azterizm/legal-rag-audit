@@ -160,7 +160,7 @@ again). Both absences are recorded inside each document rather than left to be n
 
 ### Continuous scanning, with linkable runs
 
-[**Security workflow runs →**](https://github.com/azterizm/legal-audit-rag/actions/workflows/security.yml)
+[**Security workflow runs →**](https://github.com/azterizm/legal-rag-audit/actions/workflows/security.yml)
 
 | Tool | Scope |
 |---|---|
