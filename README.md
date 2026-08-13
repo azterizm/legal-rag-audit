@@ -100,9 +100,10 @@ quoted from `legislation.gov.uk`.
 
 It found things. Without naming products, which is the standing rule here:
 
-- A dated question about a figure **one month before it changed** defeated all three, in
-  three different ways — one returned the superseded figure, one returned the figure that
-  took effect a month later, one returned both at once.
+- A dated question about a figure **one month before it changed** exposed three distinct
+  behaviors across repeat runs — one returned the figure that took effect a month later,
+  one produced conversational routing dropouts, and one returned both the historical and
+  future rate with the transition explained.
 - One product answered a dated question correctly on one pass of three and wrongly on the
   other two, **holding the right reasoning on the pass where it was right**. A single-pass
   audit would have reported it as correct on that provision.

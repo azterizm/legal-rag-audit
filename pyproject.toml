@@ -7,10 +7,20 @@ name = "legal-rag-audit"
 version = "0.1.0"
 description = "Endpoint-based evaluation harness for legal RAG systems"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Abdullah Memon", email = "abdullah@memonsystems.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 
 # Exact pins, not ranges. A report is reproducible only if the software that produced it
 # can be reconstructed, so "whatever resolved on the day you installed" is not a
@@ -34,6 +44,11 @@ dependencies = [
     "PyYAML==6.0.3",
     "websockets==17.0.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/azterizm/legal-rag-audit"
+Repository = "https://github.com/azterizm/legal-rag-audit"
+Documentation = "https://github.com/azterizm/legal-rag-audit#readme"
 
 [project.scripts]
 legal-rag-audit = "legal_rag_audit.cli:main"
