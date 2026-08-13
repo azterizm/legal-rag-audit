@@ -48,7 +48,17 @@ Every report leads with Tier 1 evidence. Tier 2 provides supporting semantic con
 
 ## Installation
 
-Install using hash-pinned lockfiles:
+### Standard PyPI Install (Recommended)
+
+```bash
+# Lightweight generation, validation, and planting (pure-Python, zero ML dependencies)
+pip install legal-rag-audit
+
+# Full installation including local offline scoring models (CPU-only)
+pip install "legal-rag-audit[score]"
+```
+
+### Hash-Verified Source Install (Auditable / Production Runs)
 
 ```bash
 # Full scoring installation (includes local CPU ML models)
@@ -56,6 +66,19 @@ pip install --require-hashes -r requirements/score.txt && pip install --no-deps 
 
 # Lightweight generation/validation installation (pure-Python, no ML stack)
 pip install --require-hashes -r requirements/generate.txt && pip install --no-deps -e .
+```
+
+### Editable Development Install
+
+```bash
+git clone https://github.com/azterizm/legal-rag-audit.git
+cd legal-rag-audit
+
+# Full development environment with local scoring dependencies
+pip install -e ".[score]"
+
+# Generation and validation only (pure-Python)
+pip install -e .
 ```
 
 ### Dependency Layers
