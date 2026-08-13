@@ -38,7 +38,7 @@ system, that policy can be honoured in full:
 3. We score it offline.
 
 Nothing of ours executes anywhere near your endpoint. This is
-[§5.1.1 of the plan](V2_FULL_PLAN.md) and it is asserted structurally rather than
+specified in [`docs/design.md`](docs/design.md) and it is asserted structurally rather than
 promised: `tests/test_dependency_boundary.py` runs `plant → hash → score` in an
 environment with `httpx` uninstalled, and CI runs the same route inside an empty network
 namespace where a socket call fails rather than resolving.

@@ -4,8 +4,6 @@ The README says what the tool does. This says why each of the awkward decisions 
 because every one of them costs something and a reader who does not know the cost cannot
 tell a considered design from an arbitrary one.
 
-Where this document and `V2_FULL_PLAN.md` disagree, the plan wins.
-
 ---
 
 ## The dependency split
@@ -160,6 +158,32 @@ in a Tier 1 scoring path.
 
 ---
 
+## Evaluator boundaries and dependency design
+
+### Citation integrity scoring boundaries
+
+`citation_integrity` scores two of the three counters in the specification:
+1. Document identifiers that resolve to nothing.
+2. Document identifiers that resolve to a document holding none of the probe's planted facts.
+
+The third counter — *this authority does not exist* — is deliberately **not scored**. Verifying non-existence requires an exhaustive register of primary legal authorities. Scoring against an incomplete bundled register would risk alleging fabrication against a target based on missing benchmark entries.
+
+### Latency measurement parameters
+
+`latency` has no pass/fail condition. It reports TTFB and total duration as distributions with median and p95. A large disparity between TTFB and total duration may indicate regeneration or filtering; in the report this is classified as `By design` inference alongside alternative explanations (slow retrieval, cold caches, network throttling). It is never entered into the defect findings table.
+
+### Exact dependency pinning without version ranges
+
+Version ranges are omitted across all configuration files. Third-party reproducibility requires reconstructing identical environments from the manifest and signed commits. Version ranges allow unpinned transitive updates, converting security audits into statements about installation date rather than the committed artefact (as occurred with `idna` 3.11 / PYSEC-2026-215).
+
+With `--require-hashes`, substituted or modified packages fail installation immediately.
+
+### Security scanner isolation
+
+Security scanners (`pip-audit`, Bandit, Semgrep, Trivy) are isolated in a dedicated fourth layer (`requirements/audit.txt`) rather than merged into development dependencies. This prevents transitive package explosion in standard contributor workflows while maintaining strict CI gating.
+
+---
+
 ## Capability map
 
 The v2 migration is complete: every capability below is in the code, and the table is kept
@@ -210,3 +234,22 @@ Two sections of the attestation are deliberately left for a person to write: the
 representation delta needs their published claims quoted with a URL and a date, and the
 mechanism section needs an architectural reading this diagnostic cannot make. Generating
 either would be the failure the tool exists to measure in other people's systems.
+
+---
+
+## Field evaluations and empirical instrument revisions
+
+The existing-corpus battery has been executed against live production legal-AI products under ordinary-use conditions (unauthenticated public or trial access, no adversarial uploads, no canaries, scoring against statutory quotations from `legislation.gov.uk`).
+
+### Target findings observed in field runs
+
+- **Temporal transition edge-cases**: Probes targeting statutory figures one month prior to legislative amendment exposed divergent behaviors: anticipating future rates prematurely, conversational routing dropouts, and explanatory dual-version returns.
+- **Non-reproducible reasoning**: Single-pass correctness masked underlying instability where identical dated questions failed on subsequent passes despite sound reasoning on the successful pass.
+- **Transport-level dropouts**: Systems returned conversational greetings in place of substantive answers across multiple passes despite verified payload delivery.
+- **Generative phrasing variance vs. divergence**: Stable multi-system responses with differing prose were verified as invariant-stable without triggering false divergence findings.
+
+### Instrument modifications derived from field data
+
+1. **Prose anchor retirement**: Free-form prose anchors were replaced with strict invariant tokens after semantically identical correct answers scored false negatives due to paraphrase variations.
+2. **Jurisdiction scoping for licensed content**: Jurisdictional qualifiers were added to licensed-content probes to prevent multi-jurisdictional engines from answering via foreign statutes and passing.
+3. **Native asynchronous transport support**: Submit-and-poll async transport was implemented natively to eliminate wrapper scripts.

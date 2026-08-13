@@ -208,3 +208,23 @@ string**. Both halves are required and the loader refuses one alone.
 Exhausting `poll_timeout_seconds` raises, and `generate` records the raise as a transport
 error. An answer that never arrived is a failed measurement, not an empty one — returning
 `""` would write a record that reads exactly like a system with nothing to say.
+
+---
+
+## Validation Diagnostics
+
+`legal-rag-audit validate -c config.yaml` dispatches three neutral throwaway queries without touching battery probes or answer keys. It prints raw response payloads alongside extracted fields.
+
+The table below catalogs the failure modes identified during validation and their consequence if left uncorrected:
+
+| Condition | Consequence in Unvalidated Run |
+|---|---|
+| 401 / 403 Authentication Rejection | Empty extracted answers; falsely scored as abstentions on a target that never processed the query. |
+| 429 Rate Limiting | Probe drops interpreted as target non-determinism rather than client rate exhaustion. |
+| Non-terminating Stream | Timeout failure or truncated answer scored as a complete response. |
+| Unresponsive WebSocket Handshake | Empty probe responses with zero transport diagnosis. |
+| Upload Omitting Document Identifier | Unresolved document IDs; silently disables citation integrity checks. |
+| High Latency Profile | Unanticipated runtime exhaustion during battery execution. |
+| Empty JSONPath Extraction | Empty answers scored as hallucinations; validation analyzes body structures and suggests candidate JSONPaths. |
+
+Validation exits with code `0` (clean setup) or `2` (configuration defect). It never emits code `1` (which is reserved for evaluation findings).

@@ -98,8 +98,8 @@ legal-rag-audit generate -c config.yaml --probes-in run/probes.jsonl -o response
 
 What it gives up is everything planting buys — no canaries, no injection payloads, no
 contradiction pairs. What it gives back is ground truth nobody has to take our word for,
-and findings that cannot be dismissed as synthetic. [§9.1 says to run
-both](../V2_FULL_PLAN.md); each covers the other's weakness.
+and findings that cannot be dismissed as synthetic. [Verification runs
+both](harness-verification.md); each covers the other's weakness.
 
 Two checks live only here:
 
