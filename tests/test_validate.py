@@ -630,9 +630,7 @@ def test_suggestions_are_stable_for_the_same_body():
 
 def test_the_raw_body_is_printed_before_our_reading_of_it(target):
     printed = render(validate(config_for(target()), timeout=5.0))
-    assert printed.index("Raw response") < printed.index(
-        "Extracted by the configured paths"
-    )
+    assert printed.index("    raw:") < printed.index("    extracted:")
 
 
 def test_candidates_are_labelled_as_guesses(target):

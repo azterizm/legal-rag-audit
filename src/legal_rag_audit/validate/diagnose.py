@@ -56,10 +56,9 @@ def auth_rejected(status: int, probe_id: str, token_env: Optional[str]) -> Diagn
         title=f"The target refused the request: HTTP {status}",
         saw=f"{status} on a neutral query. No answer was returned.",
         mistaken_for=(
-            "an empty answer. Half the battery reads an empty answer as the system "
-            "failing to produce something it should have — so a wrong token becomes "
-            "a page of hallucination and abstention findings about a system that "
-            "never saw a single question."
+            "an empty answer, which half the battery scores as a failure to produce "
+            "something — a page of hallucination and abstention findings about a "
+            "system that never saw a question."
         ),
         remedy=where,
         probe_id=probe_id,
@@ -73,15 +72,12 @@ def rate_limited(status: int, probe_id: str, retry_after: Optional[str]) -> Diag
         title=f"The target rate-limited three neutral queries: HTTP {status}",
         saw=f"{status} within the first three requests.{wait}",
         mistaken_for=(
-            "non-determinism. Some probes answer and some do not, the same probe "
-            "answers on one pass and not the next, and the variance pass reports a "
-            "system whose behaviour changes between identical questions (§8.3). It "
-            "does not — ours does."
+            "non-determinism: the variance pass (§8.3) reports a target whose "
+            "answers change between identical questions. Ours changed, not theirs."
         ),
         remedy=(
-            "raise the limit for the run window, or agree a rate with the target and "
-            "reduce `battery.passes`. Three queries is the floor; the battery is "
-            "considerably more than three."
+            "raise the limit for the run window, or agree a rate and reduce "
+            "`battery.passes`. Three queries is the floor; the battery is far more."
         ),
         probe_id=probe_id,
     )
@@ -105,15 +101,12 @@ def stream_never_terminated(
             f"target's terminator. {how}."
         ),
         mistaken_for=(
-            "a timeout scored as a failure — or worse, a truncated answer scored as "
-            "a complete one. An answer cut off mid-sentence is missing whatever it "
-            "was about to say, and every check that reads for a token that should be "
-            "present would record its absence as a finding."
+            "a timeout scored as a failure, or a truncated answer scored as a "
+            "complete one — every token cut off mid-sentence becomes a finding."
         ),
         remedy=(
-            "set `response_format.stop_payload_match` to a string that appears only "
-            "in the final frame, or `stop_field`/`stop_value` for a structured "
-            "terminator. The frames above are printed so you can pick one."
+            "set `response_format.stop_payload_match` to a string unique to the "
+            "final frame, or `stop_field`/`stop_value`. Pick one from the frames above."
         ),
         probe_id=probe_id,
     )
@@ -128,15 +121,13 @@ def answer_never_arrived(probe_id: str, seconds: float, polls: int) -> Diagnosis
             f"configured answer path never matched anything that came back."
         ),
         mistaken_for=(
-            "every probe empty, and from there a system that declines to answer its "
-            "own documentation. A decoupled endpoint that is slower than we wait is "
-            "not the same as one that says nothing."
+            "every probe empty, then a target that declines to answer. Slower than "
+            "we wait is not the same as silent."
         ),
         remedy=(
-            "raise `--timeout` if the target is simply slow — and if it is this slow, "
-            "read the run-length projection below before starting. If the answer "
-            "arrives somewhere other than `endpoints.receive`, that is the key to "
-            "change."
+            "raise `--timeout`, and read the run-length projection below before "
+            "starting. If the answer lands somewhere other than `endpoints.receive`, "
+            "that is the key to change."
         ),
         probe_id=probe_id,
     )
@@ -148,14 +139,13 @@ def handshake_failed(probe_id: str, url: str, detail: str) -> Diagnosis:
         title="The websocket connected but produced nothing",
         saw=f"{detail} ({url}).",
         mistaken_for=(
-            "a total run failure with no diagnosis: every probe empty, every check "
-            "reading it as the system declining to answer. The handshake is the "
-            "least visible part of the config and the most likely to be wrong."
+            "a whole run empty with no diagnosis. The handshake is the least "
+            "visible part of the config and the most likely to be wrong."
         ),
         remedy=(
             "`endpoints.receive.init_message` is the subscription frame the target "
-            "expects before it will send anything. Compare what is configured with "
-            "what their own client sends on connect."
+            "wants before it sends anything. Compare it with what their own client "
+            "sends on connect."
         ),
         probe_id=probe_id,
     )
@@ -167,16 +157,14 @@ def upload_no_identifier(returned: str) -> Diagnosis:
         title="The upload endpoint returned no document identifier",
         saw=f"The upload succeeded and the body carried no usable `id`: {returned}",
         mistaken_for=(
-            "nothing at all, which is the problem. Citation integrity tests whether "
-            "a cited document id is in the set the target issued at upload (§8.2 #2). "
-            "With no identifiers there is no set, the check is NOT_CAPTURED, and the "
-            "report is quietly one Tier 1 check shorter than it looks."
+            "nothing at all, which is the problem: citation integrity has no id set "
+            "to test against (§8.2 #2), goes NOT_CAPTURED, and the report is one "
+            "Tier 1 check shorter than it looks."
         ),
         remedy=(
-            "if the target does return an id under another key, there is no config "
-            "for that yet — say so and we will add it. If it genuinely issues none, "
-            "the run is still worth doing and citation integrity will be reported as "
-            "not captured rather than passed (F40)."
+            "if the id is under another key there is no config for it yet — say so. "
+            "If none is issued the run is still worth doing: citation integrity is "
+            "reported not captured, never passed (F40)."
         ),
         blocking=ADVISORY,
     )
@@ -213,9 +201,8 @@ def answer_not_extracted(
         title="The configured answer path extracted nothing",
         saw=saw,
         mistaken_for=(
-            "a hallucination, or an abstention, or a system that returns nothing — "
-            "this is the leading cause of false positives in this method (§7.1), and "
-            "a false positive in a delivered report is not recoverable."
+            "a hallucination, an abstention, or a silent system — the leading cause "
+            "of false positives in this method (§7.1), and one is not recoverable."
         ),
         remedy=remedy,
         probe_id=probe_id,
@@ -238,9 +225,8 @@ def citations_not_extracted(path: str, candidates: list[str]) -> Diagnosis:
         title="The configured citations path extracted nothing",
         saw=f"`{path}` matched no list in any of the three responses.",
         mistaken_for=(
-            "a system that cites nothing. It may well be — but the report should say "
-            "citations were not captured, not that none were made, and it cannot tell "
-            "those apart from here."
+            "a target that cites nothing. It may be — but not captured and none "
+            "made are different claims, and this cannot tell them apart."
         ),
         remedy=remedy,
         blocking=ADVISORY,
@@ -253,9 +239,8 @@ def unreachable(probe_id: str, url: str, error: str) -> Diagnosis:
         title="The request never completed",
         saw=f"{error} ({url}).",
         mistaken_for=(
-            "every probe recorded as a transport error. Scoring reads those as "
-            "NOT_CAPTURED and reports nothing about the system, which is correct and "
-            "also a wasted engagement."
+            "every probe a transport error — scored NOT_CAPTURED, reporting nothing "
+            "about the target. Correct, and a wasted engagement."
         ),
         remedy=(
             "check the URL, the network path from this machine, and whether the "
@@ -271,8 +256,8 @@ def bad_status(status: int, probe_id: str) -> Diagnosis:
         title=f"The target returned HTTP {status} to a neutral query",
         saw=f"{status}. The body is printed above.",
         mistaken_for=(
-            "an empty answer, and from there a finding about a system that returned "
-            "an error to a question about itself."
+            "an empty answer, then a finding about a target that errored on a "
+            "question about itself."
         ),
         remedy=(
             "the body above usually names the cause — a missing field in "
@@ -292,13 +277,12 @@ def run_too_long(median_ms: int, probes: int, passes: int, hours: float) -> Diag
             f"{'pass' if passes == 1 else 'passes'}, run one at a time."
         ),
         mistaken_for=(
-            "nothing, until hour three. It is not a defect in anything — it is a fact "
-            "about the engagement that is much cheaper to know now."
+            "nothing, until hour three. Not a defect — a fact about the engagement, "
+            "much cheaper to know now."
         ),
         remedy=(
-            "agree the window with the target before starting, or reduce "
-            "`battery.passes` — at one pass reproducibility is not measured and the "
-            "report says so (§8.3), which is a real cost and a defensible trade."
+            "agree the window before starting, or reduce `battery.passes` — at one "
+            "pass reproducibility is not measured and the report says so (§8.3)."
         ),
         blocking=ADVISORY,
     )

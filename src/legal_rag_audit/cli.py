@@ -113,6 +113,7 @@ def _abort(message: str) -> int:
 
 def cmd_generate(args: argparse.Namespace) -> int:
     from .generate import GenerationError, generate
+    from .transport.client import AuthTokenMissing
 
     try:
         config = AuditConfig.load_from_yaml(args.config)
@@ -139,6 +140,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
         return _abort(f"Refusing to run, and nothing was sent:\n{e}")
     except CorpusError as e:
         return _abort(f"Corpus setup failed, aborting before any request was sent:\n{e}")
+    except AuthTokenMissing as e:
+        return _abort(str(e))
     except GenerationError as e:
         return _abort(f"Generation failed, no response file written:\n{e}")
 
@@ -148,6 +151,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 def cmd_validate(args: argparse.Namespace) -> int:
     """Three neutral probes, the raw body, the extraction, the diagnoses. Exit 0 or 2."""
+    from .transport.client import AuthTokenMissing
     from .validate import render, validate
 
     try:
@@ -169,14 +173,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     elif count is None:
         source = None
 
-    result = validate(
-        config,
-        timeout=args.timeout,
-        passes=args.passes,
-        probe_count=count,
-        probe_count_source=source,
-        skip_upload=args.skip_upload,
-    )
+    try:
+        result = validate(
+            config,
+            timeout=args.timeout,
+            passes=args.passes,
+            probe_count=count,
+            probe_count_source=source,
+            skip_upload=args.skip_upload,
+        )
+    except AuthTokenMissing as e:
+        return _abort(str(e))
     print(render(result))
     return EXIT_SETUP if result.blocked else EXIT_OK
 
@@ -239,8 +246,8 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
         print(f"  Tier 2 (instrument) {', '.join(summary['tier2_findings'])}")
     if capture["transport_errors"]:
         print(
-            f"  transport errors    {capture['transport_errors']} of "
-            f"{capture['records']} records carried no answer — not captured, "
+            f"  transport errors    {capture['transport_errors']}/"
+            f"{capture['records']} records carried no answer — NOT_CAPTURED, "
             f"not findings"
         )
 
@@ -251,8 +258,8 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
     if variance:
         if variance.get("passes", 1) < 2:
             print(
-                "  variance            one pass — nothing compared. Reproducibility "
-                "was not measured, and this is not a pass"
+                "  variance            1 pass — nothing compared; reproducibility "
+                "NOT measured (not a pass)"
             )
         elif not variance.get("compared"):
             # Three zeros beside "3 passes" reads as a measurement that found nothing,
@@ -262,12 +269,12 @@ def _print_summary(summary: dict, capture: dict, manifest: dict) -> None:
             # find it eligible and compares nothing. Say that, and say the fix.
             print(
                 "  variance            "
-                f"{variance['passes']} passes and nothing compared — reproducibility "
-                "was NOT measured"
+                f"{variance['passes']} passes, 0 compared — reproducibility NOT "
+                "measured"
             )
             print(
-                "                      pass --probes: response_divergence is declared "
-                "by the probes, not by the answer key"
+                "                      fix: pass --probes (response_divergence is "
+                "declared by the probes, not the answer key)"
             )
         else:
             print(
@@ -335,16 +342,12 @@ def cmd_plant(args: argparse.Namespace) -> int:
     print(f"  probes              {out / 'probes.jsonl'}  ({len(probes)})")
     print(f"  ground truth        {out / 'ground_truth.json'}  "
           f"({len(ground_truth.expectations)} expectations)")
-    print()
     if corpus.is_demo():
-        print(
-            "  This is the published demo seed. Anyone can regenerate this corpus and "
-            "this\n  answer key, so a report from it demonstrates the method and "
-            "establishes nothing\n  about a target. Pass --seed for an engagement."
-        )
-        print()
+        print("  WARN                published demo seed — regenerable by anyone, "
+              "establishes nothing about a target. Use --seed for an engagement.")
+    print()
     print(
-        f"  Next: seal it before the target sees anything.\n"
+        f"  next (seal before the target sees anything):\n"
         f"    legal-rag-audit hash --corpus {out / 'corpus'} "
         f"--probes {out / 'probes.jsonl'} \\\n"
         f"                         --ground-truth {out / 'ground_truth.json'} "
@@ -387,18 +390,23 @@ def _plant_existing(out, args: argparse.Namespace) -> int:
     """
     from .external import (
         AnchorError,
+        InstrumentError,
         build_external_ground_truth,
         build_external_probes,
         validate_anchors,
+        validate_instruments,
     )
     from .interchange import write_ground_truth, write_probes
 
     try:
         validate_anchors()
+        validate_instruments()
         probes = build_external_probes(passes=args.passes)
         ground_truth = build_external_ground_truth()
     except AnchorError as e:
         return _abort(f"The anchor set is not usable:\n{e}")
+    except InstrumentError as e:
+        return _abort(f"The fictional-instrument set is not usable:\n{e}")
 
     write_probes(out / "probes.jsonl", probes)
     write_ground_truth(out / "ground_truth.json", ground_truth)
@@ -410,22 +418,18 @@ def _plant_existing(out, args: argparse.Namespace) -> int:
         f"  ground truth        {out / 'ground_truth.json'}  "
         f"({len(ground_truth.expectations)} expectations)"
     )
+    print("  source              external and public — legislation.gov.uk phrases, "
+          "published identifiers, off-register instruments")
+    print("  authorisation       not required — nothing planted; every probe is a "
+          "question anyone could type")
+    print()
+    print("  ORDER               run before any planted upload — planting indexes "
+          "one of these fictional instruments")
+    print("  WARN                bundled anchors ship in the wheel and are public. An "
+          "engagement authors its own.")
     print()
     print(
-        "  Ground truth here is external and public: point-in-time phrases quoted from\n"
-        "  legislation.gov.uk, and a published set of publisher-assigned identifiers.\n"
-        "  Nothing is planted, so nothing here needs authorisation — every probe is a\n"
-        "  question anyone could type into the product."
-    )
-    print()
-    print(
-        "  The bundled anchors ship in the wheel and are therefore public, exactly as\n"
-        "  the demo seed is. An engagement authors its own; a run against these\n"
-        "  demonstrates the method and establishes less about a target."
-    )
-    print()
-    print(
-        f"  Next: seal it before the target sees anything.\n"
+        f"  next (seal before the target sees anything):\n"
         f"    legal-rag-audit hash --probes {out / 'probes.jsonl'} \\\n"
         f"                         --ground-truth {out / 'ground_truth.json'} "
         f"-o {out / 'handover.json'}"
@@ -467,18 +471,17 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print()
 
     if drift:
-        print("  The anchor set and the primary source disagree:")
+        print(f"  DRIFT               {len(drift)} anchor(s) disagree with the "
+              f"primary source:")
         for problem in drift:
             print(f"    {problem}")
         print()
-        print(
-            "  Until this is resolved the battery would score answers against a version\n"
-            "  of the law that is no longer there. Fix the anchor, not the answer."
-        )
+        print("  Scoring against these would test a version of the law that is no "
+              "longer there. Fix the anchor, not the answer.")
         print()
         return EXIT_SETUP if args.strict else EXIT_OK
 
-    print("  Every anchor still says what the primary source says.")
+    print("  drift               none")
     print()
     return EXIT_OK
 

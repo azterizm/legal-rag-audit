@@ -45,11 +45,9 @@ def render(result: Validation) -> str:
     lines.append(RULE)
     lines.append("")
     lines.append(
-        "  Three neutral queries. Nothing from the battery was asked, nothing was "
-        "scored,"
+        f"  probes              {len(result.observations)} neutral — "
+        f"nothing scored, nothing written"
     )
-    lines.append("  and nothing was written to disk.")
-    lines.append("")
     lines.append(f"  answer path         {result.answer_field}")
     lines.append(f"  citations path      {result.citations_field}")
     transports = {o.transport for o in result.observations}
@@ -64,8 +62,6 @@ def render(result: Validation) -> str:
     for obs in result.observations:
         lines.append(RULE)
         lines.append(f"  {obs.probe_id}   {obs.query}")
-        indent = " " * (len(obs.probe_id) + 5)
-        lines.append(f"  {' ' * len(obs.probe_id)}   {_wrap(obs.purpose, 62, indent)}")
         lines.append("")
         status = obs.http_status if obs.http_status is not None else "no response"
         lines.append(
@@ -95,13 +91,13 @@ def render(result: Validation) -> str:
             lines.append(f"    error: {obs.error}")
         lines.append("")
 
-        lines.append("    Raw response:")
+        lines.append("    raw:")
         lines.extend(_quote(obs.raw))
         if obs.truncated:
             lines.append("    │ … truncated for display")
         lines.append("")
 
-        lines.append("    Extracted by the configured paths:")
+        lines.append("    extracted:")
         if obs.extracted:
             lines.append(f"      answer     {_one_line(obs.answer)}")
         else:
@@ -141,9 +137,10 @@ def _candidates(obs) -> list[str]:
     if not answers and not citations:
         return []
 
+    # "guesses" and "not answers" carry the warning that used to take two lines: a
+    # suggestion read as an instruction is how a request id gets scored as an answer.
     lines = [
-        "    Candidate paths — guesses from the shape of the body, not answers.",
-        "    Read the value beside each one before setting it.",
+        "    Candidate paths — guesses from the body's shape, not answers:",
         "",
     ]
     for candidate in answers:
@@ -186,21 +183,16 @@ def _document_name() -> str:
 def _projection(result: Validation) -> list[str]:
     lines = [RULE, ""]
     if result.median_ms is None:
-        lines.append(
-            "  No query succeeded, so there is no latency to project a run from."
-        )
+        lines.append("  projected run       none — no query succeeded")
         lines.append("")
         return lines
     seconds = result.projected_seconds or 0
-    passes = f"{result.passes} {'pass' if result.passes == 1 else 'passes'}"
+    passes = f"{result.passes}p"
+    lead = "" if seconds < 60 else "≈"
     lines.append(
-        f"  median {result.median_ms} ms per query × {result.probe_count} probes × "
-        f"{passes}"
-    )
-    lead = "" if seconds < 60 else "≈ "
-    lines.append(
-        f"  {lead}{_duration(seconds)} for the battery, asked one at a time "
-        f"({result.probe_count_source})."
+        f"  projected run       {lead}{_duration(seconds)}  serial, "
+        f"{result.median_ms} ms median × {result.probe_count} probes × {passes} "
+        f"({result.probe_count_source})"
     )
     lines.append("")
     return lines
@@ -211,12 +203,8 @@ def _diagnoses(result: Validation) -> list[str]:
         return [
             RULE,
             "",
-            "  Nothing to report. Every neutral query returned an answer the "
-            "configured",
-            "  paths could read.",
-            "",
-            "  This says the harness can talk to the target. It says nothing about "
-            "the target.",
+            "  ok — every query answered, both paths read; this is about the "
+            "harness and the config, and says nothing about the target.",
             "",
         ]
 
@@ -225,32 +213,29 @@ def _diagnoses(result: Validation) -> list[str]:
 
     lines = [RULE, ""]
     lines.append(
-        f"  {len(result.diagnoses)} "
-        f"{'problem' if len(result.diagnoses) == 1 else 'problems'}: "
-        f"{len(blocking)} would stop the run, {len(advisory)} would not."
+        f"  {len(result.diagnoses)} problem(s): {len(blocking)} blocking, "
+        f"{len(advisory)} advisory"
     )
     lines.append("")
 
+    # `reads as` is the F40 line and stays: an operator has to be able to see what a
+    # setup fault would have been mistaken for once it reached a report.
     for diagnosis in blocking + advisory:
-        mark = "STOP  " if diagnosis.blocking else "NOTE  "
+        mark = "STOP" if diagnosis.blocking else "NOTE"
         where = f"  [{diagnosis.probe_id}]" if diagnosis.probe_id else ""
-        lines.append(f"  {mark}{diagnosis.title}{where}")
-        lines.append(f"        code            {diagnosis.code}")
-        lines.append(f"        saw             {_wrap(diagnosis.saw)}")
-        lines.append(f"        would look like {_wrap(diagnosis.mistaken_for)}")
-        lines.append(f"        do              {_wrap(diagnosis.remedy)}")
+        lines.append(f"  {mark}  {diagnosis.code}{where}  {diagnosis.title}")
+        lines.append(f"        saw       {_wrap(diagnosis.saw)}")
+        lines.append(f"        reads as  {_wrap(diagnosis.mistaken_for)}")
+        lines.append(f"        fix       {_wrap(diagnosis.remedy)}")
         lines.append("")
 
     if blocking:
-        lines.append(
-            "  Exit 2 — did not run. These are setup problems, not findings about "
-            "the target."
-        )
+        lines.append("  Exit 2 — setup problems, not findings about the target.")
         lines.append("")
     return lines
 
 
-def _wrap(text: str, width: int = 70, indent: str = " " * 24) -> str:
+def _wrap(text: str, width: int = 74, indent: str = " " * 18) -> str:
     import textwrap
 
     wrapped = textwrap.wrap(" ".join(text.split()), width=width)

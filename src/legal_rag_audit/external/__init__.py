@@ -13,12 +13,22 @@ imports it directly, where the network is expected.
 
 from .anchors import ANCHORS, BY_ID, OGL, Anchor, AnchorError, Reading, validate_anchors
 from .battery import (
+    ABSTENTION,
     LICENSED,
     LICENSED_PROBES,
     POINT_IN_TIME,
     build_external_ground_truth,
     build_external_probes,
     external_probe_ids,
+)
+from .fictional import (
+    INSTRUMENTS,
+    REFUSED_SHAPES,
+    Instrument,
+    InstrumentError,
+    Question,
+    fictional_probe_id,
+    validate_instruments,
 )
 from .markers import (
     MARKER_CLASSES,
@@ -31,8 +41,10 @@ from .markers import (
 from .store import Snapshot, Store, StoreError, excerpt_around, snapshot_for
 
 __all__ = [
+    "ABSTENTION",
     "ANCHORS",
     "BY_ID",
+    "INSTRUMENTS",
     "LICENSED",
     "LICENSED_PROBES",
     "MARKER_CLASSES",
@@ -40,10 +52,14 @@ __all__ = [
     "NOT_SCORED_REASON",
     "OGL",
     "POINT_IN_TIME",
+    "REFUSED_SHAPES",
     "Anchor",
     "AnchorError",
     "Hit",
+    "Instrument",
+    "InstrumentError",
     "MarkerClass",
+    "Question",
     "Reading",
     "Snapshot",
     "Store",
@@ -52,7 +68,9 @@ __all__ = [
     "build_external_probes",
     "excerpt_around",
     "external_probe_ids",
+    "fictional_probe_id",
     "find",
     "snapshot_for",
+    "validate_instruments",
     "validate_anchors",
 ]

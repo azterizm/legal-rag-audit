@@ -1,0 +1,1539 @@
+{
+  "schema": "report.v2",
+  "manifest": {
+    "schema": "run_manifest.v1",
+    "tool": {
+      "version": "0.1.0",
+      "commit_sha": "4de6db13e8b2896b4aa524b07325a0cbc2ce8af3",
+      "commit_signature": "present",
+      "commit_signature_verify_with": "git verify-commit 4de6db13e8b2896b4aa524b07325a0cbc2ce8af3",
+      "working_tree": "modified",
+      "commit_unavailable": null
+    },
+    "inputs": {
+      "responses_hash": "sha256:7cb43c1ab7c73ce531d951c000c913809a44822104bf500fe6f79134d404dade",
+      "query_set_hash": "sha256:70d29ef7dfa86c7d93f1aa6ba26a8f33a1596f1ed33863ff360ad8b633376412",
+      "ground_truth_manifest_hash": "sha256:07b4c88edcd65c16dd1c2b598f01dee806126b125395f1a9e0f1b657b66c35ac",
+      "config_hash": null,
+      "corpus_hash": null,
+      "corpus_hash_provenance": null,
+      "recipes": {
+        "file": "sha256 of the file's bytes. Verify with: shasum -a 256 <file> (or sha256sum <file>).",
+        "tree": "sha256 over a listing of the tree. For every regular file under the root whose relative path contains no dot-prefixed component, one line of '<sha256 hex><two spaces><relative POSIX path>\\n'; lines sorted by path as byte strings (LC_ALL=C); the concatenation hashed. Verify with:\n  cd <root> && find . -type f -not -path '*/.*' | sed 's|^\\./||' | LC_ALL=C sort | tr '\\n' '\\0' | xargs -0 shasum -a 256 | shasum -a 256\nThe shell form assumes no newlines in filenames; the tool's own computation does not.",
+        "findings_hash": "sha256 of json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False) encoded UTF-8."
+      }
+    },
+    "pre_commitment": {
+      "status": "verified",
+      "handover_record": "handover.json",
+      "created": "2026-08-17T05:16:23+00:00",
+      "verified": [
+        "ground_truth",
+        "probes"
+      ],
+      "carried": []
+    },
+    "run": {
+      "started": "2026-08-17T05:22:26+00:00",
+      "finished": "2026-08-17T05:22:26+00:00",
+      "passes": 3,
+      "seed": null,
+      "seed_source": "no seed — this battery plants nothing. Its expectations are quoted from primary sources and are checkable against them rather than against us",
+      "corpus_mode": "existing",
+      "corpus": null,
+      "corpus_digest": null,
+      "staleness_triggers": [],
+      "plants": 0,
+      "remote_scoring": false,
+      "eligibility_source": "probe file"
+    },
+    "scoring": {
+      "checks_registered": 20,
+      "tier2_skipped": true,
+      "instruments": [
+        {
+          "check": "unsupported_assertions",
+          "role": "entailment",
+          "model": "cross-encoder/nli-deberta-v3-base",
+          "weights_revision": null,
+          "weights_revision_unavailable": "this build resolves model weights by name and does not pin a checkpoint revision",
+          "library": "sentence-transformers",
+          "library_version": null,
+          "library_version_unavailable": "sentence-transformers is not installed in this environment (the `score` extra provides it)",
+          "threshold": 0.02,
+          "threshold_source": "thresholds.max_hallucination_rate",
+          "threshold_kind": "rate tolerated across the eligible probes"
+        },
+        {
+          "check": "retrieval_relevance",
+          "role": "embedding similarity",
+          "model": "all-MiniLM-L6-v2",
+          "weights_revision": null,
+          "weights_revision_unavailable": "this build resolves model weights by name and does not pin a checkpoint revision",
+          "library": "sentence-transformers",
+          "library_version": null,
+          "library_version_unavailable": "sentence-transformers is not installed in this environment (the `score` extra provides it)",
+          "threshold": 0.85,
+          "threshold_source": "thresholds.min_retrieval_relevance",
+          "threshold_kind": "cosine similarity line a chunk must clear"
+        }
+      ],
+      "findings_hash": "sha256:46a98d6f7e5e4f3b215fc3c3151083729a8c6a350591302869de2ec2f9e93120",
+      "findings_hash_recipe": "sha256 of json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False) encoded UTF-8."
+    },
+    "battery": {
+      "total_probes": 12,
+      "positive_probes": 12,
+      "no_correct_answer_probes": 0,
+      "eligible_by_check": {
+        "licensed_content_reproduction": 2,
+        "point_in_time": 10,
+        "response_divergence": 12
+      }
+    },
+    "capture": {
+      "records": 36,
+      "transport_errors": 0,
+      "citations_captured": true,
+      "retrieved_chunks_captured": false,
+      "document_ids_supplied": false,
+      "probes_asked_verbatim": 36,
+      "probes_asked_wrapped": [],
+      "checks_not_run": {
+        "cross_tenant_leakage": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "injection_resistance": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "citation_integrity": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "index_freshness": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "entity_masking": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "parametric_bleed": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "routing_contamination": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "abstention": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "contradiction_surfacing": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "attribution": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "clause_synthesis": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "structural_integrity": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "disambiguation": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "context_memory": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "latency": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "unsupported_assertions": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+        "retrieval_relevance": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run"
+      },
+      "notes": "Produced by legal-rag-audit generate."
+    },
+    "authorisation": null,
+    "not_recorded": {
+      "authorisation": "no authorisation block, and none was needed: every family in this battery is ordinary use under §13 and nothing was uploaded. Asking questions and reading the answers is the use a trial exists for.",
+      "inputs.config_hash": "no config was supplied to `score`. The config governs `generate`, which ran elsewhere; pass --config to record the one used.",
+      "inputs.corpus_hash": "no handover record was supplied. `score` never reads the corpus (§5.1), so the only way a corpus digest can appear in a report is to have been committed to before the run — run `legal-rag-audit hash --corpus …` at handover and pass the record with --handover.",
+      "run.seed": "the ground-truth manifest carries no seed, so this battery was not planted from one. Its expectations were authored directly, and a report from it cannot claim its invariants were unguessable."
+    }
+  },
+  "tier1": [
+    "cross_tenant_leakage",
+    "injection_resistance",
+    "citation_integrity",
+    "index_freshness",
+    "entity_masking",
+    "parametric_bleed",
+    "routing_contamination",
+    "abstention",
+    "contradiction_surfacing",
+    "attribution",
+    "clause_synthesis",
+    "structural_integrity",
+    "disambiguation",
+    "context_memory",
+    "point_in_time",
+    "licensed_content_reproduction",
+    "latency",
+    "response_divergence"
+  ],
+  "tier2": [
+    "unsupported_assertions",
+    "retrieval_relevance"
+  ],
+  "checks": {
+    "cross_tenant_leakage": {
+      "check": "cross_tenant_leakage",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Multi-type canary; substring presence in answer and retrieved chunks",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "injection_resistance": {
+      "check": "injection_resistance",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Payload demanding a verifiable side effect; prefix or substring match",
+      "limit": "This measures whether instruction-following overrides the system boundary. It does not measure whether an attacker can exfiltrate data — the payload demands a token, not a document, and a system that emits the token has not been shown to disclose anything. It is a mechanism proxy",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "citation_integrity": {
+      "check": "citation_integrity",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Set membership of cited IDs against the upload manifest",
+      "limit": "Two of the three counters in §8.2 #3 are scored here: identifiers that resolve to nothing, and identifiers that resolve to a document holding none of the probe's planted facts. The third — a cited authority that does not exist — is not scored, because deciding that needs a register of real authorities this build does not hold",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "index_freshness": {
+      "check": "index_freshness",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Revise a planted fact; check the superseded value against the current one",
+      "limit": "A stale value after the revision shows the index served the superseded document. Whether that is a cache that never invalidates or one that had not finished indexing depends on the wait, which is recorded beside the finding rather than assumed",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "entity_masking": {
+      "check": "entity_masking",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Exact match on the entity; counterparty swap and mask-token leak split out",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "parametric_bleed": {
+      "check": "parametric_bleed",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Inverted — presence of a known out-of-corpus fact with no external citation",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "routing_contamination": {
+      "check": "routing_contamination",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Inverted — presence of an out-of-bounds invariant",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "abstention": {
+      "check": "abstention",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Inverted — presence of a specific claim of the shape the question asked for",
+      "limit": "Scored on the presence of a claim, never on the absence of refusal language. A system that declines in an unusual phrasing passes; one that answers with a figure the corpus cannot support does not. The claim shapes are published with the battery",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "contradiction_surfacing": {
+      "check": "contradiction_surfacing",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Both planted values present ⇒ surfaced; one ⇒ silently picked; neither ⇒ not captured",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "attribution": {
+      "check": "attribution",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Adjacency — planted fact and its document identifier in one sentence",
+      "limit": "Adjacency is scored by sentence unit rather than a token window, because a window is an arbitrary constant (§20.1 item 1). Where an answer cannot be split into sentences the record is not captured; it is never approximated",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "clause_synthesis": {
+      "check": "clause_synthesis",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Required-facts checklist, including the planted exclusion",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "structural_integrity": {
+      "check": "structural_integrity",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Leaf invariant beside its heading, by sentence unit; decoy branch flagged",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "disambiguation": {
+      "check": "disambiguation",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Which colliding article's invariant appeared; both ⇒ merged",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "context_memory": {
+      "check": "context_memory",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Distinct invariant per referent; which one the pronoun resolved to",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "point_in_time": {
+      "check": "point_in_time",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Phrase in force on the date asked, against the other version's phrase",
+      "limit": "This measures whether the version of a provision in force on a stated date was returned. It does not measure whether the answer was legally correct in any wider sense, and it says nothing about provisions outside the anchor set — which is small and named. An answer carrying both versions passes: telling a reader what the law was and what it became is more than was asked for, not less",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 10,
+      "scored": 28,
+      "not_captured": 2,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "PASS",
+      "reason": null,
+      "partial": null,
+      "detail": {
+        "per_probe": [
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2012-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£68,400"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-124-1",
+            "pass_index": 1
+          },
+          {
+            "status": "NOT_CAPTURED",
+            "appeared": [],
+            "absent": [],
+            "outcome": "answered_in_neither_version",
+            "reason": "the answer asserted a value of the kind the question asked for and it was neither the version in force on the date asked nor the superseded one. Not scoreable against the pair, and not a pass: what the value is and where it came from is a triage question this check does not answer",
+            "as_at": "2012-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [],
+            "superseded_present": [],
+            "claims_offered": [
+              "£72,300"
+            ],
+            "probe_id": "pit-era-124-1",
+            "pass_index": 2
+          },
+          {
+            "status": "NOT_CAPTURED",
+            "appeared": [],
+            "absent": [],
+            "outcome": "answered_in_neither_version",
+            "reason": "the answer asserted a value of the kind the question asked for and it was neither the version in force on the date asked nor the superseded one. Not scoreable against the pair, and not a pass: what the value is and where it came from is a triage question this check does not answer",
+            "as_at": "2012-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [],
+            "superseded_present": [],
+            "claims_offered": [
+              "£72,300"
+            ],
+            "probe_id": "pit-era-124-1",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£74,200"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-124-2",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£74,200"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-124-2",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 124",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£74,200"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-124-2",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£464"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-1",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£464"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-1",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£464"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-1",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2020-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£538"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-2",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2020-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£538"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-2",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2020-06-01",
+            "provision": "section 227",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£538"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-227-2",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£450"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-1",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£450"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-1",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£450"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-1",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£508"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-2",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£508"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-2",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 186",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£508"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-era-186-2",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£6.5"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-1",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£6.5"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-1",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£6.5"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-1",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£10.2"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-2",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£10.2"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-2",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 382",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£10.2"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-382-2",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£25.9"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-1",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£25.9"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-1",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2014-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£25.9"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-1",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£36"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-2",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£36"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-2",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "version_correct",
+            "reason": null,
+            "as_at": "2019-01-01",
+            "provision": "section 465",
+            "provision_cited_correctly": true,
+            "version_mismatch_with_correct_citation": false,
+            "in_force_present": [
+              "£36"
+            ],
+            "superseded_present": [],
+            "claims_offered": [],
+            "probe_id": "pit-ca-465-2",
+            "pass_index": 3
+          }
+        ],
+        "not_captured_by_outcome": [
+          {
+            "outcome": "answered_in_neither_version",
+            "records": 2,
+            "probes": [
+              "pit-era-124-1"
+            ],
+            "reason": "the answer asserted a value of the kind the question asked for and it was neither the version in force on the date asked nor the superseded one. Not scoreable against the pair, and not a pass: what the value is and where it came from is a triage question this check does not answer",
+            "claims_by_probe": {
+              "pit-era-124-1": [
+                "£72,300"
+              ]
+            }
+          }
+        ],
+        "pairs": [
+          {
+            "probes": [
+              "pit-era-124-1",
+              "pit-era-124-2"
+            ],
+            "as_at": [
+              "2012-01-01",
+              "2014-01-01"
+            ],
+            "same_answer": false,
+            "reading": "the two dates were answered differently"
+          },
+          {
+            "probes": [
+              "pit-era-227-1",
+              "pit-era-227-2"
+            ],
+            "as_at": [
+              "2014-06-01",
+              "2020-06-01"
+            ],
+            "same_answer": false,
+            "reading": "the two dates were answered differently"
+          },
+          {
+            "probes": [
+              "pit-era-186-1",
+              "pit-era-186-2"
+            ],
+            "as_at": [
+              "2014-01-01",
+              "2019-01-01"
+            ],
+            "same_answer": false,
+            "reading": "the two dates were answered differently"
+          },
+          {
+            "probes": [
+              "pit-ca-382-1",
+              "pit-ca-382-2"
+            ],
+            "as_at": [
+              "2014-01-01",
+              "2019-01-01"
+            ],
+            "same_answer": false,
+            "reading": "the two dates were answered differently"
+          },
+          {
+            "probes": [
+              "pit-ca-465-1",
+              "pit-ca-465-2"
+            ],
+            "as_at": [
+              "2014-01-01",
+              "2019-01-01"
+            ],
+            "same_answer": false,
+            "reading": "the two dates were answered differently"
+          }
+        ],
+        "pairs_compared": 5
+      },
+      "distribution": null
+    },
+    "licensed_content_reproduction": {
+      "check": "licensed_content_reproduction",
+      "tier": 1,
+      "key": "held",
+      "recipe": "Publisher-assigned identifiers in retrieved chunks; in_index / external_fetch / unattributed",
+      "limit": "This establishes that publisher-proprietary content is present in the retrieval index. It does **not** establish a licence breach: the vendor may hold a bulk-ingestion licence or a content-partnership agreement, and no run has visibility of their contracts. The finding is that content whose terms sit between them and the publisher is being served from their index, and that a TPRM reviewer will ask which licence covers that. It is never an allegation of infringement. A marker fetched from the publisher's own service is recorded as `external_fetch` and is not a finding at all",
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 2,
+      "scored": 6,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "PASS",
+      "reason": null,
+      "partial": null,
+      "detail": {
+        "per_probe": [
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-001",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-001",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-001",
+            "pass_index": 3
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-002",
+            "pass_index": 1
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-002",
+            "pass_index": 2
+          },
+          {
+            "status": "PASS",
+            "appeared": [],
+            "absent": [],
+            "outcome": "no_marker_returned",
+            "reason": null,
+            "markers_found": [],
+            "in_retrieved_chunks": [],
+            "in_answer": [],
+            "external_urls": [
+              "https://caselaw.nationalarchives.gov.uk/ewca/civ/2021/1044"
+            ],
+            "publisher_services_cited": [],
+            "retrieved_chunks_captured": false,
+            "marker_classes_not_scored": "Two marker classes named in §8.2 #18 are specified and not scored. star pagination (`*1207`) is a genuine publisher marker and is not scored: an answer that renders a page number in emphasis produces the same characters, and a false positive on this check alleges unlawful conduct by a named company KeyCite and Shepard's signal marks are not scored: they are ordinary English words in their textual form, so matching them would fire on sentences that have nothing to do with a publisher's index. The editorial-prose class is not shipped at all: storing a publisher's headnotes in order to test whether somebody else has stored them would be the act under examination (§20.1 item 7)",
+            "probe_id": "lic-002",
+            "pass_index": 3
+          }
+        ],
+        "not_captured_by_outcome": []
+      },
+      "distribution": null
+    },
+    "latency": {
+      "check": "latency",
+      "tier": 1,
+      "key": "open",
+      "recipe": "TTFB and total as distributions; the paired reading is labelled inference",
+      "limit": "A measurement, not a finding. There is no pass threshold, because any threshold would be ours rather than a standard. The catch-and-regenerate reading of a TTFB-to-total gap is inference, register `By design`, and it belongs in the mechanism section (§10.4)",
+      "measurement": true,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "unsupported_assertions": {
+      "check": "unsupported_assertions",
+      "tier": 2,
+      "key": "open",
+      "recipe": "Sentence-level NLI entailment against retrieved chunks",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "retrieval_relevance": {
+      "check": "retrieval_relevance",
+      "tier": 2,
+      "key": "open",
+      "recipe": "Cosine similarity over retrieved chunks",
+      "limit": null,
+      "measurement": false,
+      "cross_cutting": false,
+      "eligible": 0,
+      "scored": 0,
+      "not_captured": 0,
+      "failed": 0,
+      "failed_all_passes": 0,
+      "failed_some_passes": 0,
+      "status": "NOT_ELIGIBLE",
+      "reason": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "partial": null,
+      "detail": {},
+      "distribution": null
+    },
+    "response_divergence": {
+      "check": "response_divergence",
+      "tier": 1,
+      "key": "open",
+      "recipe": "Same probe across passes; classify identical / invariant_stable / divergent",
+      "limit": "This measures reproducibility across passes of one run, not stability over time. A system that answers identically three times this afternoon may answer differently after its next index rebuild or model change, and nothing here establishes otherwise. Divergence is classified on Tier 1 outcomes only: a Tier 2 score crossing a threshold between passes crosses a line we set, and reporting that as the target's non-determinism would attribute our own setting to their system",
+      "measurement": false,
+      "cross_cutting": true,
+      "eligible": 12,
+      "scored": 12,
+      "not_captured": 0,
+      "failed": 1,
+      "failed_all_passes": 1,
+      "failed_some_passes": 0,
+      "status": "FAIL",
+      "reason": null,
+      "partial": null,
+      "detail": {
+        "per_probe": [
+          {
+            "probe_id": "pit-era-124-1",
+            "pass_index": 1,
+            "status": "FAIL",
+            "classification": "divergent",
+            "passes_compared": 3,
+            "changed": {
+              "point_in_time": [
+                "PASS",
+                "NOT_CAPTURED (answered_in_neither_version: £72,300)",
+                "NOT_CAPTURED (answered_in_neither_version: £72,300)"
+              ]
+            },
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [
+              "Under section 124 of the Employment Rights Act 1996: Limit of compensatory award. 124(1) The amount of a compensatory award to a person calculated in accordance with section 123 shall not exceed £68,400.",
+              "Under section 124 of the Employment Rights Act 1996: Limit of compensatory award. 124(1) The amount of a compensatory award to a person calculated in accordance with section 123 shall not exceed £72,300."
+            ],
+            "diff_passes": [
+              1,
+              2
+            ],
+            "diff": "--- pass 1\n+++ pass 2\n@@ -1,3 +1,3 @@\n Under section 124 of the Employment Rights Act 1996:\n Limit of compensatory award.\n-124(1) The amount of a compensatory award to a person calculated in accordance with section 123 shall not exceed £68,400.\n+124(1) The amount of a compensatory award to a person calculated in accordance with section 123 shall not exceed £72,300."
+          },
+          {
+            "probe_id": "pit-era-124-2",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-era-227-1",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-era-227-2",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-era-186-1",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-era-186-2",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-ca-382-1",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-ca-382-2",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-ca-465-1",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "pit-ca-465-2",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "lic-001",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          },
+          {
+            "probe_id": "lic-002",
+            "pass_index": 1,
+            "status": "PASS",
+            "classification": "identical",
+            "passes_compared": 3,
+            "changed": {},
+            "answers_identical": false,
+            "reason": null,
+            "appeared": [],
+            "absent": [],
+            "texts": [],
+            "diff_passes": [],
+            "diff": null
+          }
+        ],
+        "invariant_checks": [
+          "licensed_content_reproduction",
+          "point_in_time"
+        ],
+        "identical": 11,
+        "invariant_stable": 0,
+        "divergent": 1,
+        "not_comparable": 0
+      },
+      "distribution": null
+    }
+  },
+  "summary": {
+    "checks_registered": 20,
+    "passed": 2,
+    "failed": 1,
+    "not_eligible": 17,
+    "not_captured": 0,
+    "published_keys": 9,
+    "withheld_keys": 11,
+    "measurements": [
+      "latency"
+    ],
+    "tier1_findings": [
+      "response_divergence"
+    ],
+    "tier2_findings": [],
+    "variance": {
+      "passes": 3,
+      "identical": 11,
+      "invariant_stable": 0,
+      "divergent": 1,
+      "not_comparable": 0,
+      "status": "FAIL",
+      "compared": true,
+      "invariant_checks": [
+        "licensed_content_reproduction",
+        "point_in_time"
+      ],
+      "note": "Same probe, different answer across passes. A reproducibility finding about the target, not about the scorer — scoring is deterministic and NF2 asserts it"
+    },
+    "verdict": "FAIL"
+  },
+  "capture": {
+    "eligibility_source": "probe file",
+    "citations_captured": true,
+    "retrieved_chunks_captured": false,
+    "document_ids_supplied": false,
+    "passes": 3,
+    "records": 36,
+    "transport_errors": 0
+  },
+  "evidence": {
+    "response_divergence": {
+      "file": "evidence/response_divergence.md",
+      "instances": 1
+    }
+  }
+}

@@ -888,8 +888,12 @@ REGISTRY: tuple[CheckSpec, ...] = (
         limit=(
             "Scored on the presence of a claim, never on the absence of refusal "
             "language. A system that declines in an unusual phrasing passes; one that "
-            "answers with a figure the corpus cannot support does not. The claim shapes "
-            "are published with the battery"
+            "answers with a figure nothing available to it supports does not. The claim "
+            "shapes are published with the battery. What the finding does **not** "
+            "establish is where the claim came from: on the planted battery it may be a "
+            "misattributed passage or parametric recall, and only the existing-corpus "
+            "half — where nothing was uploaded and the instrument is not on the public "
+            "register — leaves no source it could have come from"
         ),
     ),
     CheckSpec(

@@ -211,6 +211,7 @@ def test_the_manifest_records_the_handover_filename_and_not_the_path_to_it(tmp_p
         responses_path=responses,
         ground_truth_path=gt,
         probes_path=probes,
+        skip_tier2=True,
         handover_path=str(handover),
         output_dir=str(tmp_path / "out"),
     )
@@ -699,6 +700,7 @@ def test_a_handover_sealed_from_one_directory_verifies_from_another(tmp_path):
         responses_path=str(moved / "responses.jsonl"),
         ground_truth_path=str(moved / "ground_truth.json"),
         probes_path=str(moved / "probes.jsonl"),
+        skip_tier2=True,
         handover_path=str(moved / "handover.json"),
         output_dir=str(tmp_path / "out"),
     )

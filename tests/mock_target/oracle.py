@@ -48,6 +48,7 @@ from legal_rag_audit.plants.templates import SLOT, Template
 #: Imported from the submodule rather than through the package, because `__init__` is
 #: importing this module and is not finished. Only the key set is needed here — the
 #: bodies are still read lazily inside each handler.
+from .statutes import FICTIONAL_ANSWERS as _FICTIONAL
 from .statutes import PROVISIONS as _PROVISIONS
 
 #: The corpus the reference target is built against. One corpus, deliberately: §14 is
@@ -544,6 +545,28 @@ def _licensed(probe_id: str):
     return build
 
 
+def _fictional(probe_id: str):
+    """A correct answer about an instrument that does not exist: there is no such Act.
+
+    And then what the law really provides, which is the half that makes this worth
+    running. A mock that only declined would pass the check without testing the probe
+    set; one that declines and names the real provision is the answer the shape rule is
+    most likely to misread, so it is the one the specificity gate should be asked about.
+    See `statutes.FICTIONAL_ANSWERS`.
+    """
+
+    def build(_o: Oracle) -> Reply:
+        from . import statutes
+
+        return Reply(
+            probe_id=probe_id,
+            answer=statutes.FICTIONAL_ANSWERS[probe_id],
+            chunks=list(statutes.FICTIONAL_CHUNKS),
+        )
+
+    return build
+
+
 def _retainer(probe_id: str):
     def build(o: Oracle) -> Reply:
         return Reply(
@@ -584,6 +607,11 @@ _ANSWERS: dict[str, Callable[[Oracle], Reply]] = {
     **{probe_id: _point_in_time(probe_id) for probe_id in _PROVISIONS},
     "lic-001": _licensed("lic-001"),
     "lic-002": _licensed("lic-002"),
+    # The fictional-instrument family, derived from its answers for the same reason the
+    # point-in-time handlers are derived from the provisions: the set grows, and a map
+    # that had to be edited alongside it would fail as a missing answer — which scores as
+    # the target declining, not as the mock being out of date.
+    **{probe_id: _fictional(probe_id) for probe_id in _FICTIONAL},
 }
 
 

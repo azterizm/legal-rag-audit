@@ -16,6 +16,7 @@ import pytest
 from legal_rag_audit.evaluators._common import MATCH_RULE, normalise, present
 from legal_rag_audit.external.anchors import ANCHORS, validate_anchors
 from legal_rag_audit.external.battery import build_external_probes
+from legal_rag_audit.external.fictional import INSTRUMENTS
 
 
 def test_the_anchor_set_validates() -> None:
@@ -85,7 +86,8 @@ def test_neither_question_gives_away_either_answer(anchor) -> None:
 
 def test_the_battery_is_two_probes_per_anchor_plus_the_licensed_pair() -> None:
     probes = build_external_probes()
-    assert len(probes) == 2 * len(ANCHORS) + 2
+    fictional = sum(len(instrument.questions) for instrument in INSTRUMENTS)
+    assert len(probes) == 2 * len(ANCHORS) + 2 + fictional
 
 
 class TestTheMatchingRule:

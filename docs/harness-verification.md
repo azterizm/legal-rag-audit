@@ -64,6 +64,7 @@ engagement breaks, and none of them is exercised by a fixture.
 | `unsupported_prose` | Adds fluent, unsupported sentences | `unsupported_assertions` | — |
 | `irrelevant_chunks` | Returns off-topic retrieval | `retrieval_relevance` | `unsupported_assertions` |
 | `serve_licensed_content` | Returns publisher editorial markers in retrieved chunks | `licensed_content_reproduction` | — |
+| `invent_an_instrument` | Describes a section of a statute that does not exist | `abstention` | — |
 | `answer_current_law` | Serves one version of a provision whatever date is asked about | `point_in_time` | — |
 | `nondeterministic` | Varies invariant outcomes between passes | `response_divergence` | `disambiguation` |
 | `clean` | Behaves correctly on every probe — the false-positive control | — | — |
@@ -73,17 +74,33 @@ engagement breaks, and none of them is exercised by a fixture.
 beside it — and the gate, being written against the check register, refused to build
 until one existed. That is the mechanism working rather than a gap being noticed.
 
+`invent_an_instrument` is not in it either, and it is a different kind of absence. The
+check it fires, `abstention`, has been in the register since Phase B and already has a
+profile — but that profile rewrites `conf-001`, a question about a corpus we uploaded, and
+so it cannot reach the ten no-upload probes that ask about statutes nobody wrote. The gate
+is written against the check register, and the register counts checks rather than
+configurations, so it would have stayed green with those probes exercised in the passing
+direction only. Which is the quieter way for a check to stop working.
+
 ### Two batteries, because neither covers the register alone
 
 §9.1 says to run both configurations and this is where that becomes concrete. The
 **planted** battery authors documents and uploads them, which is the only way to get
 canaries, injection payloads and contradiction pairs. The **existing-corpus** battery
 uploads nothing at all and scores against public ground truth — point-in-time phrases
-quoted from `legislation.gov.uk`, and a published set of publisher-assigned identifiers.
+quoted from `legislation.gov.uk`, a published set of publisher-assigned identifiers, and
+a set of instruments that are not on the register at all.
 
 Two checks are eligible only on the second, so the gate runs both, and the clean control
 runs on both. Each battery reports the other's checks as `NOT_ELIGIBLE` rather than as
 passes: F40 applied at the level of a configuration rather than a probe.
+
+A third check, `abstention`, is eligible on both and means different things on each. On
+the planted battery it asks about an article of an uploaded statute that the statute says
+it does not have. On the existing-corpus battery it asks about a statute that does not
+exist, with nothing uploaded — so a specific answer did not come from the index and did
+not come from the law, and there is no third explanation. Same evaluator, same check
+name, and the harder finding of the two is the one that needs no corpus.
 
 The existing-corpus config declares **no `upload` endpoint at all** — not an unused key,
 an absent one — so a run that tried to upload could not have resolved a URL to send to.

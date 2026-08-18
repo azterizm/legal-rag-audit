@@ -1,0 +1,267 @@
+{
+  "schema": "ground_truth.v4",
+  "seed": null,
+  "seed_source": "no seed — this battery plants nothing. Its expectations are quoted from primary sources and are checkable against them rather than against us",
+  "corpus_mode": "existing",
+  "corpus": null,
+  "plants": [],
+  "guard": null,
+  "expectations": [
+    {
+      "probe_id": "pit-era-124-1",
+      "check": "point_in_time",
+      "must_contain": [
+        "£68,400"
+      ],
+      "must_not_contain": [
+        "£74,200"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2012-01-01",
+      "provision": "section 124",
+      "paired_with": "pit-era-124-2",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-era-124-2",
+      "check": "point_in_time",
+      "must_contain": [
+        "£74,200"
+      ],
+      "must_not_contain": [
+        "£68,400"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2014-01-01",
+      "provision": "section 124",
+      "paired_with": "pit-era-124-1",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-era-227-1",
+      "check": "point_in_time",
+      "must_contain": [
+        "£464"
+      ],
+      "must_not_contain": [
+        "£538"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2014-06-01",
+      "provision": "section 227",
+      "paired_with": "pit-era-227-2",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-era-227-2",
+      "check": "point_in_time",
+      "must_contain": [
+        "£538"
+      ],
+      "must_not_contain": [
+        "£464"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2020-06-01",
+      "provision": "section 227",
+      "paired_with": "pit-era-227-1",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-era-186-1",
+      "check": "point_in_time",
+      "must_contain": [
+        "£450"
+      ],
+      "must_not_contain": [
+        "£508"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2014-01-01",
+      "provision": "section 186",
+      "paired_with": "pit-era-186-2",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-era-186-2",
+      "check": "point_in_time",
+      "must_contain": [
+        "£508"
+      ],
+      "must_not_contain": [
+        "£450"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2019-01-01",
+      "provision": "section 186",
+      "paired_with": "pit-era-186-1",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-ca-382-1",
+      "check": "point_in_time",
+      "must_contain": [
+        "£6.5"
+      ],
+      "must_not_contain": [
+        "£10.2"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2014-01-01",
+      "provision": "section 382",
+      "paired_with": "pit-ca-382-2",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-ca-382-2",
+      "check": "point_in_time",
+      "must_contain": [
+        "£10.2"
+      ],
+      "must_not_contain": [
+        "£6.5"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2019-01-01",
+      "provision": "section 382",
+      "paired_with": "pit-ca-382-1",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-ca-465-1",
+      "check": "point_in_time",
+      "must_contain": [
+        "£25.9"
+      ],
+      "must_not_contain": [
+        "£36"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2014-01-01",
+      "provision": "section 465",
+      "paired_with": "pit-ca-465-2",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "pit-ca-465-2",
+      "check": "point_in_time",
+      "must_contain": [
+        "£36"
+      ],
+      "must_not_contain": [
+        "£25.9"
+      ],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": "2019-01-01",
+      "provision": "section 465",
+      "paired_with": "pit-ca-465-1",
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "lic-001",
+      "check": "licensed_content_reproduction",
+      "must_contain": [],
+      "must_not_contain": [],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": null,
+      "provision": null,
+      "paired_with": null,
+      "queried_as": null,
+      "scoped_to": null
+    },
+    {
+      "probe_id": "lic-002",
+      "check": "licensed_content_reproduction",
+      "must_contain": [],
+      "must_not_contain": [],
+      "must_cite_any_of": [],
+      "adjacency": [],
+      "swaps": [],
+      "mask_tokens": [],
+      "shapes": [],
+      "side_effect": null,
+      "pairing": null,
+      "as_at_date": null,
+      "provision": null,
+      "paired_with": null,
+      "queried_as": null,
+      "scoped_to": null
+    }
+  ]
+}

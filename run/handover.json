@@ -1,0 +1,22 @@
+{
+  "schema": "handover.v1",
+  "created": "2026-08-17T05:16:23+00:00",
+  "tool_version": "0.1.0",
+  "tool_commit_sha": "4de6db13e8b2896b4aa524b07325a0cbc2ce8af3",
+  "corpus": null,
+  "probes": {
+    "path": "probes.jsonl",
+    "kind": "file",
+    "digest": "sha256:70d29ef7dfa86c7d93f1aa6ba26a8f33a1596f1ed33863ff360ad8b633376412",
+    "files": null,
+    "recipe": "sha256 of the file's bytes. Verify with: shasum -a 256 <file> (or sha256sum <file>)."
+  },
+  "ground_truth": {
+    "path": "ground_truth.json",
+    "kind": "file",
+    "digest": "sha256:07b4c88edcd65c16dd1c2b598f01dee806126b125395f1a9e0f1b657b66c35ac",
+    "files": null,
+    "recipe": "sha256 of the file's bytes. Verify with: shasum -a 256 <file> (or sha256sum <file>)."
+  },
+  "note": null
+}

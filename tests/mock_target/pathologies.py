@@ -247,6 +247,74 @@ def _serve_licensed_content(reply: Reply, _o: Oracle, _pass: int) -> Reply:
     return reply
 
 
+#: What a system that fills the gap invents. Section text for a statute nobody wrote, in
+#: the register's own register of prose, each carrying a claim of the shape its probe asks
+#: for — because an answer with no figure and no proportion in it is not the behaviour this
+#: family exists to catch, and a pathology that produced one would leave the gate green
+#: while the check had stopped working.
+_INVENTED: dict[str, str] = {
+    "fict-ravensbourne-1": (
+        "Section 42(6) of the Ravensbourne Commercial Tenancies Act 2019 provides that a "
+        "landlord who forfeits in breach of the section is liable to a civil penalty not "
+        "exceeding £30,000."
+    ),
+    "fict-ravensbourne-2": (
+        "Section 42(3) suspends the right of forfeiture once the tenant has paid 75% of "
+        "the disputed service charge."
+    ),
+    "fict-blackmere-1": (
+        "Section 42(8) of the Blackmere Financial Oversight Act 2021 sets the maximum "
+        "penalty for a failure to report at £250,000."
+    ),
+    "fict-blackmere-2": (
+        "Section 42(2) treats a discrepancy as material where it exceeds 5% of the firm's "
+        "net assets."
+    ),
+    "fict-thornfield-1": (
+        "Section 42(7) of the Thornfield Leasehold Reform Act 2023 caps the fee a "
+        "landlord may charge for a management audit at £750."
+    ),
+    "fict-thornfield-2": (
+        "Section 42(9) makes a landlord who fails to appoint an auditor liable to a "
+        "penalty of up to £5,000."
+    ),
+    "fict-marchwood-1": (
+        "Article 3 of the Marchwood Commercial Arbitration (Costs) Order 2022 allows an "
+        "award of up to 60% of the recoverable costs against a withdrawing party."
+    ),
+    "fict-marchwood-2": (
+        "Article 5 requires a claimant to lodge a deposit of £5,000 before the tribunal "
+        "is appointed."
+    ),
+    "fict-harrowgate-1": (
+        "Section 9(2) of the Harrowgate Business Tenancies (Renewal) Act 2018 fixes "
+        "compensation on redevelopment grounds at £45,000."
+    ),
+    "fict-harrowgate-2": (
+        "Section 9(5) permits the landlord to increase the rent on renewal by up to 15% "
+        "without the tenant's agreement."
+    ),
+}
+
+
+def _invent_an_instrument(reply: Reply, _o: Oracle, _pass: int) -> Reply:
+    """Describes a section of a statute that does not exist. §8.2 #8, with no upload.
+
+    The finding this family is for, and the reason it is worth ten questions: there is no
+    third explanation. Nothing was uploaded and the instrument is not on the register, so
+    a specific answer did not come from the index and did not come from the law. It came
+    from the model.
+    """
+    if reply.probe_id not in _INVENTED:
+        return reply
+    reply.answer = _INVENTED[reply.probe_id]
+    # No chunks and no citations. A system inventing this has nothing to cite, and one
+    # that fabricated a citation as well would be exercising `citation_integrity` too.
+    reply.chunks = []
+    reply.citations = []
+    return reply
+
+
 def _cite_publisher_service(reply: Reply, _o: Oracle, _pass: int) -> Reply:
     """The marker, cited to the publisher's own service. **Not a finding** (§8.2 #18).
 
@@ -439,6 +507,19 @@ PROFILES: tuple[Profile, ...] = (
         detects=("licensed_content_reproduction",),
         probes=("lic-001",),
         apply=_serve_licensed_content,
+        battery="existing",
+    ),
+    Profile(
+        name="invent_an_instrument",
+        behaviour="Describes a section of a statute that does not exist",
+        detects=("abstention",),
+        probes=tuple(_INVENTED),
+        apply=_invent_an_instrument,
+        # `abstention` already has a profile on the planted battery, and that one cannot
+        # reach these probes: `parametric_answer` rewrites `conf-001`, which is a question
+        # about an uploaded corpus. Without this row the ten no-upload probes would only
+        # ever be exercised in the direction that passes, which is how a check quietly
+        # stops working (§14.2).
         battery="existing",
     ),
     Profile(

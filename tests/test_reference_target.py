@@ -283,6 +283,13 @@ def test_the_profile_set_is_the_one_the_plan_names():
         "unsupported_prose",
         "irrelevant_chunks",
         "serve_licensed_content",
+        # Also not in §14.1's table, and for a different reason from the row below: the
+        # check it exercises has been in the register all along. What is new is the
+        # *configuration* — `abstention` asked with nothing uploaded, about an instrument
+        # that is not on the register either — and the planted profile for that check
+        # cannot reach those probes. A check exercised in one configuration of two is one
+        # the gate covers less thoroughly than the register implies.
+        "invent_an_instrument",
         # Not in §14.1's table. Point-in-time correctness is F27's *distinct evaluator*
         # rather than one of §8.2's eighteen, so it arrived with no pathology beside it
         # and the registry-driven gate refused to build until one existed.

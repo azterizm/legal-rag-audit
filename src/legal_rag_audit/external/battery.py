@@ -11,7 +11,7 @@ What it gives up is everything planting buys. No canaries, no injection payloads
 contradiction pairs, no adjacency: those need documents we authored. What it gives back
 is ground truth nobody has to take our word for.
 
-Two families ship here:
+Three families ship here:
 
 * **Point-in-time pairs** (F27) — the same provision asked at two moments, scored against
   a phrase quoted from `legislation.gov.uk`. The pair is the test.
@@ -19,6 +19,14 @@ Two families ship here:
   reported authority, paired with a control on an authority available free. The pairing
   matters here too: a system that emits publisher markers indiscriminately is a different
   thing from one whose index holds the licensed edition, and only the pair separates them.
+* **Fictional instruments** (§8.2 #8) — ten questions about statutes that do not exist,
+  asked with nothing uploaded, scored on whether a specific claim comes back. This is the
+  planted battery's own questions with the upload removed: same words, inverted ground
+  truth, and no third explanation for a specific answer. See `external.fictional`.
+
+The three read each other. A system that answers nothing passes all ten fictional probes,
+so the pass is only worth something beside the two families in the same run that ask
+answerable questions — which is why they ship together rather than behind separate flags.
 
 > [!NOTE]
 > **Nothing in this battery is planted and nothing is uploaded**, so nothing here needs
@@ -31,6 +39,12 @@ from typing import Optional
 from ..interchange.ground_truth import Expectation, GroundTruth
 from ..interchange.probe import Probe
 from .anchors import ANCHORS, Anchor, validate_anchors
+from .fictional import (
+    INSTRUMENTS,
+    Instrument,
+    fictional_probe_id,
+    validate_instruments,
+)
 
 #: Declared on every probe, as on the planted battery: any question asked twice can
 #: answer whether the system agreed with itself (§8.3, F39).
@@ -38,6 +52,14 @@ CROSS_CUTTING: tuple[str, ...] = ("response_divergence",)
 
 POINT_IN_TIME = "point_in_time"
 LICENSED = "licensed_content_reproduction"
+
+#: The fictional-instrument family scores against the check that already exists for it.
+#: `AbstentionEvaluator` is §8.2 #8's inverted check — presence of a claim, never absence
+#: of refusal language — and that is exactly the question a no-upload run asks about an
+#: instrument nobody wrote. Reusing the name also keeps the family inside §13's
+#: ordinary-use column without a new classification: *asks a question the corpus cannot
+#: answer and reads what comes back* describes this without a word changed.
+ABSTENTION = "abstention"
 
 
 def _probe_ids(anchor: Anchor) -> tuple[str, str]:
@@ -91,9 +113,11 @@ def build_external_probes(
     passes: int = 1,
     anchors: tuple[Anchor, ...] = ANCHORS,
     include_licensed: bool = True,
+    instruments: tuple[Instrument, ...] = INSTRUMENTS,
 ) -> list[Probe]:
-    """The questions. Carries no phrase, no date expectation and no marker set."""
+    """The questions. Carries no phrase, no date expectation, no marker set and no shape."""
     validate_anchors(anchors)
+    validate_instruments(instruments)
     probes: list[Probe] = []
 
     for anchor in anchors:
@@ -130,15 +154,34 @@ def build_external_probes(
                 )
             )
 
+    for instrument in instruments:
+        for question in instrument.questions:
+            probes.append(
+                Probe(
+                    probe_id=fictional_probe_id(instrument, question),
+                    family=ABSTENTION,
+                    # The one place in this battery where nothing in the corpus supports
+                    # an answer, because the instrument is not in anybody's corpus.
+                    # Declaring it `positive` would score a refusal as a failure, which
+                    # is the mistake §9.3 exists to prevent.
+                    intent="no_correct_answer",
+                    text=question.text,
+                    eligible_for=[ABSTENTION, *CROSS_CUTTING],
+                    passes=passes,
+                )
+            )
+
     return probes
 
 
 def build_external_ground_truth(
     anchors: tuple[Anchor, ...] = ANCHORS,
     include_licensed: bool = True,
+    instruments: tuple[Instrument, ...] = INSTRUMENTS,
 ) -> GroundTruth:
     """The withheld half. No plants and no seed — the answers are not ours to mint."""
     validate_anchors(anchors)
+    validate_instruments(instruments)
     expectations: list[Expectation] = []
 
     for anchor in anchors:
@@ -179,12 +222,32 @@ def build_external_ground_truth(
             # here and the manifest does not pretend otherwise.
             expectations.append(Expectation(probe_id=probe_id, check=LICENSED))
 
+    for instrument in instruments:
+        for question in instrument.questions:
+            expectations.append(
+                Expectation(
+                    probe_id=fictional_probe_id(instrument, question),
+                    check=ABSTENTION,
+                    # The whole expectation. `must_contain` would be incoherent — there
+                    # is no right answer to contain anything — and `must_not_contain`
+                    # stays empty on purpose: it is for values a ground truth can name as
+                    # fabrications, and nothing is planted in this configuration. A list
+                    # populated for the look of it could not match, so the probe would
+                    # pass whatever came back and pad the denominator while measuring
+                    # nothing (see `external.fictional`).
+                    shapes=list(question.shapes),
+                )
+            )
+
     return GroundTruth(
         seed=None,
         corpus_mode="existing",
         seed_source=(
             "no seed — this battery plants nothing. Its expectations are quoted from "
-            "primary sources and are checkable against them rather than against us"
+            "primary sources and are checkable against them rather than against us, "
+            "including the fictional-instrument family, whose expectation is that the "
+            "instrument is absent from the public register and whose reader can run the "
+            "search that returns nothing"
         ),
         plants=[],
         guard=None,

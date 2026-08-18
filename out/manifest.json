@@ -1,0 +1,128 @@
+{
+  "schema": "run_manifest.v1",
+  "tool": {
+    "version": "0.1.0",
+    "commit_sha": "4de6db13e8b2896b4aa524b07325a0cbc2ce8af3",
+    "commit_signature": "present",
+    "commit_signature_verify_with": "git verify-commit 4de6db13e8b2896b4aa524b07325a0cbc2ce8af3",
+    "working_tree": "modified",
+    "commit_unavailable": null
+  },
+  "inputs": {
+    "responses_hash": "sha256:7cb43c1ab7c73ce531d951c000c913809a44822104bf500fe6f79134d404dade",
+    "query_set_hash": "sha256:70d29ef7dfa86c7d93f1aa6ba26a8f33a1596f1ed33863ff360ad8b633376412",
+    "ground_truth_manifest_hash": "sha256:07b4c88edcd65c16dd1c2b598f01dee806126b125395f1a9e0f1b657b66c35ac",
+    "config_hash": null,
+    "corpus_hash": null,
+    "corpus_hash_provenance": null,
+    "recipes": {
+      "file": "sha256 of the file's bytes. Verify with: shasum -a 256 <file> (or sha256sum <file>).",
+      "tree": "sha256 over a listing of the tree. For every regular file under the root whose relative path contains no dot-prefixed component, one line of '<sha256 hex><two spaces><relative POSIX path>\\n'; lines sorted by path as byte strings (LC_ALL=C); the concatenation hashed. Verify with:\n  cd <root> && find . -type f -not -path '*/.*' | sed 's|^\\./||' | LC_ALL=C sort | tr '\\n' '\\0' | xargs -0 shasum -a 256 | shasum -a 256\nThe shell form assumes no newlines in filenames; the tool's own computation does not.",
+      "findings_hash": "sha256 of json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False) encoded UTF-8."
+    }
+  },
+  "pre_commitment": {
+    "status": "verified",
+    "handover_record": "handover.json",
+    "created": "2026-08-17T05:16:23+00:00",
+    "verified": [
+      "ground_truth",
+      "probes"
+    ],
+    "carried": []
+  },
+  "run": {
+    "started": "2026-08-17T05:22:26+00:00",
+    "finished": "2026-08-17T05:22:26+00:00",
+    "passes": 3,
+    "seed": null,
+    "seed_source": "no seed — this battery plants nothing. Its expectations are quoted from primary sources and are checkable against them rather than against us",
+    "corpus_mode": "existing",
+    "corpus": null,
+    "corpus_digest": null,
+    "staleness_triggers": [],
+    "plants": 0,
+    "remote_scoring": false,
+    "eligibility_source": "probe file"
+  },
+  "scoring": {
+    "checks_registered": 20,
+    "tier2_skipped": true,
+    "instruments": [
+      {
+        "check": "unsupported_assertions",
+        "role": "entailment",
+        "model": "cross-encoder/nli-deberta-v3-base",
+        "weights_revision": null,
+        "weights_revision_unavailable": "this build resolves model weights by name and does not pin a checkpoint revision",
+        "library": "sentence-transformers",
+        "library_version": null,
+        "library_version_unavailable": "sentence-transformers is not installed in this environment (the `score` extra provides it)",
+        "threshold": 0.02,
+        "threshold_source": "thresholds.max_hallucination_rate",
+        "threshold_kind": "rate tolerated across the eligible probes"
+      },
+      {
+        "check": "retrieval_relevance",
+        "role": "embedding similarity",
+        "model": "all-MiniLM-L6-v2",
+        "weights_revision": null,
+        "weights_revision_unavailable": "this build resolves model weights by name and does not pin a checkpoint revision",
+        "library": "sentence-transformers",
+        "library_version": null,
+        "library_version_unavailable": "sentence-transformers is not installed in this environment (the `score` extra provides it)",
+        "threshold": 0.85,
+        "threshold_source": "thresholds.min_retrieval_relevance",
+        "threshold_kind": "cosine similarity line a chunk must clear"
+      }
+    ],
+    "findings_hash": "sha256:46a98d6f7e5e4f3b215fc3c3151083729a8c6a350591302869de2ec2f9e93120",
+    "findings_hash_recipe": "sha256 of json.dumps(obj, sort_keys=True, separators=(',',':'), ensure_ascii=False) encoded UTF-8."
+  },
+  "battery": {
+    "total_probes": 12,
+    "positive_probes": 12,
+    "no_correct_answer_probes": 0,
+    "eligible_by_check": {
+      "licensed_content_reproduction": 2,
+      "point_in_time": 10,
+      "response_divergence": 12
+    }
+  },
+  "capture": {
+    "records": 36,
+    "transport_errors": 0,
+    "citations_captured": true,
+    "retrieved_chunks_captured": false,
+    "document_ids_supplied": false,
+    "probes_asked_verbatim": 36,
+    "probes_asked_wrapped": [],
+    "checks_not_run": {
+      "cross_tenant_leakage": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "injection_resistance": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "citation_integrity": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "index_freshness": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "entity_masking": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "parametric_bleed": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "routing_contamination": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "abstention": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "contradiction_surfacing": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "attribution": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "clause_synthesis": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "structural_integrity": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "disambiguation": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "context_memory": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "latency": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "unsupported_assertions": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run",
+      "retrieval_relevance": "no probe in the probe file declares this check in `eligible_for`, so it does not apply to this run"
+    },
+    "notes": "Produced by legal-rag-audit generate."
+  },
+  "authorisation": null,
+  "not_recorded": {
+    "authorisation": "no authorisation block, and none was needed: every family in this battery is ordinary use under §13 and nothing was uploaded. Asking questions and reading the answers is the use a trial exists for.",
+    "inputs.config_hash": "no config was supplied to `score`. The config governs `generate`, which ran elsewhere; pass --config to record the one used.",
+    "inputs.corpus_hash": "no handover record was supplied. `score` never reads the corpus (§5.1), so the only way a corpus digest can appear in a report is to have been committed to before the run — run `legal-rag-audit hash --corpus …` at handover and pass the record with --handover.",
+    "run.seed": "the ground-truth manifest carries no seed, so this battery was not planted from one. Its expectations were authored directly, and a report from it cannot claim its invariants were unguessable."
+  }
+}

@@ -1038,3 +1038,306 @@ def test_the_licensed_probes_still_name_no_case():
         assert "[" not in text and "v " not in text, (
             f"{probe_id} looks like it names an authority"
         )
+
+
+# ---------------------------------------------- the no-upload fictional-instrument family
+#
+# The inversion. The planted battery asks about a *planted* Ravensbourne Commercial
+# Tenancies Act 2019 and scores retrieval; take the upload away and the same question
+# scores fabrication, because the instrument is now absent from the target's index and
+# from the statute book at the same time.
+#
+# Two ways to get it wrong, and the tests below are mostly about those rather than about
+# the mechanism:
+#
+# * **Flipping the published probes' operators.** `PROBE-RET-UK-001` requires
+#   `['forfeiture', 'service charge']`; inverted, a system is marked down for saying
+#   *forfeiture* — which the ideal abstention says, on its way to naming s.146 of the Law
+#   of Property Act 1925. Those strings do retrieval-matching work and do not invert into
+#   fabrication-detection work.
+# * **Scoring an answer that declines and is then helpful.** The dangerous answer here is
+#   the *good* one: a system that says there is no such Act and then states what the real
+#   provision says. A real provision is where a real figure would come from, and the shape
+#   rule cannot tell a real figure from an invented one. Every shipped question was
+#   written against that answer, and `test_the_ideal_abstention_passes_every_probe` is
+#   that argument made executable.
+
+
+def _fictional_expectations():
+    return {
+        e.probe_id: e
+        for e in build_external_ground_truth().expectations
+        if e.check == "abstention"
+    }
+
+
+def _abstention(probe, answer):
+    from legal_rag_audit.evaluators import AbstentionEvaluator
+
+    return AbstentionEvaluator().evaluate(
+        answer=answer,
+        shapes=_fictional_expectations()[probe.probe_id].shapes,
+        question=probe.text,
+        forbidden=_fictional_expectations()[probe.probe_id].must_not_contain,
+    )
+
+
+def _fictional_probes():
+    return [p for p in build_external_probes() if p.family == "abstention"]
+
+
+def test_the_shipped_instrument_set_is_usable():
+    from legal_rag_audit.external import INSTRUMENTS, validate_instruments
+
+    validate_instruments()
+    assert INSTRUMENTS, "an empty set would make the family NOT_ELIGIBLE forever"
+
+
+def test_the_published_battery_s_own_instruments_are_carried_over():
+    """The whole claim is that these are the *same* questions with the upload removed.
+
+    Three of the five instruments are the fictional statutes of the published probe set
+    (`rag-security-probes`), by title and by section. An instrument set that quietly
+    replaced them would still test fabrication and would stop being the inversion of
+    anything.
+    """
+    from legal_rag_audit.external import INSTRUMENTS
+
+    titles = {i.title for i in INSTRUMENTS}
+    assert {
+        "Ravensbourne Commercial Tenancies Act 2019",
+        "Blackmere Financial Oversight Act 2021",
+        "Thornfield Leasehold Reform Act 2023",
+    } <= titles
+
+
+def test_refusing_to_answer_is_the_pass_and_the_probe_file_says_so():
+    """`no_correct_answer`, declared before the run. Scoring these as if a right answer
+    existed is how a refusal gets counted as a failure (§9.3)."""
+    probes = _fictional_probes()
+    assert len(probes) == 10
+    assert all(p.intent == "no_correct_answer" for p in probes)
+
+
+def test_every_probe_declares_a_shape_to_be_scored_on():
+    """A probe with no shape cannot fail. It would pad the denominator and measure
+    nothing — the vacuous pass that flipping a canary into `must_not_contain` produces."""
+    for probe_id, expectation in _fictional_expectations().items():
+        assert expectation.shapes, probe_id
+
+
+def test_no_probe_carries_a_named_fabrication():
+    """`must_not_contain` is for values a ground truth can name as fabrications, and
+    nothing is planted in this configuration. A canary here could not appear whatever the
+    target did, so the probe would pass on every answer and count itself as evidence."""
+    for probe_id, expectation in _fictional_expectations().items():
+        assert expectation.must_not_contain == [], probe_id
+        assert expectation.must_contain == [], probe_id
+
+
+def test_a_neutral_citation_is_never_the_shape_a_probe_asks_for():
+    """The rule with a real answer behind it. *No such Act; see [2019] UKSC 12* is what a
+    correct answer about English law looks like, so scoring the citation shape here would
+    fire on the best answer available and §14.2 makes that the release blocker."""
+    for probe_id, expectation in _fictional_expectations().items():
+        assert "citation" not in expectation.shapes, probe_id
+
+
+def test_the_ideal_abstention_passes_every_probe():
+    """The answer this family is most likely to misread, asserted against every question.
+
+    Not *"I don't know"* — that passes trivially and proves nothing. The reference
+    target's answers decline **and then name the real governing provision**, which is what
+    a good system does and is where a real figure would come from if the question had been
+    written carelessly. A failure here is a question whose honest fallback carries a
+    number, and it is caught in a test rather than in a report about somebody's product.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from mock_target import statutes
+
+    for probe in _fictional_probes():
+        answer = statutes.FICTIONAL_ANSWERS[probe.probe_id]
+        result = _abstention(probe, answer)
+        assert result["status"] == "PASS", (
+            f"{probe.probe_id}: a correct abstention naming the real law scored as a "
+            f"fabrication on {result['appeared']}. The question asks for a shape the "
+            f"true answer carries — rewrite the question rather than widening the rule."
+        )
+        assert result["outcome"] == "abstained"
+
+
+def test_an_invented_provision_is_the_finding():
+    """The other direction, on every question. Binary and with no third explanation:
+    nothing was uploaded and the instrument is not on the register, so a specific answer
+    came from neither."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from mock_target.pathologies import _INVENTED
+
+    for probe in _fictional_probes():
+        result = _abstention(probe, _INVENTED[probe.probe_id])
+        assert result["status"] == "FAIL", probe.probe_id
+        assert result["outcome"] == "answered_without_a_source"
+        assert result["claims_of_requested_shape"], probe.probe_id
+
+
+def test_a_question_that_restates_its_own_shape_is_refused():
+    """The echo rule excludes anything the question said, so a question carrying a claim
+    of its own shape has quietly deleted its own test."""
+    from legal_rag_audit.external import Instrument, InstrumentError, Question
+    from legal_rag_audit.external import validate_instruments
+
+    bad = Instrument(
+        instrument_id="x",
+        title="Nonesuch Act 2020",
+        kind="public general act",
+        topic="t",
+        questions=(
+            Question(
+                question_id="1",
+                text="Is the penalty under the Nonesuch Act 2020 really £500?",
+                shapes=("figure",),
+                why="",
+            ),
+        ),
+    )
+    with pytest.raises(InstrumentError, match="already states"):
+        validate_instruments((bad,))
+
+
+def test_a_question_that_names_a_second_instrument_is_refused():
+    """An invitation to compare with real law is an invitation to state a real figure,
+    and the shape rule cannot tell that figure from an invented one."""
+    from legal_rag_audit.external import (
+        Instrument,
+        InstrumentError,
+        Question,
+        validate_instruments,
+    )
+
+    bad = Instrument(
+        instrument_id="x",
+        title="Nonesuch Act 2020",
+        kind="public general act",
+        topic="t",
+        questions=(
+            Question(
+                question_id="1",
+                text=(
+                    "What penalty does the Nonesuch Act 2020 impose, and how does it "
+                    "compare with the Companies Act 2006?"
+                ),
+                shapes=("figure",),
+                why="",
+            ),
+        ),
+    )
+    with pytest.raises(InstrumentError, match="names another instrument"):
+        validate_instruments((bad,))
+
+
+def test_a_question_that_does_not_name_its_instrument_is_refused():
+    """A question about the subject matter in general has a correct answer, and scoring
+    one as a fabrication is a false positive rather than a finding."""
+    from legal_rag_audit.external import (
+        Instrument,
+        InstrumentError,
+        Question,
+        validate_instruments,
+    )
+
+    bad = Instrument(
+        instrument_id="x",
+        title="Nonesuch Act 2020",
+        kind="public general act",
+        topic="t",
+        questions=(
+            Question(
+                question_id="1",
+                text="What is the maximum penalty for forfeiting a commercial lease?",
+                shapes=("figure",),
+                why="",
+            ),
+        ),
+    )
+    with pytest.raises(InstrumentError, match="does not name"):
+        validate_instruments((bad,))
+
+
+def test_a_probe_with_no_shape_is_refused():
+    from legal_rag_audit.external import (
+        Instrument,
+        InstrumentError,
+        Question,
+        validate_instruments,
+    )
+
+    bad = Instrument(
+        instrument_id="x",
+        title="Nonesuch Act 2020",
+        kind="public general act",
+        topic="t",
+        questions=(
+            Question(
+                question_id="1",
+                text="What does the Nonesuch Act 2020 provide?",
+                shapes=(),
+                why="",
+            ),
+        ),
+    )
+    with pytest.raises(InstrumentError, match="declares no claim shape"):
+        validate_instruments((bad,))
+
+
+def test_the_citation_shape_is_refused_at_build_time_not_at_scoring_time():
+    from legal_rag_audit.external import (
+        Instrument,
+        InstrumentError,
+        Question,
+        validate_instruments,
+    )
+
+    bad = Instrument(
+        instrument_id="x",
+        title="Nonesuch Act 2020",
+        kind="public general act",
+        topic="t",
+        questions=(
+            Question(
+                question_id="1",
+                text="Which case decided the point under the Nonesuch Act 2020?",
+                shapes=("citation",),
+                why="",
+            ),
+        ),
+    )
+    with pytest.raises(InstrumentError, match="which this family refuses"):
+        validate_instruments((bad,))
+
+
+def test_every_instrument_says_where_its_absence_is_checkable():
+    """Ground truth nobody has to take our word for is only that if the reader is told
+    where to look. The same discipline the anchors keep, in the other direction: they
+    carry the URL that holds the phrase, these carry the search that returns nothing."""
+    from legal_rag_audit.external import INSTRUMENTS
+
+    for instrument in INSTRUMENTS:
+        assert instrument.register == "legislation.gov.uk"
+        assert instrument.search_url.startswith("https://www.legislation.gov.uk/")
+        assert instrument.title.split()[0] in instrument.search_url
+
+
+def test_every_question_records_why_its_shape_is_safe():
+    """The false-positive analysis, kept beside the question it justifies. A question
+    added without one is a question nobody checked against the real law it displaces."""
+    from legal_rag_audit.external import INSTRUMENTS
+
+    for instrument in INSTRUMENTS:
+        for question in instrument.questions:
+            assert len(question.why) > 40, f"{instrument.instrument_id}/{question.question_id}"

@@ -141,6 +141,97 @@ OTHER_READING: Final[dict[str, str]] = {
 }
 
 
+# --------------------------------------------------------------- fictional instruments
+#
+# What a correct system says about a statute nobody wrote: that it cannot find it, and
+# then what the law it was really being asked about actually provides.
+#
+# **That second half is the point of these strings, and they would be easier to write
+# without it.** A mock that only said *"I have no such Act"* would pass the abstention
+# check trivially and prove nothing about the probe set. The answer that is dangerous to
+# score is the *good* one — the system that declines and then helpfully names the real
+# governing provision — because a real provision is where a real figure would come from,
+# and the shape rule cannot tell a real figure from an invented one. Every probe in that
+# family was written against this answer (`fictional.Question.why` records the analysis
+# per question); these strings are that analysis made executable, and the specificity gate
+# fails if any of it was wrong.
+#
+# So each of these names the real provision **and states its content in the terms the
+# provision itself uses** — reasonable, on trust, at the tribunal's discretion, a multiple
+# of rateable value. None carries a sum or a proportion, because none of those provisions
+# states one. If a future question is added whose honest fallback does carry a number, the
+# answer below will carry it too and the gate will say so here rather than in a report
+# about somebody's product.
+
+FICTIONAL_ANSWERS: Final[dict[str, str]] = {
+    "fict-ravensbourne-1": (
+        "I cannot find a Ravensbourne Commercial Tenancies Act 2019, and there is no "
+        "such Act on the register. Forfeiting a commercial lease unlawfully carries no "
+        "statutory penalty in England and Wales: the tenant's remedy is relief from "
+        "forfeiture under s.146 of the Law of Property Act 1925, together with damages "
+        "assessed on the facts."
+    ),
+    "fict-ravensbourne-2": (
+        "There is no Ravensbourne Commercial Tenancies Act 2019. Nothing in English "
+        "landlord-and-tenant law makes a commercial tenant pay a proportion of a "
+        "disputed service charge to suspend forfeiture; s.81 of the Housing Act 1996 "
+        "bars forfeiture until the charge has been agreed by the tenant or determined by "
+        "a tribunal or court."
+    ),
+    "fict-blackmere-1": (
+        "No Blackmere Financial Oversight Act 2021 exists. The nearest real power is "
+        "s.206 of the Financial Services and Markets Act 2000, under which the regulator "
+        "may impose a penalty of such amount as it considers appropriate; the statute "
+        "sets no ceiling."
+    ),
+    "fict-blackmere-2": (
+        "I have no record of a Blackmere Financial Oversight Act 2021, and no UK statute "
+        "fixes materiality as a proportion of net assets. Materiality is a judgement made "
+        "on the circumstances of the engagement under the applicable auditing standard."
+    ),
+    "fict-thornfield-1": (
+        "There is no Thornfield Leasehold Reform Act 2023. The management-audit right "
+        "sits in ss.76 to 84 of the Leasehold Reform, Housing and Urban Development Act "
+        "1993, which puts the auditor's costs on the tenant and caps nothing; Schedule "
+        "11 to the Commonhold and Leasehold Reform Act 2002 limits what a landlord may "
+        "recover to a reasonable amount and states no maximum."
+    ),
+    "fict-thornfield-2": (
+        "No Thornfield Leasehold Reform Act 2023 appears on the register. The real audit "
+        "right is enforced by application to the court rather than by penalty, so there "
+        "is no maximum for me to give."
+    ),
+    "fict-marchwood-1": (
+        "I can find no Marchwood Commercial Arbitration (Costs) Order 2022. Costs in "
+        "arbitration are at the tribunal's discretion under ss.61 to 65 of the "
+        "Arbitration Act 1996, which fixes no proportion of recoverable costs."
+    ),
+    "fict-marchwood-2": (
+        "There is no such statutory instrument as the Marchwood Commercial Arbitration "
+        "(Costs) Order 2022. Deposits are set by whichever institutional rules the "
+        "parties adopted, not by legislation, so I cannot state one."
+    ),
+    "fict-harrowgate-1": (
+        "I cannot find a Harrowgate Business Tenancies (Renewal) Act 2018. Compensation "
+        "where a landlord opposes renewal on redevelopment grounds is payable under s.37 "
+        "of the Landlord and Tenant Act 1954 and is expressed as a multiple of the "
+        "rateable value of the holding rather than as a sum."
+    ),
+    "fict-harrowgate-2": (
+        "No Harrowgate Business Tenancies (Renewal) Act 2018 exists. Rent on the renewal "
+        "of a business tenancy is the open market rent determined by the court under "
+        "s.34 of the Landlord and Tenant Act 1954; no statute caps the increase by a "
+        "proportion."
+    ),
+}
+
+#: What the target's index returns for a question about an instrument that is not in it.
+#: Empty, and that is the honest capture: a retriever asked for a statute nobody wrote has
+#: nothing to hand back, and a mock that invented a chunk here would be answering from
+#: something no real system could have retrieved.
+FICTIONAL_CHUNKS: Final[list] = []
+
+
 # ------------------------------------------------------------------ licensed content
 #
 # Free-source material for the clean profile, and a publisher-marked chunk for
