@@ -255,9 +255,22 @@ async def _observe_sse(config, client, http, probe, timeout) -> Observation:
                     obs.ended_by = "terminator"
                     break
                 if chunk is not None:
-                    found = client.answer_parser.find(chunk)
-                    if found:
-                        answer += str(found[0].value)
+                    # The frame selector has to be applied here too, or this mode lies
+                    # about the one thing it exists to show. `generate` reads the answer
+                    # only from frames whose type matches `answer_frame_value`; a
+                    # `validate` that skipped that check previewed a different extraction
+                    # than the run would perform, in both directions. Against a stream
+                    # whose `*_end` frames had been renamed it printed the *thinking*
+                    # text under "extracted" while `generate` would have recorded an
+                    # empty answer; against a healthy interleaved stream it would
+                    # concatenate reasoning into a preview that looked fine. Either way
+                    # the operator reads a preview of a run that will not happen, which
+                    # is exactly what §7.1 puts this mode in front of the battery to
+                    # prevent.
+                    if client._carries_the_answer(chunk):
+                        found = client.answer_parser.find(chunk)
+                        if found:
+                            answer += str(found[0].value)
                     cited = client.citations_parser.find(chunk)
                     if cited and isinstance(cited[0].value, list):
                         citations.extend(cited[0].value)
@@ -366,9 +379,11 @@ async def _observe_ws(config, client, http, probe, timeout) -> Observation:
                     obs.ended_by = "terminator"
                     break
                 if chunk is not None:
-                    found = client.answer_parser.find(chunk)
-                    if found:
-                        answer += str(found[0].value)
+                    # Same frame selector as the SSE path above, for the same reason.
+                    if client._carries_the_answer(chunk):
+                        found = client.answer_parser.find(chunk)
+                        if found:
+                            answer += str(found[0].value)
                         if not config.target.response_format.stream:
                             obs.ended_by = "terminator"
                             cited = client.citations_parser.find(chunk)

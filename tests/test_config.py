@@ -375,7 +375,7 @@ class TestATwoHundredWithNoTextIsNotAnAnswer:
         config = load({**MINIMAL, "corpus": {"mode": "existing"}}, tmp_path)
         generator = Generator(config=config, documents=[], passes=1)
 
-        async def chat(_query):
+        async def chat(_query, attachments=None):
             return {"answer": answer, "citations": None, "raw": {"seen": True}}
 
         generator.client.chat = chat

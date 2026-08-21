@@ -1,6 +1,10 @@
 target:
   name: "lexcorp-staging"
   endpoints:
+    # Usually an HTTP route. It may instead be the same ws:// or wss:// url as
+    # `receive`, for a target whose question goes out on the socket and which has no
+    # HTTP route to post one to — the body is then written to that socket rather than
+    # sent as a request.
     chat: "https://staging.lexcorp.example.com/api/v1/chat"
     receive:
       # Optional: For WebSockets, url should start with ws:// or wss://
@@ -19,6 +23,12 @@ target:
         scenario-id: "..."
         x-csrftoken: "..."
       file_field: "file"
+      # With `file_field` set, `body:` is optional and becomes the ordinary form fields
+      # sent beside the file — for an ingest route that also wants an owner, a target
+      # folder or an OCR mode in the same multipart body. Written as a mapping:
+      #   body:
+      #     owner: "operator@example.com"
+      #     ocr_mode: "auto"
     retrieval: "https://staging.lexcorp.example.com/api/v1/search"  # optional
 
     # OPTIONAL, AND THE ONLY ENDPOINT THAT DESTROYS ANYTHING. Absent by default: without
@@ -44,7 +54,12 @@ target:
   pseudonym: null
   auth:
     type: "bearer"  # bearer | api_key | basic | cookie | none
-    token_env: "TARGET_API_KEY"  # reads from env var
+    token_env: "TARGET_API_KEY"  # reads from env var — the default, and the safe one
+    # Or, for a self-contained run config that is deleted after the run, the credential
+    # itself. Never both: which one is live cannot be read off the file, and a stale one
+    # sends rejections that are recorded as answers the target gave. Nothing here reaches
+    # the report — the manifest records a hash of this config, not its content.
+    # token: "..."
   response_format:
     answer_field: "response.text"  # JSONPath to the answer text
     citations_field: "response.sources"  # JSONPath to citations array
@@ -54,6 +69,19 @@ target:
     # do not apply to the dict a single frame is. Both halves or neither.
     # answer_frame_field: "$.type"
     # answer_frame_value: "text_end"
+    #
+    # Streams whose frames are typed by the SSE `event:` line rather than by anything in
+    # the JSON: name the event carrying the answer, and the one that ends the stage. No
+    # JSONPath can see an event name, so this is the only way to keep a target's own
+    # commentary or retrieved sources out of the text scored as its answer.
+    # answer_event: "message"
+    # stop_event: "complete"
+    #
+    # A target that generates nothing until asked to advance — create returns a ticket,
+    # and each request to `receive` produces the next stage — is driven rather than
+    # polled. That happens automatically when `receive.method` is not GET: the receive
+    # request is re-issued until a stage carries answer text, with stages that carry none
+    # treated as steps on the way rather than as an empty answer.
     #
     # Targets that answer asynchronously: the submit hands back a ticket and the answer
     # is polled for. `handle_field` reads the ticket out of the submit response and binds

@@ -143,6 +143,28 @@ def test_both_images_are_built_on_the_same_base_digest():
     )
 
 
+@pytest.mark.parametrize("path", [GENERATE, SCORE], ids=["generate", "score"])
+def test_the_runtime_stage_applies_debian_security_updates(path):
+    """A digest-pinned base freezes the OS packages, fixes included.
+
+    That is the point of the pin and also its one cost: Debian keeps issuing fixes after
+    the image is built, and the image cannot receive them. CVE-2026-53615 (util-linux)
+    failed `trivy image` on both images with a fix already published — and bumping the
+    digest did not help, because the current `python:3.11-slim` carried the vulnerable
+    version too. Without this layer the only remaining move is to suppress the finding,
+    which ships a known-vulnerable image to a target and calls it green.
+    """
+    text = read(path)
+    assert "apt-get --yes upgrade" in text, (
+        f"{path.name} no longer applies Debian security updates, so the image ships "
+        f"whatever OS packages the pinned base was built with — fixes and all"
+    )
+    assert "rm -rf /var/lib/apt/lists/*" in text, (
+        f"{path.name} upgrades without dropping the apt lists, which leaves the "
+        f"package index in the published image"
+    )
+
+
 # ----------------------------------------------------------------------- the runtime
 
 

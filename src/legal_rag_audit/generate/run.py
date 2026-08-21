@@ -65,9 +65,14 @@ class Generator:
         passes: int = 1,
         skip_upload: bool = False,
         authorisation: Optional[Authorisation] = None,
+        request_delay: Optional[float] = None,
     ):
         if passes < 1:
             raise GenerationError(f"passes must be at least 1, got {passes}")
+        if request_delay is not None and request_delay < 0:
+            raise GenerationError(
+                f"request delay must not be negative, got {request_delay}"
+            )
         self.config = config
         #: Passed in already checked. The gate lives in `generate()` because it has to
         #: fire before a corpus is uploaded, and by the time this class exists the
@@ -76,6 +81,14 @@ class Generator:
         self.documents = documents
         self.revisions = revisions or []
         self.passes = passes
+        # The flag wins when given; the config is the default. Same rule as `passes`,
+        # and for the same reason: a value typed on the command line is a decision about
+        # this run, and one copied between configs is not.
+        self.request_delay = (
+            request_delay
+            if request_delay is not None
+            else config.battery.request_delay_seconds
+        )
         self.skip_upload = skip_upload
         self.run_id = uuid.uuid4().hex[:16]
         self.client = TargetClient(config.target)
@@ -86,6 +99,19 @@ class Generator:
         #: is Vectara's `integration_fee_notice.txt`, and deleting the wrong string
         #: silently succeeds on an API that treats a miss as a no-op.
         self.issued_ids: dict[str, str] = {}
+        #: Corpus document id -> the reference a chat turn attaches it by. Populated at
+        #: upload, replaced in place when the revision phase re-uploads, and bound to
+        #: `{{ATTACHMENTS}}` in the chat body for targets that answer from documents
+        #: named on the message rather than from a standing index.
+        #:
+        #: **Every uploaded document is attached to every probe, deliberately.** The
+        #: alternative — attaching only the document a probe needs — reads that pairing
+        #: out of the withheld ground truth and posts it to the target, which both leaks
+        #: pre-committed expectations into the request and answers the question the
+        #: retrieval checks exist to ask. Handing over the whole corpus is the closest
+        #: analogue of an index the product can search; handing over the right file is a
+        #: reading-comprehension test wearing a retrieval audit's clothes.
+        self.attachments: dict[str, dict[str, str]] = {}
         #: Set once we know whether the target emits these at all, rather than guessed
         #: per record.
         self.saw_citations = False
@@ -138,11 +164,28 @@ class Generator:
         return responses, notes
 
     async def _ask_all(self, probes: list[Probe]) -> list[Response]:
+        """Ask every probe, once per pass, waiting `request_delay` between requests.
+
+        The wait goes *between* requests rather than after each one, so a run is never
+        padded by a trailing sleep and a delay of zero is exactly the old behaviour.
+        """
         responses: list[Response] = []
+        if self.request_delay:
+            total = len(probes) * self.passes
+            logger.info(
+                f"Pacing: {self.request_delay}s between requests. "
+                f"{total} requests will take at least "
+                f"{int((total - 1) * self.request_delay // 60)}m"
+                f"{int((total - 1) * self.request_delay % 60)}s of waiting alone."
+            )
+        first = True
         for pass_index in range(1, self.passes + 1):
             if self.passes > 1:
                 logger.info(f"Pass {pass_index} of {self.passes}")
             for probe in probes:
+                if not first and self.request_delay:
+                    await asyncio.sleep(self.request_delay)
+                first = False
                 responses.append(await self._ask(probe, pass_index))
         return responses
 
@@ -316,6 +359,10 @@ class Generator:
             # citation integrity tests membership against twice.
             if identifier not in self.document_ids:
                 self.document_ids.append(identifier)
+            self.attachments[doc["id"]] = {
+                "filename": doc["filename"],
+                "document_id": identifier,
+            }
 
         logger.info(f"Uploaded {len(documents)} documents ({label}).")
 
@@ -323,7 +370,9 @@ class Generator:
         started = _now()
         t0 = time.monotonic()
         try:
-            result = await self.client.chat(probe.text)
+            result = await self.client.chat(
+                probe.text, attachments=list(self.attachments.values())
+            )
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             logger.error(f"{probe.probe_id}: request failed: {e}")
@@ -557,6 +606,7 @@ def generate(
     corpus_dir: Optional[str] = None,
     probes_in: Optional[str] = None,
     production_ack: bool = False,
+    request_delay: Optional[float] = None,
 ) -> int:
     """Run the battery and write the response file. Returns the record count.
 
@@ -612,6 +662,7 @@ def generate(
         passes=passes,
         skip_upload=skip_upload,
         authorisation=authorisation,
+        request_delay=request_delay,
     )
     responses, notes = asyncio.run(generator.run(probes))
     write_responses(responses_path, responses, capture_notes=notes)

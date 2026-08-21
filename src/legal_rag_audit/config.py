@@ -83,14 +83,45 @@ class AuthConfig(BaseModel):
     model_config = STRICT
 
     type: Literal["none", "bearer", "api_key", "basic", "cookie"] = "none"
-    #: The environment variable holding the credential. Never the credential itself: a
-    #: config is committed, pasted into an issue and copied between runs, and a secret in
-    #: one of those is a secret in all of them.
+    #: The environment variable holding the credential. The safe spelling, and the one to
+    #: reach for by default: a config is committed, pasted into an issue and copied
+    #: between runs, and a secret in one of those is a secret in all of them.
     token_env: Optional[str] = None
+    #: The credential itself, in the file. Deliberately available and deliberately
+    #: second, for a self-contained run config that is thrown away rather than kept — a
+    #: short-lived browser session token in a file deleted after the run is a different
+    #: risk from an API key in a committed config, and refusing the spelling outright
+    #: just pushes operators into `export` lines their shell history keeps.
+    #:
+    #: What it does not touch: nothing here reaches an artefact. The manifest records a
+    #: *hash* of the config, never its content (`provenance.emit`), so a token in this
+    #: field does not travel with the report. The file itself is yours to delete.
+    token: Optional[str] = None
 
     @model_validator(mode="after")
     def _a_scheme_needs_somewhere_to_read_the_credential_from(self) -> "AuthConfig":
-        if self.type != "none" and not self.token_env:
+        if self.token is not None and not self.token.strip():
+            raise ValueError(
+                "auth.token is set to a blank string. A credential lost to a bad "
+                "copy-paste is caught here\n"
+                "  or not at all: the run would send an empty Bearer header and record "
+                "every rejection as\n"
+                "  an answer the target gave. Remove the key, or paste the token."
+            )
+        if self.token is not None:
+            # Tokens arrive from a clipboard and a YAML block scalar; a trailing newline
+            # in an Authorization header is a 400 from some servers and a silent
+            # mismatch on others.
+            object.__setattr__(self, "token", self.token.strip())
+        if self.type != "none" and self.token_env and self.token:
+            raise ValueError(
+                "auth.token and auth.token_env are both set. Which one is live cannot "
+                "be read off the file,\n"
+                "  and the wrong guess sends a stale credential — whereupon the "
+                "target's rejections are\n"
+                "  recorded as answers it gave. Keep one."
+            )
+        if self.type != "none" and not self.token_env and not self.token:
             raise ValueError(
                 f"auth.type is {self.type!r} but auth.token_env is not set.\n"
                 "  Nothing would be sent to authenticate, and the target's rejections "
@@ -100,6 +131,11 @@ class AuthConfig(BaseModel):
                 "    auth:\n"
                 f"      type: {self.type}\n"
                 "      token_env: TARGET_API_KEY\n"
+                "  Or, for a run config that is deleted after the run, the credential "
+                "itself:\n"
+                "    auth:\n"
+                f"      type: {self.type}\n"
+                '      token: "..."\n'
                 "  Or set type: none if this endpoint genuinely takes no credential."
             )
         return self
@@ -140,6 +176,21 @@ class ResponseFormatConfig(BaseModel):
     answer_field: str = "response.text"
     citations_field: str = "response.sources"
     stream: bool = False
+    #: SSE `event:` name whose frames carry the answer, for a stream whose frames are
+    #: distinguished by event name rather than by anything inside the JSON. It exists
+    #: because `answer_frame_field` is a JSONPath into the frame body and cannot see the
+    #: event line at all — and on a target that names its events, that line is the only
+    #: thing separating the answer from everything else on the stream.
+    #:
+    #: Justice Pappers is the case: `message` frames carry the answer a token at a time,
+    #: `decision` frames carry retrieved case law, and `enhanced` frames carry the
+    #: model's own critique of the answer it just gave. All three are `{"content": …}`,
+    #: so a run without this reads all three as one answer and scores a system's
+    #: self-criticism as part of what it told the user.
+    answer_event: Optional[str] = None
+    #: SSE `event:` name that ends the stream, for a target whose terminator is an event
+    #: rather than the `[DONE]` sentinel this reader already knows.
+    stop_event: Optional[str] = None
     stop_payload_match: Optional[str] = None
     stop_field: Optional[str] = None
     stop_value: Optional[str] = None
@@ -343,6 +394,25 @@ class BatteryConfig(BaseModel):
     #: looking like measurement, and §12's whole position is that this tool never has to
     #: be argued down from something that looks like abuse.
     passes: int = Field(default=1, ge=1, le=10)
+
+    #: Seconds to wait between one probe and the next. **Zero is the default and is
+    #: wrong for most public trials**, which is stated here rather than discovered.
+    #:
+    #: With no pacing the battery fires as fast as the target answers. A 22-probe
+    #: three-pass run went out in 111 seconds at a median of one second apart, and the
+    #: endpoint defended itself exactly as it should have: one read timeout, then six
+    #: `403`s, then fifty-nine `429`s, and not one answer. Every record was written as a
+    #: transport error, so nothing was mis-scored — but the run measured nothing and
+    #: spent someone else's quota to do it.
+    #:
+    #: That is the same argument `passes` makes one field up. The endpoint is theirs, and
+    #: a burst that reads as abuse is a worse failure than a slow run: §12's position is
+    #: that this tool never has to be argued down from something that looks like abuse.
+    #: A paced run is also the only one whose failures are attributable — a `429` in an
+    #: unpaced run says nothing about the target except that we asked too fast.
+    #:
+    #: Applied between probes and between passes, never before the first request.
+    request_delay_seconds: float = Field(default=0.0, ge=0.0, le=300.0)
 
 
 class AuditConfig(BaseModel):

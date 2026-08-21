@@ -57,6 +57,7 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 
 from .authorisation import PRODUCTION_ACK, AuthorisationError
 from .config import AuditConfig
@@ -135,6 +136,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             corpus_dir=args.corpus,
             probes_in=args.probes_in,
             production_ack=args.production_ack,
+            request_delay=args.delay,
         )
     except AuthorisationError as e:
         return _abort(f"Refusing to run, and nothing was sent:\n{e}")
@@ -514,6 +516,180 @@ def cmd_hash(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_split(args: argparse.Namespace) -> int:
+    from .interchange import (
+        InterchangeError,
+        rehydrate_response_file,
+        split_response_file,
+        verify_round_trip,
+    )
+
+    if args.rehydrate:
+        if not args.output:
+            return _abort("--rehydrate needs -o/--output: the file to write.")
+        try:
+            digest = rehydrate_response_file(args.responses, args.output)
+        except InterchangeError as e:
+            return _abort(str(e))
+        print(f"  rehydrated       {args.output}")
+        print(f"  sha256           {digest}")
+        print("\nCompare against `source_sha256` in raw/index.json.")
+        return EXIT_OK
+
+    if args.verify:
+        try:
+            ok, expected, actual = verify_round_trip(args.responses)
+        except (InterchangeError, OSError, KeyError, ValueError) as e:
+            return _abort(str(e))
+        print(f"  expected  sha256:{expected}")
+        print(f"  rebuilt   sha256:{actual}")
+        print(f"\n  {'MATCH — the split pair reproduces the original capture.' if ok else 'MISMATCH — do not rely on this pair.'}")
+        # A pair that no longer rehydrates is a corrupted artefact, not a finding about
+        # a target — NF9's distinction, and the reason this is EXIT_SETUP and not 1.
+        return EXIT_OK if ok else EXIT_SETUP
+
+    if not args.output:
+        return _abort("Nothing to write to. Pass -o/--output: a directory.")
+
+    try:
+        result = split_response_file(
+            args.responses, args.output, lean_name=args.lean_name
+        )
+    except InterchangeError as e:
+        return _abort(str(e))
+
+    mb = 1024 * 1024
+    print(f"  source           {args.responses}")
+    print(f"    sha256         {result.source_sha256}")
+    print(f"    size           {result.source_bytes / mb:.2f} MB")
+    print(f"  lean file        {result.lean_path}")
+    print(f"    size           {result.lean_bytes / mb:.3f} MB  ({result.shrink_factor:.0f}x smaller)")
+    print(f"  raw sidecars     {result.raw_dir}  ({len(result.sidecars)} files)")
+    print(f"  index            {result.index_path}")
+    print("\n  round trip       VERIFIED before writing — rehydrates to the source bytes")
+
+    if result.dict_raw_probes:
+        print(
+            f"\n  NOTE  {len(result.dict_raw_probes)} record(s) carried an object "
+            f"`raw_response`, which is the\n"
+            f"        one form `score` can read (entity_masking). Scoring the lean file "
+            f"reports\n"
+            f"        that check as not captured. Rehydrate first if you need it: "
+            f"{', '.join(result.dict_raw_probes[:5])}"
+        )
+    return EXIT_OK
+
+
+def cmd_triage(args: argparse.Namespace) -> int:
+    from .score.triage import build_divergences, build_rows, render_worksheet
+
+    try:
+        rows = build_rows(args.responses, args.probes, args.report)
+        divergences = build_divergences(args.report, rows)
+    except (OSError, ValueError, KeyError) as e:
+        return _abort(f"Could not build the worksheet: {e}")
+
+    text = render_worksheet(
+        rows, target=args.target or "unnamed target", divergences=divergences
+    )
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(text, encoding="utf-8")
+        need = sum(1 for r in rows if r.needs_reading)
+        print(f"  worksheet        {args.output}")
+        print(f"  observations     {len(rows)}")
+        print(f"  need reading     {need}  (flagged + unjudged + uncaptured)")
+        print("\n  Nothing here is a finding until a person signs the line.")
+    else:
+        print(text)
+    return EXIT_OK
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    from .interchange import outstanding, write_remaining_probes
+
+    try:
+        state = outstanding(args.probes, args.responses, args.passes)
+    except InterchangeError as e:
+        return _abort(str(e))
+
+    total = len(state.gathered)
+    done = sum(1 for pid in state.gathered if pid not in state.remaining)
+    print(f"  target            {args.passes} pass(es) per probe")
+    print(f"  probes complete   {done} of {total}")
+    print(f"  still outstanding {len(state.remaining)}")
+
+    if state.unknown:
+        print(
+            f"\n  NOTE  {len(state.unknown)} probe id(s) in the response files are not "
+            f"in this probe file:\n        {', '.join(state.unknown[:6])}\n"
+            f"        They were ignored. A response file from a different battery is "
+            f"the usual cause."
+        )
+
+    if state.complete:
+        print("\n  Nothing outstanding. Merge the segments:")
+        print("    legal-rag-audit merge --responses <seg1> <seg2> ... -o responses.jsonl")
+        return EXIT_OK
+
+    try:
+        written = write_remaining_probes(args.probes, args.output, state)
+    except InterchangeError as e:
+        return _abort(str(e))
+
+    shortfalls = set(state.remaining.values())
+    print(f"\n  remaining probes  {args.output}  ({written})")
+    if len(shortfalls) == 1:
+        only = shortfalls.pop()
+        print(f"  shortfall         {only} pass(es), the same for every probe")
+        print(f"  ask next account  --probes-in {args.output} --passes {only}")
+    else:
+        # `generate` asks every probe the same number of times, so a single --passes
+        # over the whole remaining set would over-ask the probes that are nearly done.
+        # Against a quota measured in single-figure questions that is wasted budget, so
+        # the recommendation is one pass at a time with a recompute between.
+        lo, hi = min(shortfalls), max(shortfalls)
+        print(f"  shortfall         uneven — between {lo} and {hi} passes per probe")
+        print(f"  ask next account  --probes-in {args.output} --passes 1")
+        print(
+            f"\n  One pass, not {hi}: `generate` asks every probe the same number of "
+            f"times, so\n  --passes {hi} here would ask the nearly-finished probes "
+            f"{hi - lo} time(s) too many. Against a\n  quota measured in single-figure "
+            f"questions that is budget spent on nothing."
+        )
+    print(
+        "\n  Re-run this command after each account and it recomputes; nothing already\n"
+        "  answered is asked again."
+    )
+    return EXIT_OK
+
+
+def cmd_merge(args: argparse.Namespace) -> int:
+    from .interchange import merge_segments
+
+    try:
+        summary = merge_segments(args.responses, args.output, note=args.note)
+    except InterchangeError as e:
+        return _abort(str(e))
+
+    print(f"  merged            {args.output}")
+    print(f"  segments          {summary['segments']}")
+    print(f"  probes            {summary['probes']}")
+    print(f"  records           {summary['records']}  ({summary['answered']} answered)")
+    print(f"  dropped           {summary['dropped_superseded']} superseded failure(s)")
+    thin = [p for p, n in summary["passes_per_probe"].items() if n < 2]
+    if thin:
+        print(
+            f"\n  NOTE  {len(thin)} probe(s) carry a single pass, so `response_divergence`\n"
+            f"        cannot compare them and the report will say so."
+        )
+    print(
+        "\n  The header records that this file was assembled and why that weakens the\n"
+        "  reproducibility claim. Do not strip it."
+    )
+    return EXIT_OK
+
+
 def cmd_schema(args: argparse.Namespace) -> int:
     from .interchange import available_schemas, read_schema_document
 
@@ -651,6 +827,16 @@ def build_parser() -> argparse.ArgumentParser:
             "`production`. There is no config-only path to a production run (§13 rule "
             "2): a config is copied between runs and a command line is typed for one"
         ),
+    )
+    gen.add_argument(
+        "--delay",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="wait this long between requests. Overrides `battery.request_delay_seconds`; "
+        "defaults to that, or to 0. A public trial will usually rate-limit an unpaced "
+        "battery, and a run that collects 429s has measured nothing while spending "
+        "someone else's quota",
     )
     gen.set_defaults(func=cmd_generate)
 
@@ -810,6 +996,106 @@ def build_parser() -> argparse.ArgumentParser:
         "--note", default=None, help="free text: who received this, and when"
     )
     hs.set_defaults(func=cmd_hash)
+
+    sp = sub.add_parser(
+        "split",
+        help="move raw_response out of a response file into one file per observation",
+        description=(
+            "A response file carries the records a person reads and the target's own "
+            "wire capture, and the second one ruins the first: one streamed probe can "
+            "be 2.5 MB of frames around a 2 KB answer, and a fifteen-record file no "
+            "editor will open is a file people take on trust. This moves "
+            "`raw_response` to raw/<probe_id>.pass<N>.json, one file per observation, "
+            "and nulls it in the record. The split is proven to rehydrate to the "
+            "source bytes before anything is written, and `--verify` re-proves it "
+            "afterwards. Scores nothing; the original is left untouched."
+        ),
+    )
+    sp.add_argument("--responses", required=True, help="path to the response file")
+    sp.add_argument(
+        "-o", "--output", default=None, help="directory to write the split pair into"
+    )
+    sp.add_argument(
+        "--lean-name",
+        default="responses.jsonl",
+        help="name of the lean response file (default: responses.jsonl)",
+    )
+    sp.add_argument(
+        "--rehydrate",
+        action="store_true",
+        help="reverse: read a lean file plus its raw/ directory and write the "
+        "monolithic file to --output",
+    )
+    sp.add_argument(
+        "--verify",
+        action="store_true",
+        help="rehydrate a lean file in memory and check it still reproduces the "
+        "digest recorded at split time. Writes nothing",
+    )
+    sp.set_defaults(func=cmd_split)
+
+    tr = sub.add_parser(
+        "triage",
+        help="lay every observation beside its answer text for hand-verification",
+        description=(
+            "Decides nothing. `score` says what the evidence supports; this prints "
+            "each observation next to the answer that produced it so a person can "
+            "sign it off before anything is published. A FAIL on `abstention` means "
+            "the answer contained a claim of the shape asked for — not that it "
+            "attributed the claim to the instrument that does not exist, and only "
+            "the second is a fabrication. Flagged rows are printed with the sentence "
+            "the match sits in, because that distinction is a reading task."
+        ),
+    )
+    tr.add_argument("--responses", required=True, help="path to responses.jsonl")
+    tr.add_argument("--probes", required=True, help="path to probes.jsonl")
+    tr.add_argument("--report", required=True, help="path to report.json from `score`")
+    tr.add_argument("--target", default=None, help="label for the worksheet heading")
+    tr.add_argument("-o", "--output", default=None, help="write the worksheet here")
+    tr.set_defaults(func=cmd_triage)
+
+    rs = sub.add_parser(
+        "resume",
+        help="work out which probes a further account still has to answer",
+        description=(
+            "A free trial answers a handful of questions and then returns 402, so no "
+            "single account carries a 22-probe three-pass battery. This counts the "
+            "passes that came back *with an answer* and writes a probe file holding "
+            "only the shortfall. A record carrying a transport error is not an answer, "
+            "so the probe it names is still outstanding — which is exactly why the "
+            "first exhausted account's 402s have to be re-asked rather than merged in."
+        ),
+    )
+    rs.add_argument("--probes", required=True, help="the full sealed probe file")
+    rs.add_argument(
+        "--responses", nargs="+", required=True, help="every segment gathered so far"
+    )
+    rs.add_argument(
+        "--passes", type=int, default=3, help="passes wanted per probe (default 3)"
+    )
+    rs.add_argument(
+        "-o", "--output", default=None, help="write the remaining probe file here"
+    )
+    rs.set_defaults(func=cmd_resume)
+
+    mg = sub.add_parser(
+        "merge",
+        help="join response segments from several accounts into one file",
+        description=(
+            "Drops error records a later segment answered, keeps every surviving "
+            "record verbatim, and renumbers `pass_index` so the file satisfies "
+            "one-record-per-(probe_id, pass_index). The header records that the file "
+            "was assembled and that passes drawn from different accounts measure "
+            "account-to-account variation as well as reproducibility — those are "
+            "different claims and only the weaker one is supported."
+        ),
+    )
+    mg.add_argument(
+        "--responses", nargs="+", required=True, help="segments, in precedence order"
+    )
+    mg.add_argument("-o", "--output", required=True, help="where to write the merged file")
+    mg.add_argument("--note", default=None, help="free text appended to the header note")
+    mg.set_defaults(func=cmd_merge)
 
     schema = sub.add_parser(
         "schema",

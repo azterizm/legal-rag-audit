@@ -70,6 +70,15 @@ RUN /opt/venv/bin/python -m compileall -q -x 'torch/testing/_internal/' /opt/ven
 # ---------------------------------------------------------------------------- runtime
 FROM ${BASE}
 
+# Debian security updates, applied at build time. Same layer as Dockerfile.generate,
+# same reasoning — see the long note there. The digest still fixes the interpreter, the
+# TLS store and the keyring apt verifies against; this patches the OS packages Debian
+# has fixed since the image was built, and is the one unpinned step in either file.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get --yes upgrade \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /opt/venv /opt/venv
 
 # The installer, out of the artefact. Same reason as Dockerfile.generate, and the same

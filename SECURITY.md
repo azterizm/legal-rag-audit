@@ -119,6 +119,21 @@ A range would also make a vulnerability scan a statement about the day you insta
 rather than about the artefact — which is how `idna` 3.11 (PYSEC-2026-215) came to be
 installed here while the declared dependency set looked clean.
 
+**One step in the container builds is deliberately not pinned, and it is the OS.** Both
+Dockerfiles run `apt-get upgrade` in their runtime stage. A base image pinned by digest
+freezes its Debian packages at the day it was built, fixes included, so a published
+security update cannot reach the image on its own — CVE-2026-53615 (`util-linux`) failed
+`trivy image` on both images with the fix already in `trixie-security`, and bumping the
+digest did not help because the current `python:3.11-slim` carried the same version.
+
+The pin still does its job: the interpreter, the TLS store and
+`debian-archive-keyring.pgp` all come from the digest, so what apt installs is signed by
+a key out of the pinned image and drawn from a suite that image already trusts. An exact
+version pin here would hold only until Debian superseded it and dropped it from the
+archive, at which point the *build* would fail on an archive retention policy. The
+alternative to this layer is suppressing the finding and shipping a known-vulnerable
+image to a target, which is not a trade this project makes.
+
 ### The dependency set is small on purpose
 
 | Layer | Packages | Who installs it |

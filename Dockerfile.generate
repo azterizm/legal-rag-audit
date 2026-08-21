@@ -70,6 +70,34 @@ RUN /opt/venv/bin/python -m compileall -q /opt/venv/lib
 # ---------------------------------------------------------------------------- runtime
 FROM ${BASE}
 
+# Debian security updates, applied at build time.
+#
+# The base image is pinned by digest above, and that pin is what stops the interpreter,
+# the TLS store and the OS baseline shifting between builds. It is also why the OS
+# packages inside it are frozen at whatever Debian shipped on the day the image was
+# built — and Debian keeps issuing fixes afterwards. CVE-2026-53615 (util-linux, an
+# integer overflow in libblkid's DOS partition-table parser) failed `trivy image` on
+# both images this way: fixed in 2.41.5-0+deb13u1, still 2.41-5 in the base. Bumping the
+# digest does not help, because the current `python:3.11-slim` carries 2.41-5 too.
+#
+# This is not a hole in the pinning. Everything the digest fixes is still fixed by it,
+# including `debian-archive-keyring.pgp` — so what apt installs here is signed by a key
+# that came from the pinned image, out of the `trixie-security` suite that image already
+# trusts. What changes is that known-vulnerable packages get patched, which is the
+# purpose of pinning and scanning rather than a violation of it.
+#
+# Unpinned, deliberately, and it is the one unpinned thing in either file. An exact
+# version pin would be reproducible right up to the day Debian supersedes it and drops
+# it from the archive — at which point the *build* breaks rather than the scan, and a
+# release pipeline that fails on the archive's retention policy is worse than one that
+# tracks security fixes. Recorded in SECURITY.md rather than left here.
+#
+# Becomes a no-op the moment upstream rebuilds the base image.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get --yes upgrade \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /opt/venv /opt/venv
 
 # The installer, out of the artefact.

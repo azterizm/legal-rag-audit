@@ -29,6 +29,19 @@ from .handover import (
     write_handover,
 )
 from .jsonl import InterchangeError, read_records, write_records
+from .segments import (
+    Outstanding,
+    merge_segments,
+    outstanding,
+    write_remaining_probes,
+)
+from .split import (
+    RAW_DIRNAME,
+    SplitResult,
+    rehydrate_response_file,
+    split_response_file,
+    verify_round_trip,
+)
 from .probe import Probe, load_probes, write_probes
 from .response import (
     CaptureNotes,
@@ -119,12 +132,21 @@ __all__ = [
     "load_probes",
     "load_responses",
     "now_utc",
+    "Outstanding",
+    "RAW_DIRNAME",
+    "merge_segments",
+    "outstanding",
+    "write_remaining_probes",
+    "SplitResult",
     "read_records",
+    "rehydrate_response_file",
     "read_schema_document",
     "unrecorded_gaps",
     "write_ground_truth",
     "write_handover",
     "write_probes",
+    "split_response_file",
+    "verify_round_trip",
     "write_records",
     "write_responses",
 ]

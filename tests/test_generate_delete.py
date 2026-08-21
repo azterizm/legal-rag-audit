@@ -23,7 +23,8 @@ import asyncio
 import pytest
 
 from legal_rag_audit.config import AuditConfig
-from legal_rag_audit.generate.run import Generator
+from legal_rag_audit.generate import run as run_module
+from legal_rag_audit.generate.run import Generator, GenerationError
 from legal_rag_audit.interchange.probe import Probe
 
 BASE = {
@@ -77,7 +78,7 @@ class RecordingClient:
     async def delete_document(self, document_id: str) -> None:
         self.deleted.append(document_id)
 
-    async def chat(self, text: str):
+    async def chat(self, text: str, attachments=None):
         return {"answer": "an answer", "citations": [], "raw": {}}
 
     async def close(self) -> None:
@@ -209,3 +210,58 @@ class TestAFailedRevisionDoesNotDiscardTheRun:
         gen = generator(config(), client)
         with pytest.raises(GenerationError):
             asyncio.run(gen.run(PROBES))
+
+
+class TestTheBatteryCanBePaced:
+    """Pacing exists because an unpaced run measured nothing and spent a stranger's quota.
+
+    A 22-probe three-pass battery went out in 111 seconds at a median of one second
+    apart. The endpoint answered with one read timeout, six `403`s and fifty-nine
+    `429`s — 66 records, 0 answers. Nothing was mis-scored, because every record was
+    written as a transport error, but the run was worthless and the footprint was not.
+    """
+
+    def _timed(self, monkeypatch):
+        """Record what the runner sleeps for, without actually waiting."""
+        slept: list[float] = []
+
+        async def fake_sleep(seconds):
+            slept.append(seconds)
+
+        monkeypatch.setattr(run_module.asyncio, "sleep", fake_sleep)
+        return slept
+
+    def test_the_delay_falls_between_requests_not_before_the_first(self, monkeypatch):
+        slept = self._timed(monkeypatch)
+        gen = generator(config(), RecordingClient(), passes=1, request_delay=5.0)
+        # `_ask_all` is the unit under test. `run()` splits the battery into an initial
+        # and a revision phase, and each phase opens its own request sequence — testing
+        # through it would be asserting the phase split, not the pacing.
+        asyncio.run(gen._ask_all(PROBES))
+        # One wait fewer than there are requests: the first goes out immediately and the
+        # run is never padded by a trailing sleep.
+        assert slept == [5.0] * (len(PROBES) - 1)
+
+    def test_pacing_spans_passes_as_well_as_probes(self, monkeypatch):
+        slept = self._timed(monkeypatch)
+        gen = generator(config(), RecordingClient(), passes=3, request_delay=2.0)
+        asyncio.run(gen._ask_all(PROBES))
+        assert slept == [2.0] * (len(PROBES) * 3 - 1)
+
+    def test_zero_delay_is_exactly_the_old_behaviour(self, monkeypatch):
+        slept = self._timed(monkeypatch)
+        gen = generator(config(), RecordingClient(), passes=2, request_delay=0.0)
+        asyncio.run(gen._ask_all(PROBES))
+        assert slept == []
+
+    def test_the_config_supplies_the_default_and_the_argument_overrides_it(self):
+        cfg = config()
+        cfg.battery.request_delay_seconds = 7.5
+        assert generator(cfg, RecordingClient()).request_delay == 7.5
+        # An explicit 0 is an instruction, not silence — it must not fall back.
+        assert generator(cfg, RecordingClient(), request_delay=0.0).request_delay == 0.0
+        assert generator(cfg, RecordingClient(), request_delay=1.5).request_delay == 1.5
+
+    def test_a_negative_delay_is_refused(self):
+        with pytest.raises(GenerationError, match="must not be negative"):
+            generator(config(), RecordingClient(), request_delay=-1.0)

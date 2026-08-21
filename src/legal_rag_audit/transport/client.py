@@ -38,8 +38,12 @@ class TargetClient:
     def _build_auth_headers(self) -> Dict[str, str]:
         headers = {}
         auth = self.config.auth
-        if auth.type != "none" and auth.token_env:
-            token = os.environ.get(auth.token_env)
+        if auth.type != "none" and (auth.token_env or auth.token):
+            # In-file first only when the env var is absent; the two cannot both be set
+            # (AuthConfig refuses it), so there is no precedence to remember.
+            token = auth.token or (
+                os.environ.get(auth.token_env) if auth.token_env else None
+            )
             if not token:
                 # NF9. This used to warn and substitute "DUMMY_TOKEN", which is the worst
                 # of the three available behaviours: the run continues, every request is
@@ -48,15 +52,25 @@ class TargetClient:
                 # unset environment variable arriving in the report as a finding about
                 # somebody's product. An absent measurement and a failed one must never
                 # print the same thing (F40), and here the absent one was printing worse.
+                where = (
+                    f"${auth.token_env} is not set"
+                    if auth.token_env
+                    else "target.auth.token is empty"
+                )
                 raise AuthTokenMissing(
-                    f"${auth.token_env} is not set, and target.auth.type is "
+                    f"{where}, and target.auth.type is "
                     f"{auth.type!r}.\n\n"
                     f"  Nothing was sent. This is a setup problem, not a finding: with "
                     f"no credential every\n"
                     f"  request would be rejected, and rejections recorded against the "
                     f"target read as answers\n"
                     f"  it got wrong.\n\n"
-                    f"    export {auth.token_env}=...\n\n"
+                    + (
+                        f"    export {auth.token_env}=...\n\n"
+                        if auth.token_env
+                        else "    auth:\n      token: \"...\"\n\n"
+                    )
+                    +
                     f"  Or set target.auth.type to \"none\" if this endpoint genuinely "
                     f"takes no credential."
                 )
@@ -77,12 +91,25 @@ class TargetClient:
                 headers["Cookie"] = token
         return headers
 
-    def _inject_variables(self, template: Any, variables: Dict[str, str]) -> Any:
+    def _inject_variables(self, template: Any, variables: Dict[str, Any]) -> Any:
         if template is None:
             return None
         if isinstance(template, str):
+            # A placeholder that *is* the whole string stands in for the value itself,
+            # not for its text. `{{ATTACHMENTS}}` is a list of file references, and a
+            # body written as YAML has nowhere to put a list except here — substituting
+            # `str(list)` would send a Python repr, single quotes and all, to a JSON API.
+            # Only whole-string placeholders qualify: half a list interpolated into a
+            # sentence is not a thing any target asked for.
+            stripped = template.strip()
+            if stripped.startswith("{{") and stripped.endswith("}}"):
+                key = stripped[2:-2]
+                if key in variables and not isinstance(variables[key], str):
+                    return variables[key]
             res = template
             for k, v in variables.items():
+                if not isinstance(v, str):
+                    continue
                 res = res.replace(f"{{{{{k}}}}}", v)
             return res
         elif isinstance(template, dict):
@@ -164,11 +191,31 @@ class TargetClient:
             headers = {k: v for k, v in headers.items() if k.lower() != 'content-type'}
             
             # Since we are sending files, we remove json/content from kwargs
-            kwargs.pop("json", None)
+            payload_fields = kwargs.pop("json", None)
             kwargs.pop("content", None)
+            # Only a body the config actually wrote. With none, `_prepare_request`
+            # hands back the default payload — filename and content — and those are the
+            # file, not fields to send beside it.
+            declared_body = (
+                not isinstance(endpoint_config, str) and endpoint_config.body is not None
+            )
+            if not (declared_body and isinstance(payload_fields, dict)):
+                payload_fields = None
             
             files = {file_field: (filename, content, "text/plain")}
             kwargs["files"] = files
+            # Everything else the body named travels as ordinary form fields beside the
+            # file. An ingest route that takes the file *and* an owner, a target path or
+            # an OCR mode in the same multipart body — Gaius Lex takes all three — was
+            # previously unconfigurable: the body was parsed, then dropped on the floor
+            # here, and the upload went out missing the fields the target requires.
+            form_fields = {
+                k: ("" if v is None else str(v))
+                for k, v in (payload_fields or {}).items()
+                if k != file_field
+            }
+            if form_fields:
+                kwargs["data"] = form_fields
             
             logger.debug(f"Uploading {filename} to {url} using native multipart on field '{file_field}'")
             response = await self.client.request(method, url, headers=headers, **kwargs)
@@ -248,7 +295,17 @@ class TargetClient:
             return text[start:]
         return None
 
-    async def chat(self, query: str) -> Dict[str, Any]:
+    async def chat(
+        self, query: str, attachments: Optional[List[Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
+        """Ask one question, optionally naming documents this run already uploaded.
+
+        `attachments` binds to `{{ATTACHMENTS}}` in the chat body as the list of
+        `{"filename": ..., "document_id": ...}` the upload phase was issued. It exists
+        for products whose chat turn references stored documents per message rather than
+        searching a standing index — Eulex posts the ids back under `messages[].files`.
+        A config that never writes the placeholder is unaffected.
+        """
         import uuid
         req_uuid = str(uuid.uuid4())
         
@@ -258,7 +315,14 @@ class TargetClient:
         # uploads — which take the same union — worked fine.
         endpoint_headers = getattr(self.config.endpoints.chat, "headers", None) or {}
         chat_headers = {**self.headers, **endpoint_headers}
-        variables = {"QUERY": query, "UUID": req_uuid}
+        variables: Dict[str, Any] = {
+            "QUERY": query,
+            "UUID": req_uuid,
+            # Always present, empty when nothing was uploaded. A body that names the
+            # placeholder must still be valid JSON on an existing-corpus run, and an
+            # unsubstituted `{{ATTACHMENTS}}` reaching the wire is not.
+            "ATTACHMENTS": list(attachments or []),
+        }
         for k, v in chat_headers.items():
             variables[k] = str(v)
             variables[k.replace("-", "_")] = str(v)
@@ -307,9 +371,23 @@ class TargetClient:
                         else:
                             await websocket.send("40")
                         
-                    logger.debug(f"Sending query to {url}: {query}")
-                    response = await self.client.request(method, url, headers=headers, **kwargs)
-                    response.raise_for_status()
+                    if url.startswith("ws://") or url.startswith("wss://"):
+                        # The question goes out on the socket, not over HTTP. Gaius Lex
+                        # is this shape: one `wss://…/workflows-agent` connection carries
+                        # the send frame *and* the answer, and there is no chat route to
+                        # POST to. Without this branch a config would have to name some
+                        # unrelated HTTP endpoint as `chat` purely to satisfy the call
+                        # below, and the file would then describe a request the target
+                        # never receives — §6.1's whole objection.
+                        frame = kwargs.get("json", kwargs.get("content"))
+                        if isinstance(frame, (dict, list)):
+                            frame = json.dumps(frame, ensure_ascii=False)
+                        logger.debug(f"Sending query on {url}: {query}")
+                        await websocket.send(frame)
+                    else:
+                        logger.debug(f"Sending query to {url}: {query}")
+                        response = await self.client.request(method, url, headers=headers, **kwargs)
+                        response.raise_for_status()
 
                     answer_text = ""
                     citations = []
@@ -386,6 +464,63 @@ class TargetClient:
                         "citations": citations,
                         "raw": raw_response
                     }
+            elif rec_method.upper() != "GET":
+                # A *driver*, not a poll. Some targets do not generate anything until
+                # the client asks them to advance: Justice Pappers creates a question,
+                # hands back a uuid, and then produces retrieval, then case law, then
+                # the answer, one stage per POST to `…/{uuid}/etape`. Polling such a
+                # target with GET reads an empty record forever, because nothing is
+                # running.
+                #
+                # So the receive request is re-issued until a stage carries answer text.
+                # Stages that carry none are not failures — the first one answers JSON
+                # (the retrieved articles, kept as citations) and the second a stream of
+                # case law — they are steps on the way, and the loop keeps going.
+                import asyncio
+                import time
+
+                fmt = self.config.response_format
+                logger.debug(f"Sending query to {url}: {query}")
+                response = await self.client.request(method, url, headers=headers, **kwargs)
+                response.raise_for_status()
+                rec_url, rec_method, rec_headers, rec_kwargs = self._bind_handle(
+                    response, receive_endpoint, variables
+                )
+
+                deadline = time.monotonic() + fmt.poll_timeout_seconds
+                citations: List[Any] = []
+                frames: List[Any] = []
+                stages = 0
+                while time.monotonic() < deadline:
+                    stages += 1
+                    answer_text, stage_citations, stage_frames = await self._drive_once(
+                        rec_method, rec_url, rec_headers, rec_kwargs
+                    )
+                    citations.extend(stage_citations)
+                    frames.extend(stage_frames)
+                    if answer_text:
+                        return {
+                            "answer": answer_text,
+                            "citations": citations,
+                            "raw": frames,
+                        }
+                    await asyncio.sleep(fmt.poll_interval_seconds)
+
+                # Same rule as the polling path: an answer that never arrived is a failed
+                # measurement, not an empty one (F40). Returning "" would have `generate`
+                # write a record indistinguishable from a target declining to answer.
+                raise TimeoutError(
+                    f"drove {rec_url} through {stages} stages in "
+                    f"{fmt.poll_timeout_seconds:g}s and none carried answer text"
+                    + (
+                        f" on an SSE {fmt.answer_event!r} event"
+                        if fmt.answer_event
+                        else ""
+                    )
+                    + ". Raise response_format.poll_timeout_seconds if this target is "
+                    "simply slow, or check answer_event/answer_field against a real "
+                    "stage; nothing about this probe was measured."
+                )
             elif rec_method.upper() == "GET":
                 import asyncio
                 import time
@@ -472,95 +607,192 @@ class TargetClient:
 
         # Fallback to normal synchronous / SSE processing if receive is not configured
         logger.debug(f"Sending query to {url}: {query}")
-        
+
         if self.config.response_format.stream:
-            answer_text = ""
-            citations = []
-            raw_response = {}
-            
-            async with self.client.stream(method, url, headers=headers, **kwargs) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                        
-                    if line.startswith("data:"):
-                        data_str = line[5:].strip()
-                    elif line.startswith("data "):
-                        data_str = line[5:].strip()
-                    elif line.startswith("id:") or line.startswith("event:") or line.startswith("retry:"):
-                        continue
-                    else:
-                        data_str = line
-
-                    if data_str == "[DONE]":
-                        break
-                        
-                    if getattr(self.config.response_format, 'stop_payload_match', None) and self.config.response_format.stop_payload_match in data_str:
-                        logger.debug("HTTP stream stopped by lazy stop_payload_match.")
-                        break
-                    
-                    if data_str:
-                        # Only the decode is guarded, and only against a frame that is
-                        # not JSON — a stream carries comments, keep-alives and a
-                        # provider's own framing alongside the payload, and one of those
-                        # is skipped rather than ending the read.
-                        #
-                        # Everything below the decode is deliberately outside the guard.
-                        # A raise there is a bug in extraction or a config whose paths do
-                        # not fit this target, and swallowing it yields an empty answer
-                        # that reads exactly like a system with nothing to say (F40).
-                        # `generate` records a raise as a transport error, which is the
-                        # honest record of a read that failed.
-                        json_str = self._extract_json_from_string(data_str)
-                        try:
-                            chunk = json.loads(json_str if json_str else data_str)
-                        except json.JSONDecodeError:
-                            logger.debug(
-                                "skipping a stream frame that is not JSON: %.120r",
-                                data_str,
-                            )
-                            continue
-
-                        if getattr(self, 'stop_parser', None):
-                            stop_match = self.stop_parser.find(chunk)
-                            if stop_match and str(stop_match[0].value) == getattr(self.config.response_format, 'stop_value', None):
-                                logger.debug("HTTP stream stopped by strict stop_field match.")
-                                break
-
-                        if self._carries_the_answer(chunk):
-                            match = self.answer_parser.find(chunk)
-                            if match:
-                                answer_text += match[0].value
-
-                        cit_match = self.citations_parser.find(chunk)
-                        if cit_match and isinstance(cit_match[0].value, list):
-                            citations.extend(cit_match[0].value)
-                        if not isinstance(raw_response, list):
-                            raw_response = []
-                        raw_response.append(chunk)
-            return {
-                "answer": answer_text,
-                "citations": citations,
-                "raw": raw_response
-            }
+            answer_text, citations, frames = await self._read_event_stream(
+                method, url, headers, kwargs
+            )
+            return {"answer": answer_text, "citations": citations, "raw": frames}
         else:
             response = await self.client.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
             data = response.json()
-            
+
             answer_match = self.answer_parser.find(data)
             answer_text = answer_match[0].value if answer_match else ""
-            
+
             cit_match = self.citations_parser.find(data)
             citations = cit_match[0].value if cit_match else []
-            
+
             return {
                 "answer": answer_text,
                 "citations": citations,
                 "raw": data
             }
+
+    def _bind_handle(self, response, receive_endpoint, variables):
+        """Re-prepare the receive request with `{{HANDLE}}` bound to the submit's ticket.
+
+        An asynchronous target hands back a ticket rather than an answer, and the poll or
+        drive URL is not knowable until it does.
+        """
+        fmt = self.config.response_format
+        if self.handle_parser is None:
+            return self._prepare_request(receive_endpoint, {}, variables)
+        try:
+            submitted = response.json()
+        except Exception as exc:
+            raise RuntimeError(
+                f"response_format.handle_field is set, so the submit response has to be "
+                f"JSON to read the handle out of, and this one is not: {exc}"
+            ) from exc
+        found = self.handle_parser.find(submitted)
+        if not found or found[0].value in (None, ""):
+            raise RuntimeError(
+                f"the submit request succeeded and response_format.handle_field "
+                f"({fmt.handle_field!r}) matched nothing in its body. Without the handle "
+                f"there is no answer to ask for; check the path against a real response "
+                f"before reading anything into this run."
+            )
+        return self._prepare_request(
+            receive_endpoint, {}, {**variables, "HANDLE": str(found[0].value)}
+        )
+
+    async def _drive_once(self, method, url, headers, kwargs):
+        """Advance one stage, whichever of the two shapes it answers in.
+
+        A stage is JSON or it is an event stream, and which one is not knowable before
+        the response arrives — the same URL answers `application/json` for retrieval and
+        `text/event-stream` for generation. Dispatching on the content type is what lets
+        the retrieved articles be kept as citations from the stage that carries them.
+        """
+        async with self.client.stream(method, url, headers=headers, **kwargs) as stage:
+            stage.raise_for_status()
+            content_type = stage.headers.get("content-type", "")
+            if "event-stream" in content_type:
+                return await self._consume_event_stream(stage)
+            await stage.aread()
+            try:
+                data = stage.json()
+            except Exception:
+                logger.debug(
+                    "stage answered %r, which is not JSON; skipping", content_type
+                )
+                return "", [], []
+        answer_match = self.answer_parser.find(data)
+        cit_match = self.citations_parser.find(data)
+        citations = (
+            cit_match[0].value
+            if cit_match and isinstance(cit_match[0].value, list)
+            else []
+        )
+        return (answer_match[0].value if answer_match else ""), citations, [data]
+
+    async def _read_event_stream(self, method, url, headers, kwargs):
+        """Read one SSE response into (answer, citations, frames).
+
+        Event names are tracked, not skipped. A stream that types its frames on the
+        `event:` line — Justice Pappers sends `message`, `decision`, `enhanced` and
+        `complete`, all carrying `{"content": …}` — cannot be told apart by any JSONPath,
+        because the name is not in the JSON. `answer_event` names the one to keep and
+        `stop_event` the one that ends the read; without them this behaves exactly as it
+        did before, which is to say it keeps everything.
+        """
+        fmt = self.config.response_format
+        answer_text = ""
+        citations: List[Any] = []
+        frames: List[Any] = []
+        event_name = None
+
+        async with self.client.stream(method, url, headers=headers, **kwargs) as response:
+            response.raise_for_status()
+            return await self._consume_event_stream(response)
+
+    async def _consume_event_stream(self, response):
+        """The line loop, over a response already open. See `_read_event_stream`.
+
+        Separate because a driven stage cannot re-issue its request to read it: the POST
+        that returns the stream is the same POST that advances the target one stage, so
+        asking twice would skip one.
+        """
+        fmt = self.config.response_format
+        answer_text = ""
+        citations: List[Any] = []
+        frames: List[Any] = []
+        event_name = None
+
+        async for line in response.aiter_lines():
+            line = line.strip()
+            if not line:
+                # A blank line ends one SSE event. The name does not carry over to
+                # the next: an untyped frame after a `message` frame is untyped, and
+                # inheriting the previous name would quietly widen the filter.
+                event_name = None
+                continue
+
+            if line.startswith("event:"):
+                event_name = line[6:].strip()
+                if fmt.stop_event and event_name == fmt.stop_event:
+                    logger.debug("stream ended by stop_event %r", event_name)
+                    break
+                continue
+
+            if line.startswith("data:"):
+                data_str = line[5:].strip()
+            elif line.startswith("data "):
+                data_str = line[5:].strip()
+            elif line.startswith("id:") or line.startswith("retry:"):
+                continue
+            else:
+                data_str = line
+
+            if data_str == "[DONE]":
+                break
+
+            if fmt.stop_payload_match and fmt.stop_payload_match in data_str:
+                logger.debug("HTTP stream stopped by lazy stop_payload_match.")
+                break
+
+            if not data_str:
+                continue
+
+            # Only the decode is guarded, and only against a frame that is not JSON —
+            # a stream carries comments, keep-alives and a provider's own framing
+            # alongside the payload, and one of those is skipped rather than ending
+            # the read.
+            #
+            # Everything below the decode is deliberately outside the guard. A raise
+            # there is a bug in extraction or a config whose paths do not fit this
+            # target, and swallowing it yields an empty answer that reads exactly
+            # like a system with nothing to say (F40). `generate` records a raise as
+            # a transport error, which is the honest record of a read that failed.
+            json_str = self._extract_json_from_string(data_str)
+            try:
+                chunk = json.loads(json_str if json_str else data_str)
+            except json.JSONDecodeError:
+                logger.debug(
+                    "skipping a stream frame that is not JSON: %.120r", data_str
+                )
+                continue
+
+            if self.stop_parser is not None:
+                stop_match = self.stop_parser.find(chunk)
+                if stop_match and str(stop_match[0].value) == fmt.stop_value:
+                    logger.debug("HTTP stream stopped by strict stop_field match.")
+                    break
+
+            wanted_event = fmt.answer_event is None or event_name == fmt.answer_event
+            if wanted_event and self._carries_the_answer(chunk):
+                match = self.answer_parser.find(chunk)
+                if match:
+                    answer_text += match[0].value
+
+            cit_match = self.citations_parser.find(chunk)
+            if cit_match and isinstance(cit_match[0].value, list):
+                citations.extend(cit_match[0].value)
+            frames.append(chunk)
+
+        return answer_text, citations, frames
 
     async def close(self):
         await self.client.aclose()

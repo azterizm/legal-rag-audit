@@ -48,3 +48,12 @@ V2_PROGRESS.md
 # Captured run output. Session tokens end up in these.
 output.log
 *.log
+
+configs/
+
+# Captured runs and scored output. `run/` holds responses.jsonl, which carries the
+# target's answers and the session context they were fetched under; `out/` holds the
+# reports scored from them. Neither is ours to publish — `reports/` was already ignored
+# and these two were not, so a `git add -A` would have staged the evidence.
+run/
+out/

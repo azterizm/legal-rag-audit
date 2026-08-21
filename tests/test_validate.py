@@ -121,6 +121,29 @@ class _Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
             return
+        if mode == "sse_interleaved":
+            # A stream that carries reasoning and answer text under the same key,
+            # told apart only by the frame's `type`. This is the shape a frame
+            # selector exists for, and the shape that caught `validate` previewing
+            # an extraction the run would not perform.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            try:
+                for kind, piece in (
+                    ("thinking_delta", "I should check the register. "),
+                    ("thinking_delta", "The Act may not exist. "),
+                    ("text_delta", "There is no such Act. "),
+                    ("text_delta", "See section 146 instead."),
+                ):
+                    frame = json.dumps({"type": kind, "delta": piece})
+                    self.wfile.write(f"data: {frame}\n\n".encode())
+                    self.wfile.flush()
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            return
         if mode == "sse_clean":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -741,3 +764,52 @@ def test_validate_uses_the_configured_paths_rather_than_its_own(target):
     result = validate(config, timeout=5.0)
     assert all("Companies Act" in (o.answer or "") for o in result.observations)
     assert "answer_not_extracted" not in codes(result)
+
+
+def test_validate_applies_the_frame_selector_like_generate_does(target):
+    """`validate` must preview the extraction the run will perform, not a different one.
+
+    The stream interleaves `thinking_delta` and `text_delta` under one `delta` key. With
+    a frame selector naming `text_delta`, `generate` reads only the answer. A `validate`
+    that ignored the selector concatenated the reasoning as well and printed it under
+    "extracted" — an operator reading that preview is reading a run that will not happen,
+    and on the abstention family the difference is a phrase the system *thought* being
+    scored as a claim it *made*.
+    """
+    config = config_for(
+        target("sse_interleaved"),
+        response_format={
+            "answer_field": "delta",
+            "answer_frame_field": "type",
+            "answer_frame_value": "text_delta",
+            "stream": True,
+            "stop_payload_match": "[DONE]",
+        },
+    )
+    result = validate(config, timeout=5.0)
+    for obs in result.observations:
+        assert "There is no such Act." in (obs.answer or "")
+        assert "should check the register" not in (obs.answer or "")
+
+
+def test_a_frame_selector_that_matches_nothing_extracts_nothing(target):
+    """A renamed frame type must read as an empty extraction, not as a partial answer.
+
+    This is the Ordalie case: the stream's `*_end` frames were renamed between runs, so
+    the configured selector matched no frame at all. The honest preview is *nothing
+    extracted* — which `validate` then diagnoses — rather than whichever text happened to
+    sit under the same key.
+    """
+    config = config_for(
+        target("sse_interleaved"),
+        response_format={
+            "answer_field": "delta",
+            "answer_frame_field": "type",
+            "answer_frame_value": "text_end",
+            "stream": True,
+            "stop_payload_match": "[DONE]",
+        },
+    )
+    result = validate(config, timeout=5.0)
+    assert all(not (o.answer or "") for o in result.observations)
+    assert "answer_not_extracted" in codes(result)
